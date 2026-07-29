@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLATED · Macro Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --rubber: #15130F;
+    --rubber-deep: #0C0B08;
+    --plate-panel: #211E1A;
+    --panel-line: #3A362E;
+    --chalk: #EDE6D6;
+    --chalk-dim: #9C9585;
+    --iron-line: #3A362E;
+    --hazard: #E8B923;
+    --hazard-dim: #8A6E17;
+    --plate-red: #C0392B;
+    --plate-blue: #2E6DA4;
+    --plate-yellow: #E8B923;
+    --plate-green: #4E8B3F;
+    --danger: #C0392B;
+    --ok: #6FAF57;
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--rubber);
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 18px 18px;
+    color: var(--chalk);
+    font-family: var(--font-body);
+    padding-bottom: 60px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--hazard); outline-offset: 2px; }
+
+  .hazard-rule {
+    height: 6px;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 14px, var(--rubber-deep) 14px 28px);
+    border-radius: 3px;
+  }
+
+  /* ============ LOGIN / CHECK-IN GATE (disabled for now) ============ */
+  #checkinScreen {
+    min-height: 100vh;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .checkin-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--plate-panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+    padding: 0 0 28px 0;
+    overflow: hidden;
+    text-align: center;
+  }
+  .checkin-card .hazard-rule { height: 8px; border-radius: 0; }
+  .checkin-body { padding: 30px 28px 0; }
+  .checkin-icon { margin: 0 auto 14px; width: 56px; height: 56px; }
+  .checkin-eyebrow {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 3px;
+    color: var(--chalk-dim); text-transform: uppercase; margin-bottom: 8px;
+  }
+  .checkin-card h1 {
+    font-family: var(--font-display); font-size: 40px; letter-spacing: 1px;
+    margin: 0 0 6px; color: var(--chalk); text-transform: uppercase;
+  }
+  .checkin-card p.tagline {
+    color: var(--chalk-dim); font-size: 13.5px; margin: 0 0 26px; line-height: 1.5;
+  }
+  .checkin-form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+  .checkin-form label {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--chalk-dim); display: flex; flex-direction: column; gap: 6px;
+  }
+  .checkin-form input {
+    background: var(--rubber-deep); border: 1px solid var(--panel-line); border-radius: 6px;
+    color: var(--chalk); padding: 11px 12px; font-family: var(--font-body); font-size: 15px;
+  }
+  .checkin-form input:focus { outline: none; border-color: var(--hazard); }
+  #checkinBtn {
+    margin-top: 8px;
+    background: var(--hazard); color: var(--rubber-deep); border: none; border-radius: 6px;
+    padding: 13px 18px; font-family: var(--font-display); font-size: 20px; letter-spacing: 1px;
+    text-transform: uppercase; cursor: pointer; transition: transform 0.1s ease, background 0.15s ease;
+  }
+  #checkinBtn:hover { background: #F5C63C; }
+  #checkinBtn:active { transform: scale(0.98); }
+  .checkin-note {
+    font-family: var(--font-mono); font-size: 11px; color: var(--chalk-dim);
+    margin-top: 18px; line-height: 1.6; text-align: left;
+  }
+  .checkin-error { color: var(--danger); font-size: 12px; font-family: var(--font-mono); min-height: 16px; margin-top: 2px; }
+
+  .auth-tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .auth-tab {
+    flex: 1; background: var(--rubber-deep); border: 1px solid var(--panel-line); color: var(--chalk-dim);
+    border-radius: 6px; padding: 9px 10px; font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+  }
+  .auth-tab.active { background: var(--hazard); color: var(--rubber-deep); border-color: var(--hazard); }
+
+  /* ============ APP SHELL ============ */
+  #appScreen { display: block; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    padding: 18px 0 0;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    font-family: var(--font-display); font-size: 22px; letter-spacing: 1px;
+    color: var(--hazard); background: var(--plate-panel); border: 1px solid var(--panel-line);
+    border-radius: 6px; padding: 3px 10px 1px;
+  }
+  .brand-name { font-family: var(--font-mono); font-size: 11px; letter-spacing: 2px; color: var(--chalk-dim); text-transform: uppercase; }
+  .member-chip {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--chalk-dim);
+  }
+  .member-chip b { color: var(--chalk); font-weight: 600; }
+  #logoutBtn {
+    background: none; border: 1px solid var(--panel-line); color: var(--chalk-dim);
+    border-radius: 5px; padding: 6px 11px; font-family: var(--font-mono); font-size: 10.5px;
+    letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer;
+  }
+  #logoutBtn:hover { border-color: var(--danger); color: var(--danger); }
+
+  .tab-nav { display: flex; gap: 4px; background: var(--plate-panel); border: 1px solid var(--panel-line); border-radius: 8px; padding: 4px; }
+  .tab-btn {
+    background: none; border: none; color: var(--chalk-dim); cursor: pointer;
+    font-family: var(--font-display); font-size: 16px; letter-spacing: 0.5px; text-transform: uppercase;
+    padding: 7px 18px; border-radius: 5px; transition: background 0.15s ease, color 0.15s ease;
+  }
+  .tab-btn:hover { color: var(--chalk); }
+  .tab-btn.active { background: var(--hazard); color: var(--rubber-deep); }
+  .tab-panel { }
+
+  .hero { padding: 18px 0 24px; margin-top: 14px; }
+  .hero-eyebrow {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 3px;
+    color: var(--chalk-dim); text-transform: uppercase; margin-bottom: 10px;
+  }
+  .hero h1 {
+    font-family: var(--font-display); font-weight: 400; font-size: 44px;
+    letter-spacing: 1px; margin: 0 0 6px; text-transform: uppercase; color: var(--chalk);
+  }
+  .hero p.sub { color: var(--chalk-dim); font-size: 15px; margin: 0; max-width: 560px; line-height: 1.5; }
+
+  /* ============ PLATE SCOREBOARD ============ */
+  .plate-board {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    margin-top: 26px;
+  }
+  .plate-cell {
+    background: var(--plate-panel); border: 1px solid var(--panel-line); border-radius: 10px;
+    padding: 16px 12px 14px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  }
+  .plate-disc {
+    width: 78px; height: 78px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; margin-bottom: 10px;
+    border: 5px solid rgba(0,0,0,0.25);
+    box-shadow: inset 0 0 0 3px rgba(255,255,255,0.12), inset 0 4px 10px rgba(0,0,0,0.35);
+  }
+  .plate-disc::after {
+    content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+    background: rgba(0,0,0,0.35); box-shadow: inset 0 2px 3px rgba(0,0,0,0.4);
+  }
+  .plate-disc.protein { background: var(--plate-red); }
+  .plate-disc.calories { background: var(--plate-blue); }
+  .plate-disc.carbs { background: var(--plate-yellow); }
+  .plate-disc.fat { background: var(--plate-green); }
+  .plate-value {
+    font-family: var(--font-display); font-size: 22px; color: var(--chalk); letter-spacing: 0.5px;
+    position: relative; z-index: 1; line-height: 1;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+  .plate-label {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--chalk-dim); margin-bottom: 4px;
+  }
+  .plate-goal {
+    font-family: var(--font-mono); font-size: 12px; color: var(--chalk-dim);
+  }
+  .plate-goal b { color: var(--chalk); }
+  .plate-bar-track { margin-top: 8px; height: 5px; width: 100%; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+  .plate-bar-fill { height: 100%; transition: width 0.3s ease; }
+  .plate-bar-fill.protein-fill { background: var(--plate-red); }
+  .plate-bar-fill.calories-fill { background: var(--plate-blue); }
+  .plate-bar-fill.carbs-fill { background: var(--plate-yellow); }
+  .plate-bar-fill.fat-fill { background: var(--plate-green); }
+  .plate-bar-fill.hit { background: var(--ok); }
+  @media (max-width: 700px) { .plate-board { grid-template-columns: repeat(2,1fr); } }
+
+  .goals-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 14px;
+    margin-top: 16px; padding: 14px 16px; background: var(--plate-panel); border: 1px solid var(--panel-line);
+    border-radius: 8px; font-family: var(--font-mono); font-size: 12px; color: var(--chalk-dim);
+  }
+  .goals-label { text-transform: uppercase; letter-spacing: 1px; color: var(--chalk-dim); }
+  .goals-row label { display: flex; align-items: center; gap: 6px; }
+  .goals-row input {
+    width: 64px; background: var(--rubber-deep); border: 1px solid var(--panel-line); border-radius: 4px;
+    color: var(--chalk); padding: 5px 7px; font-family: var(--font-mono); font-size: 12px;
+  }
+  .goals-row input:focus { outline: none; border-color: var(--hazard); }
+  .goals-row button {
+    background: var(--hazard-dim); color: var(--chalk); border: none; border-radius: 4px;
+    padding: 6px 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.5px;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .goals-row button:hover { background: var(--hazard); color: var(--rubber-deep); }
+  .goals-saved { color: var(--ok); font-size: 11px; }
+
+  .personalize-panel { margin-top: 16px; }
+  .personalize-note {
+    font-size: 12.5px; color: var(--chalk-dim); line-height: 1.5; margin: 0 0 14px;
+    max-width: 640px;
+  }
+  .personalize-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 16px; margin-bottom: 14px;
+  }
+  @media (max-width: 700px) { .personalize-grid { grid-template-columns: repeat(2, 1fr); } }
+  .personalize-grid label {
+    display: flex; flex-direction: column; gap: 5px; font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--chalk-dim);
+  }
+  .personalize-grid input, .personalize-grid select {
+    background: var(--rubber-deep); border: 1px solid var(--panel-line); border-radius: 4px;
+    color: var(--chalk); padding: 7px 9px; font-family: var(--font-body); font-size: 13px;
+  }
+  .personalize-grid input:focus, .personalize-grid select:focus { outline: none; border-color: var(--hazard); }
+  #calcGoalsBtn {
+    background: var(--hazard); color: var(--rubber-deep); border: none; border-radius: 5px;
+    padding: 9px 16px; font-family: var(--font-display); letter-spacing: 0.5px;
+    text-transform: uppercase; font-size: 16px; cursor: pointer;
+  }
+  #calcGoalsBtn:hover { background: #F5C63C; }
+
+  /* ============ LAYOUT ============ */
+  .layout { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; margin-top: 26px; align-items: start; }
+  @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--plate-panel); border: 1px solid var(--panel-line); border-radius: 10px; padding: 18px 20px; }
+  .panel h2 {
+    font-family: var(--font-display); font-weight: 400; font-size: 22px; letter-spacing: 0.5px;
+    text-transform: uppercase; margin: 0 0 14px; color: var(--chalk);
+  }
+  .log-form { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .log-form input {
+    background: var(--rubber-deep); border: 1px solid var(--panel-line); border-radius: 5px;
+    color: var(--chalk); padding: 10px 12px; font-family: var(--font-body); font-size: 14px;
+  }
+  .log-form input:focus { outline: none; border-color: var(--hazard); }
+  .log-form input#foodInput { flex: 2; min-width: 180px; }
+  .log-form input#servingInput { flex: 1; min-width: 120px; }
+  .log-form button {
+    background: var(--hazard); color: var(--rubber-deep); border: none; border-radius: 5px;
+    padding: 10px 20px; font-family: var(--font-display); font-size: 16px; letter-spacing: 0.5px;
+    text-transform: uppercase; cursor: pointer; transition: background 0.15s ease;
+  }
+  .log-form button:hover { background: #F5C63C; }
+  .log-form button:disabled { background: var(--hazard-dim); cursor: default; }
+  .status-msg { font-family: var(--font-mono); font-size: 12px; color: var(--chalk-dim); min-height: 16px; margin-top: 4px; }
+  .status-msg.error { color: var(--danger); }
+
+  .entries { margin-top: 16px; }
+  .entry-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .entry-row:last-child { border-bottom: none; }
+  .entry-info { flex: 1; }
+  .entry-name { font-size: 14.5px; color: var(--chalk); font-weight: 500; }
+  .entry-serving { font-family: var(--font-mono); font-size: 11.5px; color: var(--chalk-dim); margin-top: 2px; }
+  .entry-macros {
+    font-family: var(--font-mono); font-size: 12px; color: var(--chalk-dim);
+    display: flex; gap: 10px; white-space: nowrap;
+  }
+  .entry-macros b { color: var(--hazard); font-weight: 600; }
+  .entry-delete {
+    background: none; border: 1px solid var(--panel-line); color: var(--chalk-dim);
+    border-radius: 4px; width: 24px; height: 24px; cursor: pointer; font-size: 14px; line-height: 1;
+    flex-shrink: 0;
+  }
+  .entry-delete:hover { border-color: var(--danger); color: var(--danger); }
+  .entry-edit {
+    background: none; border: 1px solid var(--panel-line); color: var(--chalk-dim);
+    border-radius: 4px; width: 24px; height: 24px; cursor: pointer; font-size: 12px; line-height: 1;
+    flex-shrink: 0;
+  }
+  .entry-edit:hover { border-color: var(--hazard); color: var(--hazard); }
+  .entry-edit-form {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; padding: 4px 0;
+  }
+  .entry-edit-form .edit-food {
+    flex: 1; min-width: 140px; background: var(--rubber-deep); border: 1px solid var(--panel-line);
+    border-radius: 4px; color: var(--chalk); padding: 6px 8px; font-family: var(--font-body); font-size: 13px;
+  }
+  .edit-macro-inputs { display: flex; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--chalk-dim); }
+  .edit-macro-inputs label { display: flex; align-items: center; gap: 4px; }
+  .edit-macro-inputs input {
+    width: 48px; background: var(--rubber-deep); border: 1px solid var(--panel-line); border-radius: 4px;
+    color: var(--chalk); padding: 4px 6px; font-family: var(--font-mono); font-size: 11px;
+  }
+  .edit-save-btn, .edit-cancel-btn {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.5px; text-transform: uppercase;
+    border-radius: 4px; padding: 5px 9px; cursor: pointer; border: 1px solid var(--panel-line);
+  }
+  .edit-save-btn { background: var(--hazard-dim); color: var(--chalk); border: none; }
+  .edit-save-btn:hover { background: var(--hazard); color: var(--rubber-deep); }
+  .edit-cancel-btn { background: none; color: var(--chalk-dim); }
+  .edit-cancel-btn:hover { color: var(--danger); border-color: var(--danger); }
+  .empty-note { color: var(--chalk-dim); font-size: 13.5px; font-style: italic; padding: 10px 0; }
+
+  .clear-btn {
+    background: none; border: 1px solid var(--panel-line); color: var(--chalk-dim);
+    border-radius: 5px; padding: 5px 10px; font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer;
+  }
+  .clear-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* SUGGESTIONS */
+  .suggest-card {
+    display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;
+  }
+  .suggest-card:last-child { border-bottom: none; }
+  .suggest-card:hover .suggest-name { color: var(--hazard); }
+  .suggest-info { flex: 1; }
+  .suggest-name { font-size: 13.5px; color: var(--chalk); font-weight: 500; line-height: 1.4; transition: color 0.15s ease; cursor: pointer; }
+  .suggest-macro { font-family: var(--font-mono); font-size: 11px; color: var(--chalk-dim); margin-top: 3px; }
+  .suggest-protein {
+    font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--hazard);
+    white-space: nowrap; padding-top: 1px; cursor: pointer;
+  }
+  .suggest-hint { font-family: var(--font-mono); font-size: 11px; color: var(--chalk-dim); margin-bottom: 10px; }
+
+  .recipe-toggle {
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--hazard-dim);
+    text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; margin-top: 4px; display: inline-block;
+  }
+  .recipe-toggle:hover { color: var(--hazard); }
+  .recipe-detail {
+    display: none; font-size: 12.5px; color: var(--chalk-dim); line-height: 1.5;
+    margin-top: 8px; padding: 10px 12px; background: rgba(255,255,255,0.03); border-radius: 5px;
+    border-left: 2px solid var(--hazard-dim);
+  }
+  .recipe-detail.open { display: block; }
+
+  /* HISTORY */
+  .avg-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--panel-line); border: 1px solid var(--panel-line); border-radius: 8px;
+    overflow: hidden; margin-top: 14px;
+  }
+  .avg-cell { background: var(--plate-panel); padding: 12px 16px; }
+  .avg-cell .score-label {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--chalk-dim); margin-bottom: 6px;
+  }
+  .avg-cell .score-value {
+    font-family: var(--font-display); font-size: 26px; color: var(--hazard); line-height: 1;
+  }
+  .avg-cell .score-value .unit { font-size: 13px; color: var(--chalk-dim); font-family: var(--font-body); }
+  @media (max-width: 600px) { .avg-grid { grid-template-columns: repeat(2,1fr); } }
+
+  .trend-bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .trend-bar-label { font-family: var(--font-mono); font-size: 9.5px; color: var(--chalk-dim); white-space: nowrap; }
+
+  .day-card {
+    background: var(--rubber-deep); border: 1px solid var(--panel-line); border-radius: 8px;
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .day-card.hit { border-color: var(--hazard-dim); }
+  .day-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; cursor: pointer;
+  }
+  .day-head:hover { background: rgba(255,255,255,0.02); }
+  .day-date { font-family: var(--font-display); font-size: 18px; color: var(--chalk); letter-spacing: 0.3px; }
+  .day-sub { font-family: var(--font-mono); font-size: 11px; color: var(--chalk-dim); margin-top: 2px; }
+  .day-macros { font-family: var(--font-mono); font-size: 13px; color: var(--chalk-dim); display: flex; gap: 12px; white-space: nowrap; }
+  .day-macros b.hit-text { color: var(--ok); }
+  .day-macros b { color: var(--hazard); }
+  .day-detail { padding: 0 16px 12px; display: none; }
+  .day-detail.open { display: block; }
+  .day-detail .entry-row { padding: 8px 0; }
+  .day-detail .entry-macros { font-size: 11px; }
+  .empty-history { color: var(--chalk-dim); font-size: 13.5px; font-style: italic; padding: 10px 0; }
+</style>
+</head>
+<body>
+
+<!-- ============ AUTH GATE ============ -->
+<div id="checkinScreen">
+  <div class="checkin-card">
+    <div class="hazard-rule"></div>
+    <div class="checkin-body">
+      <svg class="checkin-icon" viewBox="0 0 64 64" fill="none">
+        <rect x="6" y="28" width="6" height="8" rx="1.5" fill="#9C9585"/>
+        <rect x="14" y="22" width="6" height="20" rx="1.5" fill="#E8B923"/>
+        <rect x="22" y="30" width="20" height="4" rx="1" fill="#EDE6D6"/>
+        <rect x="44" y="22" width="6" height="20" rx="1.5" fill="#E8B923"/>
+        <rect x="52" y="28" width="6" height="8" rx="1.5" fill="#9C9585"/>
+      </svg>
+      <div class="checkin-eyebrow">Member Access</div>
+      <h1>Plated</h1>
+      <p class="tagline">Log your session. Track your plates. Hit your numbers.</p>
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" id="authTabSignIn">Sign In</button>
+        <button type="button" class="auth-tab" id="authTabSignUp">Create Account</button>
+      </div>
+
+      <div class="checkin-form">
+        <label>Email<input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email" /></label>
+        <label>Password<input type="password" id="authPassword" placeholder="At least 6 characters" autocomplete="current-password" /></label>
+        <div class="checkin-error" id="checkinError"></div>
+        <button id="checkinBtn">Sign In</button>
+      </div>
+      <div class="checkin-note" id="checkinNote">Real accounts, powered by Supabase Auth. Your log, goals, and stats are private to your account — enforced by row-level security in the database, not just the app hiding them.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="appScreen">
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">P</div>
+      <div class="brand-name">Plated · Macro Log</div>
+    </div>
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="tabLog">Log</button>
+      <button class="tab-btn" data-tab="tabProfile">Profile</button>
+    </div>
+    <div class="member-chip">
+      <b id="memberEmailChip"></b>
+      <button id="logoutBtn">Sign Out</button>
+    </div>
+  </div>
+
+  <div id="tabLog" class="tab-panel">
+
+  <div class="hero">
+    <div class="hero-eyebrow">Daily Training Log</div>
+    <h1>Macro Log</h1>
+    <p class="sub">Log what you ate, get the macros estimated automatically, and hit your plates every day. Suggestions on the side help close the gap.</p>
+
+    <div class="plate-board">
+      <div class="plate-cell">
+        <div class="plate-label">Protein</div>
+        <div class="plate-disc protein"><span class="plate-value" id="proteinTotal">0</span></div>
+        <div class="plate-goal">of <b id="proteinGoalLabel">160</b>g</div>
+        <div class="plate-bar-track"><div class="plate-bar-fill protein-fill" id="proteinBar" style="width:0%"></div></div>
+      </div>
+      <div class="plate-cell">
+        <div class="plate-label">Calories</div>
+        <div class="plate-disc calories"><span class="plate-value" id="calTotal">0</span></div>
+        <div class="plate-goal">of <b id="calGoalLabel">2600</b></div>
+        <div class="plate-bar-track"><div class="plate-bar-fill calories-fill" id="calBar" style="width:0%"></div></div>
+      </div>
+      <div class="plate-cell">
+        <div class="plate-label">Carbs</div>
+        <div class="plate-disc carbs"><span class="plate-value" id="carbTotal">0</span></div>
+        <div class="plate-goal">of <b id="carbGoalLabel">280</b>g</div>
+        <div class="plate-bar-track"><div class="plate-bar-fill carbs-fill" id="carbBar" style="width:0%"></div></div>
+      </div>
+      <div class="plate-cell">
+        <div class="plate-label">Fat</div>
+        <div class="plate-disc fat"><span class="plate-value" id="fatTotal">0</span></div>
+        <div class="plate-goal">of <b id="fatGoalLabel">80</b>g</div>
+        <div class="plate-bar-track"><div class="plate-bar-fill fat-fill" id="fatBar" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="panel">
+      <h2 style="display:flex; align-items:center; justify-content:space-between;">
+        <span>Log Food · <span id="todayLabel" style="color:var(--chalk-dim); font-weight:400; font-size:14px; text-transform:none; letter-spacing:0; font-family:var(--font-body);"></span></span>
+        <button id="clearTodayBtn" class="clear-btn">Clear Today</button>
+      </h2>
+      <div class="log-form">
+        <input id="foodInput" type="text" placeholder="e.g. grilled chicken breast" />
+        <input id="servingInput" type="text" placeholder="serving (optional)" />
+        <button id="logBtn">Log It</button>
+      </div>
+      <div class="status-msg" id="statusMsg"></div>
+
+      <div class="entries" id="entries">
+        <div class="empty-note">Loading today's log...</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Meal Suggestions</h2>
+      <div class="suggest-hint">Sorted by protein · tap to log instantly</div>
+      <div id="suggestions"></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:22px;">
+    <h2>Tracking Over Time</h2>
+    <div id="historyStatus" class="status-msg">Loading history...</div>
+
+    <div class="avg-grid" id="avgGrid" style="display:none;">
+      <div class="avg-cell">
+        <div class="score-label">Days Logged</div>
+        <div class="score-value"><span id="daysLoggedCount">0</span></div>
+      </div>
+      <div class="avg-cell">
+        <div class="score-label">7-Day Avg Protein</div>
+        <div class="score-value"><span id="avg7Protein">0</span><span class="unit">g</span></div>
+      </div>
+      <div class="avg-cell">
+        <div class="score-label">All-Time Avg Protein</div>
+        <div class="score-value"><span id="avgAllProtein">0</span><span class="unit">g</span></div>
+      </div>
+      <div class="avg-cell">
+        <div class="score-label">Days Hit Target</div>
+        <div class="score-value"><span id="daysHitCount">0</span><span class="unit">/ <span id="daysLoggedCount2">0</span></span></div>
+      </div>
+      <div class="avg-cell">
+        <div class="score-label">Best Day</div>
+        <div class="score-value"><span id="bestDayProtein">0</span><span class="unit">g</span></div>
+      </div>
+      <div class="avg-cell">
+        <div class="score-label">7-Day Avg Calories</div>
+        <div class="score-value"><span id="avg7Cal">0</span><span class="unit">cal</span></div>
+      </div>
+    </div>
+
+    <div id="trendChartWrap" style="display:none; margin-top:20px;">
+      <div class="score-label" style="font-family:var(--font-mono); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--chalk-dim); margin-bottom:8px;">Protein — Last 14 Days</div>
+      <div id="trendChart"></div>
+    </div>
+
+    <div id="pastDays" style="margin-top:18px;"></div>
+  </div>
+
+  </div><!-- /tabLog -->
+
+  <div id="tabProfile" class="tab-panel" style="display:none;">
+
+    <div class="hero" style="border-bottom:none; padding-bottom:0;">
+      <div class="hero-eyebrow">Member Profile</div>
+      <h1 style="font-size:36px;">Profile</h1>
+      <p class="sub">Set your name and build your macro goals from your own stats. Everything here feeds straight into the scoreboard on the Log tab.</p>
+    </div>
+
+    <div class="panel" style="margin-top:6px;">
+      <h2>Your Info</h2>
+      <div class="log-form">
+        <input id="profileNameInput" type="text" placeholder="Your name" style="flex:2; min-width:180px;" />
+        <button id="saveProfileBtn">Save Profile</button>
+      </div>
+      <div class="status-msg" id="profileSavedMsg"></div>
+    </div>
+
+    <div class="panel" style="margin-top:22px;">
+      <h2>Customize My Goals</h2>
+      <p class="personalize-note">These use standard formulas (Mifflin-St Jeor + activity level) to estimate a reasonable starting point — not a medical or dietary prescription. For real weight-goal changes, it's worth checking in with a coach, doctor, or dietitian, especially while you're still growing.</p>
+      <div class="personalize-grid">
+        <label>Sex <select id="pSex"><option value="male">Male</option><option value="female">Female</option></select></label>
+        <label>Age <input type="number" id="pAge" min="10" max="90" value="18" /></label>
+        <label>Height <input type="number" id="pHeightFt" min="3" max="8" value="5" style="width:44px;" /> ft <input type="number" id="pHeightIn" min="0" max="11" value="10" style="width:44px;" /> in</label>
+        <label>Weight <input type="number" id="pWeight" min="50" max="400" value="160" /> lb</label>
+        <label>Goal Weight <input type="number" id="pGoalWeight" min="50" max="400" value="165" /> lb</label>
+        <label>Activity
+          <select id="pActivity">
+            <option value="1.2">Sedentary</option>
+            <option value="1.375">Lightly active</option>
+            <option value="1.55">Moderately active</option>
+            <option value="1.725" selected>Very active (daily training)</option>
+            <option value="1.9">Athlete (2x/day or heavy load)</option>
+          </select>
+        </label>
+      </div>
+      <button id="calcGoalsBtn">Calculate Goals</button>
+      <span class="goals-saved" id="calcGoalsMsg"></span>
+    </div>
+
+    <div class="panel" style="margin-top:22px;">
+      <h2>Manual Goal Editing</h2>
+      <div class="goals-row" id="goalsRow" style="margin-top:0;">
+        <span class="goals-label">Edit goals:</span>
+        <label>Protein <input type="number" id="goalProteinInput" min="0" /> g</label>
+        <label>Calories <input type="number" id="goalCalInput" min="0" /></label>
+        <label>Carbs <input type="number" id="goalCarbInput" min="0" /> g</label>
+        <label>Fat <input type="number" id="goalFatInput" min="0" /> g</label>
+        <button id="saveGoalsBtn">Save</button>
+        <span class="goals-saved" id="goalsSavedMsg"></span>
+      </div>
+    </div>
+
+  </div><!-- /tabProfile -->
+
+</div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE CONFIG — fill these in from your Supabase project
+// (Project Settings → API). The anon key is safe to expose in client-side
+// code by design — it only grants what your Row-Level Security policies
+// allow, which is why the SQL schema matters as much as this file.
+// ============================================================
+const SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL'; // e.g. https://xxxxx.supabase.co
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+
+const SUPABASE_CONFIGURED =
+  SUPABASE_URL.startsWith('http') &&
+  SUPABASE_URL !== 'YOUR_SUPABASE_PROJECT_URL' &&
+  SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
+
+// ------------------------------------------------------------
+// DEMO MODE: if real credentials haven't been filled in yet (e.g. testing
+// this file here before deploying), this stands in for the real Supabase
+// client so the app is still fully clickable — same method names, same
+// shapes back, just backed by an in-memory store instead of a real database.
+// Nothing here persists across a reload, and "accounts" only exist for the
+// current tab. Swap in real SUPABASE_URL/SUPABASE_ANON_KEY above and this
+// is bypassed entirely in favor of the real thing.
+// ------------------------------------------------------------
+function createDemoSupabaseClient() {
+  const tables = { profiles: [], goals: [], body_stats: [], food_logs: [], food_cache: [] };
+  const users = {}; // email -> { id, email, password }
+  let session = null;
+  let idCounter = 1;
+  const nextId = () => 'demo-' + idCounter++;
+  const keyField = { profiles: 'id', goals: 'user_id', body_stats: 'user_id', food_cache: 'cache_key' };
+
+  function matches(row, filters) {
+    return filters.every(([field, val]) => row[field] === val);
+  }
+
+  class DemoQuery {
+    constructor(table) {
+      this.table = table;
+      this.filters = [];
+      this.orders = [];
+      this.op = 'select';
+      this.payload = null;
+      this.wantSingle = false;
+      this.wantMaybeSingle = false;
+      this.countHead = false;
+    }
+    select(cols, opts) {
+      if (this.op === 'select') this.op = 'select';
+      this._selectAfterWrite = this.op !== 'select';
+      if (opts && opts.head) this.countHead = true;
+      return this;
+    }
+    eq(field, val) { this.filters.push([field, val]); return this; }
+    order() { return this; } // ordering is applied generically below
+    insert(row) { this.op = 'insert'; this.payload = row; return this; }
+    upsert(row) { this.op = 'upsert'; this.payload = row; return this; }
+    update(patch) { this.op = 'update'; this.payload = patch; return this; }
+    delete() { this.op = 'delete'; return this; }
+    maybeSingle() { this.wantMaybeSingle = true; return this; }
+    single() { this.wantSingle = true; return this; }
+    then(resolve, reject) { this._run().then(resolve, reject); }
+    async _run() {
+      const rows = tables[this.table];
+      try {
+        if (this.op === 'select') {
+          let result = rows.filter((r) => matches(r, this.filters));
+          result = result.slice().sort((a, b) => {
+            if (a.log_date && b.log_date && a.log_date !== b.log_date) return b.log_date.localeCompare(a.log_date);
+            if (a.created_at && b.created_at) return b.created_at.localeCompare(a.created_at);
+            return 0;
+          });
+          if (this.countHead) return { data: null, count: result.length, error: null };
+          if (this.wantMaybeSingle) return { data: result[0] || null, error: null };
+          if (this.wantSingle) return { data: result[0], error: result[0] ? null : { message: 'No rows found' } };
+          return { data: result, error: null };
+        }
+        if (this.op === 'insert') {
+          const row = { ...this.payload };
+          if (this.table === 'food_logs') {
+            row.id = nextId();
+            row.created_at = new Date().toISOString();
+          }
+          rows.push(row);
+          if (this._selectAfterWrite) return { data: this.wantSingle ? row : [row], error: null };
+          return { data: null, error: null };
+        }
+        if (this.op === 'upsert') {
+          const kf = keyField[this.table];
+          const idx = rows.findIndex((r) => r[kf] === this.payload[kf]);
+          if (idx >= 0) rows[idx] = { ...rows[idx], ...this.payload };
+          else rows.push({ ...this.payload });
+          return { data: null, error: null };
+        }
+        if (this.op === 'update') {
+          rows.forEach((r, i) => {
+            if (matches(r, this.filters)) rows[i] = { ...r, ...this.payload };
+          });
+          return { data: null, error: null };
+        }
+        if (this.op === 'delete') {
+          tables[this.table] = rows.filter((r) => !matches(r, this.filters));
+          return { data: null, error: null };
+        }
+      } catch (err) {
+        return { data: null, error: { message: err.message } };
+      }
+    }
+  }
+
+  return {
+    auth: {
+      async signUp({ email, password }) {
+        if (users[email]) return { data: null, error: { message: 'An account with that email already exists — try signing in instead.' } };
+        const id = nextId();
+        users[email] = { id, email, password };
+        session = { user: { id, email }, access_token: 'demo-token' };
+        return { data: { user: session.user, session }, error: null };
+      },
+      async signInWithPassword({ email, password }) {
+        const u = users[email];
+        if (!u || u.password !== password) return { data: null, error: { message: 'Invalid email or password.' } };
+        session = { user: { id: u.id, email }, access_token: 'demo-token' };
+        return { data: { user: session.user, session }, error: null };
+      },
+      async getSession() { return { data: { session } }; },
+      async signOut() { session = null; return { error: null }; },
+    },
+    from(table) { return new DemoQuery(table); },
+  };
+}
+
+const supabaseClient = SUPABASE_CONFIGURED
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : createDemoSupabaseClient();
+
+let currentUser = null; // set once signed in — { id, email }
+</script>
+
+<script>
+const checkinScreen = document.getElementById('checkinScreen');
+const appScreen = document.getElementById('appScreen');
+const authEmailInput = document.getElementById('authEmail');
+const authPasswordInput = document.getElementById('authPassword');
+const checkinError = document.getElementById('checkinError');
+const checkinBtn = document.getElementById('checkinBtn');
+const checkinNote = document.getElementById('checkinNote');
+const authTabSignIn = document.getElementById('authTabSignIn');
+const authTabSignUp = document.getElementById('authTabSignUp');
+const memberEmailChip = document.getElementById('memberEmailChip');
+const logoutBtn = document.getElementById('logoutBtn');
+
+let authMode = 'signin'; // 'signin' | 'signup'
+let appInitialized = false;
+
+function setAuthMode(mode) {
+  authMode = mode;
+  authTabSignIn.classList.toggle('active', mode === 'signin');
+  authTabSignUp.classList.toggle('active', mode === 'signup');
+  checkinBtn.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+  authPasswordInput.autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
+  checkinError.textContent = '';
+}
+authTabSignIn.addEventListener('click', () => setAuthMode('signin'));
+
+if (!SUPABASE_CONFIGURED) {
+  checkinNote.textContent = 'Demo mode — no Supabase project connected yet. Sign up with anything to try the app; nothing here persists past this session, and live AI food lookups need the real deployed site to work.';
+  checkinNote.style.color = 'var(--hazard)';
+}
+authTabSignUp.addEventListener('click', () => setAuthMode('signup'));
+
+function showApp(user) {
+  currentUser = user;
+  checkinScreen.style.display = 'none';
+  appScreen.style.display = 'block';
+  memberEmailChip.textContent = user.email;
+  if (!appInitialized) {
+    appInitialized = true;
+    init();
+  }
+}
+
+function showCheckin() {
+  currentUser = null;
+  appScreen.style.display = 'none';
+  checkinScreen.style.display = 'flex';
+  authPasswordInput.value = '';
+  checkinError.textContent = '';
+}
+
+async function attemptAuth() {
+  const email = authEmailInput.value.trim();
+  const password = authPasswordInput.value;
+  if (!email || !password) {
+    checkinError.textContent = 'Enter both email and password.';
+    return;
+  }
+  if (password.length < 6) {
+    checkinError.textContent = 'Password needs to be at least 6 characters.';
+    return;
+  }
+
+  checkinError.textContent = '';
+  checkinBtn.disabled = true;
+  checkinBtn.textContent = authMode === 'signin' ? 'Signing in...' : 'Creating account...';
+
+  try {
+    if (authMode === 'signin') {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      showApp(data.user);
+    } else {
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) throw error;
+      if (!data.session) {
+        // Email confirmation is turned on in this Supabase project — no session yet.
+        checkinError.textContent = '';
+        checkinNote.textContent = 'Account created — check your email to confirm, then sign in.';
+        setAuthMode('signin');
+      } else {
+        showApp(data.user);
+      }
+    }
+  } catch (err) {
+    checkinError.textContent = err.message || 'Something went wrong — try again.';
+  } finally {
+    checkinBtn.disabled = false;
+    checkinBtn.textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
+  }
+}
+
+checkinBtn.addEventListener('click', attemptAuth);
+authEmailInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptAuth(); });
+authPasswordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptAuth(); });
+
+logoutBtn.addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  showCheckin();
+});
+
+(async function bootstrap() {
+  const { data } = await supabaseClient.auth.getSession();
+  if (data.session) {
+    showApp(data.session.user);
+  } else {
+    showCheckin();
+  }
+})();
+</script>
+
+<script>
+// TAB NAVIGATION
+const tabButtons = document.querySelectorAll('.tab-btn');
+const tabPanels = {
+  tabLog: document.getElementById('tabLog'),
+  tabProfile: document.getElementById('tabProfile'),
+};
+tabButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    tabButtons.forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    Object.keys(tabPanels).forEach((key) => {
+      tabPanels[key].style.display = key === btn.dataset.tab ? 'block' : 'none';
+    });
+  });
+});
+
+let goals = { protein: 160, calories: 2600, carbs: 280, fat: 80 };
+
+const suggestions = [
+  { name: "3 hard-boiled eggs + 1 cup Greek yogurt", serving: "3 eggs + 1 cup yogurt", calories: 380, protein: 35, carbs: 7, fat: 16,
+    how: "Boil eggs 10-12 min, then cool in ice water and peel. Serve alongside a cup of plain Greek yogurt." },
+  { name: "6oz grilled chicken breast, 1 cup rice, 1 cup broccoli", serving: "1 bowl", calories: 520, protein: 61, carbs: 49, fat: 8,
+    how: "Season chicken with salt, pepper, and garlic powder. Bake at 400°F for ~20 min or pan-sear 6-7 min per side. Steam broccoli 5 min. Serve over cooked rice." },
+  { name: "6oz ground turkey, roasted sweet potato, mixed veg", serving: "1 plate", calories: 480, protein: 51, carbs: 33, fat: 14,
+    how: "Brown ground turkey in a pan with salt and pepper, breaking it up as it cooks. Cube sweet potato and roast at 400°F for 25 min. Roast or steam mixed veg alongside." },
+  { name: "1 cup low-fat cottage cheese", serving: "1 cup", calories: 180, protein: 28, carbs: 8, fat: 2,
+    how: "No prep needed — straight from the container." },
+  { name: "Oats with milk + peanut butter, 2 boiled eggs", serving: "1 bowl + 2 eggs", calories: 430, protein: 33, carbs: 40, fat: 18,
+    how: "Cook oats with milk on the stove or microwave for 2-3 min. Stir in a spoonful of peanut butter. Boil eggs separately for 10-12 min." },
+  { name: "6oz seared sirloin steak bites, rice, peppers", serving: "1 bowl", calories: 540, protein: 55, carbs: 47, fat: 18,
+    how: "Cube steak, season with salt and pepper, sear in a hot pan 3-4 min per side. Sauté sliced peppers in the same pan. Serve over rice." },
+  { name: "6oz ground beef (90/10), roasted potato, green beans", serving: "1 plate", calories: 500, protein: 50, carbs: 40, fat: 20,
+    how: "Brown ground beef with salt and pepper. Cube potato and roast at 400°F for 25 min. Steam green beans 5 min." },
+  { name: "1 can tuna in water", serving: "1 can", calories: 140, protein: 26, carbs: 0, fat: 1,
+    how: "Drain and eat as-is, or mix with a spoon of mayo or mustard." },
+  { name: "Turkey meatballs, whole wheat pasta, marinara", serving: "1 bowl", calories: 560, protein: 53, carbs: 55, fat: 16,
+    how: "Mix ground turkey with breadcrumbs, an egg, and garlic. Form into balls, bake at 400°F for 18-20 min. Boil pasta, top with marinara sauce and meatballs." },
+  { name: "6oz roasted pork tenderloin, rice, roasted veg", serving: "1 plate", calories: 460, protein: 51, carbs: 40, fat: 14,
+    how: "Rub tenderloin with paprika, garlic powder, and salt. Roast at 400°F for ~25 min until it hits 145°F internal. Slice and serve over rice with roasted veg." },
+  { name: "6oz shredded chicken, buffalo sauce, rice, celery", serving: "1 bowl", calories: 520, protein: 57, carbs: 45, fat: 14,
+    how: "Cook chicken breast (bake or boil), then shred with two forks. Toss with buffalo sauce. Serve over rice with celery sticks on the side." },
+  { name: "Ground beef chili with black beans over rice", serving: "1 bowl", calories: 540, protein: 56, carbs: 50, fat: 16,
+    how: "Brown ground beef, add canned black beans, diced tomatoes, and chili powder. Simmer 15-20 min. Serve over rice." },
+  { name: "2 cans tuna, 1 cup quinoa, roasted veg", serving: "1 bowl", calories: 520, protein: 60, carbs: 45, fat: 10,
+    how: "Cook quinoa per package directions. Drain tuna cans. Roast veg at 400°F for 20 min. Combine everything in a bowl." },
+  { name: "6oz ground turkey tacos, black beans, rice", serving: "1 plate", calories: 540, protein: 57, carbs: 50, fat: 14,
+    how: "Brown ground turkey with taco seasoning. Warm black beans. Serve with rice, in tortillas or as a bowl." },
+].sort((a, b) => b.protein - a.protein);
+
+let entries = [];
+
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+const TODAY = todayStr();
+
+function prettyDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const isToday = dateStr === TODAY;
+  const label = dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  return isToday ? `${label} (Today)` : label;
+}
+
+document.getElementById('todayLabel').textContent = prettyDate(TODAY);
+
+const foodInput = document.getElementById('foodInput');
+const servingInput = document.getElementById('servingInput');
+const logBtn = document.getElementById('logBtn');
+const statusMsg = document.getElementById('statusMsg');
+const entriesEl = document.getElementById('entries');
+const suggestionsEl = document.getElementById('suggestions');
+
+async function addEntryToLog(entryData, source) {
+  const { data, error } = await supabaseClient
+    .from('food_logs')
+    .insert({
+      user_id: currentUser.id,
+      log_date: TODAY,
+      food: entryData.food,
+      serving: entryData.serving || '',
+      calories: entryData.calories,
+      protein: entryData.protein,
+      carbs: entryData.carbs,
+      fat: entryData.fat,
+      source,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  entries.unshift(data);
+  renderEntries();
+  renderHistory();
+}
+
+function renderSuggestions() {
+  suggestionsEl.innerHTML = '';
+  suggestions.forEach((s, idx) => {
+    const card = document.createElement('div');
+    card.className = 'suggest-card';
+    card.style.flexDirection = 'column';
+    card.style.alignItems = 'stretch';
+    card.innerHTML = `
+      <div style="display:flex; align-items:flex-start; gap:10px; width:100%;">
+        <div class="suggest-info">
+          <div class="suggest-name">${s.name}</div>
+          <div class="suggest-macro">${s.calories} cal &middot; ${s.carbs}g carb &middot; ${s.fat}g fat</div>
+          <span class="recipe-toggle" data-idx="${idx}">Recipe &#9662;</span>
+        </div>
+        <div class="suggest-protein">${s.protein}g</div>
+      </div>
+      <div class="recipe-detail" id="recipe-${idx}">${s.how}</div>
+    `;
+    const logFromSuggestion = () => {
+      addEntryToLog({ food: s.name, serving: s.serving, calories: s.calories, protein: s.protein, carbs: s.carbs, fat: s.fat }, 'suggestion')
+        .catch((err) => { statusMsg.textContent = "Couldn't log that — try again."; statusMsg.classList.add('error'); });
+    };
+    card.querySelector('.suggest-info').addEventListener('click', (e) => {
+      if (e.target.classList.contains('suggest-name')) logFromSuggestion();
+    });
+    card.querySelector('.suggest-name').style.cursor = 'pointer';
+    card.querySelector('.suggest-protein').style.cursor = 'pointer';
+    card.querySelector('.suggest-protein').addEventListener('click', logFromSuggestion);
+    card.querySelector('.recipe-toggle').addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById(`recipe-${idx}`).classList.toggle('open');
+    });
+    suggestionsEl.appendChild(card);
+  });
+}
+
+function renderEntries() {
+  if (entries.length === 0) {
+    entriesEl.innerHTML = '<div class="empty-note">Nothing logged yet today — add your first item above.</div>';
+  } else {
+    entriesEl.innerHTML = '';
+    entries.forEach((e, i) => {
+      const row = document.createElement('div');
+      row.className = 'entry-row';
+      row.innerHTML = `
+        <div class="entry-info">
+          <div class="entry-name">${e.food}</div>
+          <div class="entry-serving">${e.serving || ''}</div>
+        </div>
+        <div class="entry-macros">
+          <span><b>${e.protein}g</b> P</span>
+          <span>${e.carbs}g C</span>
+          <span>${e.fat}g F</span>
+          <span>${e.calories} cal</span>
+        </div>
+        <button class="entry-edit" title="Edit">&#9998;</button>
+        <button class="entry-delete" title="Remove">&times;</button>
+      `;
+      row.querySelector('.entry-delete').addEventListener('click', async () => {
+        try {
+          const { error } = await supabaseClient.from('food_logs').delete().eq('id', e.id);
+          if (error) throw error;
+          entries.splice(i, 1);
+          renderEntries();
+          renderHistory();
+        } catch (err) {
+          statusMsg.textContent = "Couldn't delete that entry — try again.";
+          statusMsg.classList.add('error');
+        }
+      });
+      row.querySelector('.entry-edit').addEventListener('click', () => {
+        renderEditRow(row, e, i);
+      });
+      entriesEl.appendChild(row);
+    });
+  }
+  updateTotals();
+}
+
+function renderEditRow(row, entry, i) {
+  row.innerHTML = `
+    <div class="entry-edit-form">
+      <input type="text" class="edit-food" value="${entry.food}" />
+      <div class="edit-macro-inputs">
+        <label>P <input type="number" class="edit-protein" value="${entry.protein}" min="0" /></label>
+        <label>C <input type="number" class="edit-carbs" value="${entry.carbs}" min="0" /></label>
+        <label>F <input type="number" class="edit-fat" value="${entry.fat}" min="0" /></label>
+        <label>Cal <input type="number" class="edit-calories" value="${entry.calories}" min="0" /></label>
+      </div>
+      <button class="edit-save-btn">Save</button>
+      <button class="edit-cancel-btn">Cancel</button>
+    </div>
+  `;
+  row.querySelector('.edit-save-btn').addEventListener('click', async () => {
+    const updated = {
+      food: row.querySelector('.edit-food').value.trim() || entry.food,
+      protein: parseInt(row.querySelector('.edit-protein').value) || 0,
+      carbs: parseInt(row.querySelector('.edit-carbs').value) || 0,
+      fat: parseInt(row.querySelector('.edit-fat').value) || 0,
+      calories: parseInt(row.querySelector('.edit-calories').value) || 0,
+    };
+    try {
+      const { error } = await supabaseClient.from('food_logs').update(updated).eq('id', entry.id);
+      if (error) throw error;
+      entries[i] = { ...entry, ...updated };
+      renderEntries();
+      renderHistory();
+    } catch (err) {
+      statusMsg.textContent = "Couldn't save that edit — try again.";
+      statusMsg.classList.add('error');
+      renderEntries();
+    }
+  });
+  row.querySelector('.edit-cancel-btn').addEventListener('click', () => renderEntries());
+}
+
+async function loadToday() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('food_logs')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .eq('log_date', TODAY)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    entries = data || [];
+  } catch (err) {
+    entries = [];
+  }
+  renderEntries();
+}
+
+document.getElementById('clearTodayBtn').addEventListener('click', async () => {
+  if (entries.length === 0) return;
+  try {
+    const { error } = await supabaseClient
+      .from('food_logs')
+      .delete()
+      .eq('user_id', currentUser.id)
+      .eq('log_date', TODAY);
+    if (error) throw error;
+    entries = [];
+    renderEntries();
+    renderHistory();
+  } catch (err) {
+    statusMsg.textContent = "Couldn't clear today's log — try again.";
+    statusMsg.classList.add('error');
+  }
+});
+
+function updateTotals() {
+  const totals = entries.reduce((acc, e) => {
+    acc.protein += e.protein; acc.calories += e.calories; acc.carbs += e.carbs; acc.fat += e.fat;
+    return acc;
+  }, { protein: 0, calories: 0, carbs: 0, fat: 0 });
+
+  document.getElementById('proteinTotal').textContent = totals.protein;
+  document.getElementById('calTotal').textContent = totals.calories;
+  document.getElementById('carbTotal').textContent = totals.carbs;
+  document.getElementById('fatTotal').textContent = totals.fat;
+
+  const pPct = Math.min(100, Math.round((totals.protein / goals.protein) * 100));
+  const proteinBar = document.getElementById('proteinBar');
+  proteinBar.style.width = pPct + '%';
+  proteinBar.classList.toggle('hit', totals.protein >= goals.protein);
+
+  const cPct = Math.min(100, Math.round((totals.calories / goals.calories) * 100));
+  const calBar = document.getElementById('calBar');
+  calBar.style.width = cPct + '%';
+  calBar.classList.toggle('hit', totals.calories >= goals.calories);
+
+  const carbPct = Math.min(100, Math.round((totals.carbs / goals.carbs) * 100));
+  const carbBar = document.getElementById('carbBar');
+  carbBar.style.width = carbPct + '%';
+  carbBar.classList.toggle('hit', totals.carbs >= goals.carbs);
+
+  const fPct = Math.min(100, Math.round((totals.fat / goals.fat) * 100));
+  const fatBar = document.getElementById('fatBar');
+  fatBar.style.width = fPct + '%';
+  fatBar.classList.toggle('hit', totals.fat >= goals.fat);
+}
+
+function applyGoalLabels() {
+  document.getElementById('proteinGoalLabel').textContent = goals.protein;
+  document.getElementById('calGoalLabel').textContent = goals.calories;
+  document.getElementById('carbGoalLabel').textContent = goals.carbs;
+  document.getElementById('fatGoalLabel').textContent = goals.fat;
+  document.getElementById('goalProteinInput').value = goals.protein;
+  document.getElementById('goalCalInput').value = goals.calories;
+  document.getElementById('goalCarbInput').value = goals.carbs;
+  document.getElementById('goalFatInput').value = goals.fat;
+}
+
+async function loadGoals() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('goals')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) goals = { protein: data.protein, calories: data.calories, carbs: data.carbs, fat: data.fat };
+  } catch (err) {
+    // keep defaults
+  }
+  applyGoalLabels();
+}
+
+async function saveGoals() {
+  const p = parseInt(document.getElementById('goalProteinInput').value) || goals.protein;
+  const c = parseInt(document.getElementById('goalCalInput').value) || goals.calories;
+  const cb = parseInt(document.getElementById('goalCarbInput').value) || goals.carbs;
+  const f = parseInt(document.getElementById('goalFatInput').value) || goals.fat;
+  goals = { protein: p, calories: c, carbs: cb, fat: f };
+  applyGoalLabels();
+  updateTotals();
+  try {
+    const { error } = await supabaseClient
+      .from('goals')
+      .upsert({ user_id: currentUser.id, ...goals, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    const msg = document.getElementById('goalsSavedMsg');
+    msg.textContent = 'Saved';
+    setTimeout(() => { msg.textContent = ''; }, 1800);
+    renderHistory();
+  } catch (err) {
+    document.getElementById('goalsSavedMsg').textContent = "Couldn't save";
+  }
+}
+
+document.getElementById('saveGoalsBtn').addEventListener('click', saveGoals);
+
+// PERSONALIZED GOAL BUILDER — always visible on its own Profile tab now,
+// no collapse/expand needed.
+
+async function loadBodyStats() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('body_stats')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) {
+      document.getElementById('pSex').value = data.sex;
+      document.getElementById('pAge').value = data.age;
+      document.getElementById('pHeightFt').value = data.height_ft;
+      document.getElementById('pHeightIn').value = data.height_in;
+      document.getElementById('pWeight').value = data.weight;
+      document.getElementById('pGoalWeight').value = data.goal_weight;
+      document.getElementById('pActivity').value = data.activity;
+    }
+  } catch (err) {
+    // keep defaults already in the markup
+  }
+}
+
+async function calculateGoals() {
+  const sex = document.getElementById('pSex').value;
+  const age = parseFloat(document.getElementById('pAge').value) || 18;
+  const heightFt = parseFloat(document.getElementById('pHeightFt').value) || 0;
+  const heightIn = parseFloat(document.getElementById('pHeightIn').value) || 0;
+  const weight = parseFloat(document.getElementById('pWeight').value) || 0;
+  const goalWeight = parseFloat(document.getElementById('pGoalWeight').value) || weight;
+  const activity = parseFloat(document.getElementById('pActivity').value) || 1.55;
+
+  if (!weight || (!heightFt && !heightIn)) {
+    document.getElementById('calcGoalsMsg').textContent = 'Fill in height and weight first.';
+    return;
+  }
+
+  const totalInches = heightFt * 12 + heightIn;
+  const heightCm = totalInches * 2.54;
+  const weightKg = weight * 0.453592;
+
+  // Mifflin-St Jeor BMR
+  let bmr = 10 * weightKg + 6.25 * heightCm - 5 * age;
+  bmr += (sex === 'male') ? 5 : -161;
+
+  const tdee = bmr * activity;
+
+  // Adjust for weight goal: ~500 cal deficit/surplus per lb/week target difference
+  const weightDiff = goalWeight - weight;
+  let calorieTarget = tdee;
+  if (weightDiff <= -1) calorieTarget = tdee - 500;
+  else if (weightDiff >= 1) calorieTarget = tdee + 350;
+
+  // Safety floor: never recommend eating below resting metabolic rate, and never below
+  // a conservative absolute minimum. This caps how aggressive a deficit can be.
+  const absoluteFloor = 1500;
+  const safeFloor = Math.max(bmr, absoluteFloor);
+  let floorApplied = false;
+  if (calorieTarget < safeFloor) {
+    calorieTarget = safeFloor;
+    floorApplied = true;
+  }
+
+  // Macro split: protein ~1g/lb bodyweight (athlete-level), fat ~27% of calories, remainder carbs
+  const proteinTarget = Math.round(weight * 1.0);
+  const fatTarget = Math.round((calorieTarget * 0.27) / 9);
+  const carbTarget = Math.max(0, Math.round((calorieTarget - proteinTarget * 4 - fatTarget * 9) / 4));
+
+  goals = { protein: proteinTarget, calories: Math.round(calorieTarget), carbs: carbTarget, fat: fatTarget };
+  applyGoalLabels();
+  updateTotals();
+
+  const msg = document.getElementById('calcGoalsMsg');
+  msg.textContent = floorApplied
+    ? 'Goals applied — calorie target was raised to a safe minimum for your stats.'
+    : 'Goals calculated and applied ✓';
+
+  try {
+    const { error: goalsErr } = await supabaseClient
+      .from('goals')
+      .upsert({ user_id: currentUser.id, ...goals, updated_at: new Date().toISOString() });
+    if (goalsErr) throw goalsErr;
+
+    const { error: statsErr } = await supabaseClient
+      .from('body_stats')
+      .upsert({
+        user_id: currentUser.id,
+        sex, age, height_ft: heightFt, height_in: heightIn, weight, goal_weight: goalWeight, activity,
+        updated_at: new Date().toISOString(),
+      });
+    if (statsErr) throw statsErr;
+
+    renderHistory();
+    setTimeout(() => { msg.textContent = ''; }, floorApplied ? 4500 : 2500);
+  } catch (err) {
+    msg.textContent = 'Calculated, but saving failed.';
+  }
+}
+
+document.getElementById('calcGoalsBtn').addEventListener('click', calculateGoals);
+
+// COST PROTECTION: common foods answered instantly with no API call
+const commonFoodsCache = {
+  "egg": { food: "1 large egg", serving: "1 egg", calories: 78, protein: 6, carbs: 1, fat: 5 },
+  "eggs": { food: "Eggs", serving: "per egg", calories: 78, protein: 6, carbs: 1, fat: 5 },
+  "banana": { food: "Banana", serving: "1 medium", calories: 105, protein: 1, carbs: 27, fat: 0 },
+  "apple": { food: "Apple", serving: "1 medium", calories: 95, protein: 0, carbs: 25, fat: 0 },
+  "chicken breast": { food: "Chicken breast, cooked", serving: "100g", calories: 165, protein: 31, carbs: 0, fat: 4 },
+  "ground beef": { food: "Ground beef (90/10), cooked", serving: "100g", calories: 176, protein: 26, carbs: 0, fat: 8 },
+  "ground turkey": { food: "Ground turkey (93/7), cooked", serving: "100g", calories: 176, protein: 27, carbs: 0, fat: 8 },
+  "white rice": { food: "White rice, cooked", serving: "1 cup", calories: 205, protein: 4, carbs: 45, fat: 0 },
+  "rice": { food: "Rice, cooked", serving: "1 cup", calories: 205, protein: 4, carbs: 45, fat: 0 },
+  "greek yogurt": { food: "Plain Greek yogurt", serving: "1 cup (170g)", calories: 100, protein: 17, carbs: 6, fat: 0 },
+  "cottage cheese": { food: "Low-fat cottage cheese", serving: "1 cup", calories: 180, protein: 28, carbs: 8, fat: 2 },
+  "tuna": { food: "Canned tuna in water", serving: "1 can (142g)", calories: 140, protein: 26, carbs: 0, fat: 1 },
+  "broccoli": { food: "Broccoli, cooked", serving: "1 cup", calories: 55, protein: 4, carbs: 11, fat: 0 },
+  "sweet potato": { food: "Sweet potato, baked", serving: "1 medium", calories: 130, protein: 2, carbs: 30, fat: 0 },
+  "oatmeal": { food: "Oats, cooked", serving: "1/2 cup dry", calories: 150, protein: 5, carbs: 27, fat: 3 },
+  "oats": { food: "Oats, cooked", serving: "1/2 cup dry", calories: 150, protein: 5, carbs: 27, fat: 3 },
+  "peanut butter": { food: "Peanut butter", serving: "2 tbsp", calories: 190, protein: 8, carbs: 7, fat: 16 },
+  "milk": { food: "Milk", serving: "1 cup", calories: 149, protein: 8, carbs: 12, fat: 8 },
+  "almonds": { food: "Almonds", serving: "1 oz (23 almonds)", calories: 164, protein: 6, carbs: 6, fat: 14 },
+  "black beans": { food: "Black beans, cooked", serving: "1 cup", calories: 227, protein: 15, carbs: 41, fat: 1 },
+  "quinoa": { food: "Quinoa, cooked", serving: "1 cup", calories: 222, protein: 8, carbs: 39, fat: 4 },
+  "avocado": { food: "Avocado", serving: "1 medium", calories: 234, protein: 3, carbs: 12, fat: 21 },
+  "salmon": { food: "Salmon, cooked", serving: "100g", calories: 206, protein: 22, carbs: 0, fat: 13 },
+  "pork tenderloin": { food: "Pork tenderloin, cooked", serving: "100g", calories: 143, protein: 26, carbs: 0, fat: 4 },
+  "whole wheat pasta": { food: "Whole wheat pasta, cooked", serving: "1 cup", calories: 174, protein: 7, carbs: 37, fat: 1 },
+  "protein shake": { food: "Whey protein shake", serving: "1 scoop + water", calories: 120, protein: 24, carbs: 3, fat: 1 },
+};
+
+function normalizeFoodKey(str) {
+  return str.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+}
+
+function lookupCommonFood(food) {
+  const key = normalizeFoodKey(food);
+  // Exact match only — a loose "contains" match used to catch things like
+  // "chicken fried rice" and wrongly return plain rice's macros just because
+  // the word "rice" appeared in there. Anything that isn't a clean match to
+  // one of these simple single-ingredient entries goes to the real AI estimate.
+  return commonFoodsCache[key] || null;
+}
+
+async function lookupSharedCache(food, serving) {
+  const cacheKey = normalizeFoodKey(food + ' ' + (serving || ''));
+  try {
+    const { data, error } = await supabaseClient
+      .from('food_cache')
+      .select('*')
+      .eq('cache_key', cacheKey)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return { food: data.food, serving: data.serving, calories: data.calories, protein: data.protein, carbs: data.carbs, fat: data.fat };
+  } catch (err) {
+    return null;
+  }
+}
+
+async function saveSharedCache(food, serving, macros) {
+  const cacheKey = normalizeFoodKey(food + ' ' + (serving || ''));
+  try {
+    await supabaseClient.from('food_cache').upsert({
+      cache_key: cacheKey,
+      food: macros.food,
+      serving: macros.serving,
+      calories: macros.calories,
+      protein: macros.protein,
+      carbs: macros.carbs,
+      fat: macros.fat,
+    });
+  } catch (err) {
+    // non-critical, ignore
+  }
+}
+
+const DAILY_AI_LOOKUP_LIMIT = 25;
+
+async function checkAndIncrementRateLimit() {
+  // Counts how many AI-sourced lookups this user has made today, straight
+  // from food_logs — no separate counter needed, and it can't drift out of
+  // sync with what's actually in the log.
+  try {
+    const { count, error } = await supabaseClient
+      .from('food_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', currentUser.id)
+      .eq('log_date', TODAY)
+      .eq('source', 'ai');
+    if (error) throw error;
+    return (count || 0) < DAILY_AI_LOOKUP_LIMIT;
+  } catch (err) {
+    // if we can't check, err on the side of allowing the lookup
+    return true;
+  }
+}
+
+async function estimateMacros(food, serving) {
+  // Calls your own Netlify function (netlify/functions/estimate-macros.js),
+  // which verifies you're a real signed-in user, then holds the real Anthropic
+  // API key server-side and forwards the request.
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  const token = sessionData.session ? sessionData.session.access_token : '';
+
+  const response = await fetch("/.netlify/functions/estimate-macros", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+    },
+    body: JSON.stringify({ food, serving })
+  });
+
+  if (!response.ok) throw new Error('Request failed');
+  const parsed = await response.json();
+
+  if (typeof parsed.protein !== 'number' || typeof parsed.calories !== 'number') {
+    throw new Error('Bad response shape');
+  }
+  return parsed;
+}
+
+async function handleLog() {
+  const food = foodInput.value.trim();
+  const serving = servingInput.value.trim();
+  if (!food) {
+    statusMsg.textContent = 'Type in a food first.';
+    statusMsg.classList.add('error');
+    return;
+  }
+
+  statusMsg.classList.remove('error');
+  logBtn.disabled = true;
+
+  // 1. Check the built-in common foods list — instant, free, no API call
+  const builtIn = lookupCommonFood(food);
+  if (builtIn && !serving) {
+    try {
+      await addEntryToLog(builtIn, 'common');
+      foodInput.value = '';
+      servingInput.value = '';
+      statusMsg.textContent = 'Matched from common foods list — no lookup needed.';
+      setTimeout(() => { if (!statusMsg.classList.contains('error')) statusMsg.textContent = ''; }, 2500);
+    } catch (err) {
+      statusMsg.textContent = "Couldn't log that — try again.";
+      statusMsg.classList.add('error');
+    }
+    logBtn.disabled = false;
+    return;
+  }
+
+  // 2. Check the shared cache of previously-estimated foods across all users
+  statusMsg.textContent = 'Checking cache...';
+  const cached = await lookupSharedCache(food, serving);
+  if (cached) {
+    try {
+      await addEntryToLog(cached, 'cache');
+      foodInput.value = '';
+      servingInput.value = '';
+      statusMsg.textContent = 'Found in shared cache — no lookup needed.';
+      setTimeout(() => { if (!statusMsg.classList.contains('error')) statusMsg.textContent = ''; }, 2500);
+    } catch (err) {
+      statusMsg.textContent = "Couldn't log that — try again.";
+      statusMsg.classList.add('error');
+    }
+    logBtn.disabled = false;
+    return;
+  }
+
+  // 3. Fall back to the AI estimate, gated by a daily rate limit
+  const allowed = await checkAndIncrementRateLimit();
+  if (!allowed) {
+    statusMsg.textContent = `You've hit today's limit of ${DAILY_AI_LOOKUP_LIMIT} AI lookups. Try a common food name, or come back tomorrow.`;
+    statusMsg.classList.add('error');
+    logBtn.disabled = false;
+    return;
+  }
+
+  statusMsg.textContent = 'Estimating macros...';
+
+  try {
+    const result = await estimateMacros(food, serving);
+    const entryData = {
+      food: result.food || food,
+      serving: result.serving || serving || '',
+      calories: Math.round(result.calories) || 0,
+      protein: Math.round(result.protein) || 0,
+      carbs: Math.round(result.carbs) || 0,
+      fat: Math.round(result.fat) || 0,
+    };
+    await addEntryToLog(entryData, 'ai');
+    saveSharedCache(food, serving, entryData);
+    foodInput.value = '';
+    servingInput.value = '';
+    statusMsg.textContent = '';
+  } catch (err) {
+    statusMsg.textContent = "Couldn't estimate that one — try rephrasing or add a serving size.";
+    statusMsg.classList.add('error');
+  } finally {
+    logBtn.disabled = false;
+  }
+}
+
+logBtn.addEventListener('click', handleLog);
+foodInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleLog(); });
+servingInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleLog(); });
+
+function dayTotals(dayEntries) {
+  return dayEntries.reduce((acc, e) => {
+    acc.protein += e.protein; acc.calories += e.calories; acc.carbs += e.carbs; acc.fat += e.fat;
+    return acc;
+  }, { protein: 0, calories: 0, carbs: 0, fat: 0 });
+}
+
+async function fetchAllDays() {
+  const { data, error } = await supabaseClient
+    .from('food_logs')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .order('log_date', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+
+  const byDate = {};
+  (data || []).forEach((row) => {
+    if (!byDate[row.log_date]) byDate[row.log_date] = [];
+    byDate[row.log_date].push(row);
+  });
+
+  return Object.keys(byDate)
+    .sort((a, b) => b.localeCompare(a))
+    .map((date) => ({ date, entries: byDate[date] }));
+}
+
+function toggleDayDetail(el) {
+  el.classList.toggle('open');
+}
+
+function renderTrendChart(totalsPerDay) {
+  const wrap = document.getElementById('trendChartWrap');
+  const chartEl = document.getElementById('trendChart');
+  if (totalsPerDay.length === 0) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+
+  const last14 = totalsPerDay.slice(0, 14).slice().reverse(); // chronological ascending
+  const maxVal = Math.max(goals.protein, ...last14.map(d => d.totals.protein)) * 1.15;
+  const chartHeight = 120;
+  const barWidth = 100 / last14.length;
+
+  const targetY = chartHeight - (goals.protein / maxVal) * chartHeight;
+
+  let svg = `<svg viewBox="0 0 ${last14.length * 40} ${chartHeight + 30}" style="width:100%; height:150px;" preserveAspectRatio="none">`;
+  svg += `<line x1="0" y1="${targetY}" x2="${last14.length * 40}" y2="${targetY}" stroke="var(--chalk-dim)" stroke-width="1" stroke-dasharray="4,3" />`;
+
+  last14.forEach((d, i) => {
+    const barH = Math.max(2, (d.totals.protein / maxVal) * chartHeight);
+    const x = i * 40 + 8;
+    const hit = d.totals.protein >= goals.protein;
+    const [y, m, dayNum] = d.date.split('-');
+    const shortLabel = `${parseInt(m)}/${parseInt(dayNum)}`;
+    svg += `
+      <rect x="${x}" y="${chartHeight - barH}" width="24" height="${barH}" rx="2"
+        fill="${hit ? 'var(--ok)' : 'var(--hazard)'}" opacity="0.9">
+        <title>${d.date}: ${d.totals.protein}g protein</title>
+      </rect>
+      <text x="${x + 12}" y="${chartHeight + 16}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="var(--chalk-dim)">${shortLabel}</text>
+    `;
+  });
+  svg += `</svg>`;
+  chartEl.innerHTML = svg;
+}
+
+async function renderHistory() {
+  const historyStatus = document.getElementById('historyStatus');
+  const avgGrid = document.getElementById('avgGrid');
+  const pastDaysEl = document.getElementById('pastDays');
+
+  let days;
+  try {
+    days = await fetchAllDays();
+  } catch (err) {
+    historyStatus.textContent = "Couldn't load history right now.";
+    historyStatus.classList.add('error');
+    return;
+  }
+
+  if (days.length === 0) {
+    historyStatus.textContent = '';
+    avgGrid.style.display = 'none';
+    document.getElementById('trendChartWrap').style.display = 'none';
+    pastDaysEl.innerHTML = '<div class="empty-history">No days logged yet — history builds up as you log food each day.</div>';
+    return;
+  }
+
+  historyStatus.textContent = '';
+  avgGrid.style.display = 'grid';
+
+  const totalsPerDay = days.map(d => ({ date: d.date, totals: dayTotals(d.entries) }));
+  const last7 = totalsPerDay.slice(0, 7);
+
+  renderTrendChart(totalsPerDay);
+
+  const avg = (arr, key) => arr.length ? Math.round(arr.reduce((s, d) => s + d.totals[key], 0) / arr.length) : 0;
+
+  document.getElementById('daysLoggedCount').textContent = totalsPerDay.length;
+  document.getElementById('daysLoggedCount2').textContent = totalsPerDay.length;
+  document.getElementById('avg7Protein').textContent = avg(last7, 'protein');
+  document.getElementById('avgAllProtein').textContent = avg(totalsPerDay, 'protein');
+  document.getElementById('avg7Cal').textContent = avg(last7, 'calories');
+  document.getElementById('daysHitCount').textContent = totalsPerDay.filter(d => d.totals.protein >= goals.protein).length;
+  document.getElementById('bestDayProtein').textContent = Math.max(...totalsPerDay.map(d => d.totals.protein));
+
+  pastDaysEl.innerHTML = '';
+  totalsPerDay.forEach(d => {
+    const hit = d.totals.protein >= goals.protein;
+    const card = document.createElement('div');
+    card.className = 'day-card' + (hit ? ' hit' : '');
+
+    const head = document.createElement('div');
+    head.className = 'day-head';
+    head.innerHTML = `
+      <div>
+        <div class="day-date">${prettyDate(d.date)}</div>
+        <div class="day-sub">${days.find(x => x.date === d.date).entries.length} item${days.find(x => x.date === d.date).entries.length === 1 ? '' : 's'} logged</div>
+      </div>
+      <div class="day-macros">
+        <span><b class="${hit ? 'hit-text' : ''}">${d.totals.protein}g</b> P</span>
+        <span>${d.totals.carbs}g C</span>
+        <span>${d.totals.fat}g F</span>
+        <span>${d.totals.calories} cal</span>
+      </div>
+    `;
+    const detail = document.createElement('div');
+    detail.className = 'day-detail';
+    const dayEntries = days.find(x => x.date === d.date).entries;
+    detail.innerHTML = dayEntries.map(e => `
+      <div class="entry-row" style="border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div class="entry-info">
+          <div class="entry-name" style="font-size:13.5px;">${e.food}</div>
+          <div class="entry-serving">${e.serving || ''}</div>
+        </div>
+        <div class="entry-macros">
+          <span><b>${e.protein}g</b> P</span>
+          <span>${e.carbs}g C</span>
+          <span>${e.fat}g F</span>
+          <span>${e.calories} cal</span>
+        </div>
+      </div>
+    `).join('');
+
+    head.addEventListener('click', () => toggleDayDetail(detail));
+    card.appendChild(head);
+    card.appendChild(detail);
+    pastDaysEl.appendChild(card);
+  });
+}
+
+// PROFILE
+async function loadProfile() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('profiles')
+      .select('name')
+      .eq('id', currentUser.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (data && data.name) {
+      document.getElementById('profileNameInput').value = data.name;
+      applyGreeting(data.name);
+    }
+  } catch (err) {
+    // no profile saved yet
+  }
+}
+
+function applyGreeting(name) {
+  const eyebrow = document.querySelector('#tabLog .hero-eyebrow');
+  if (eyebrow) eyebrow.textContent = name ? `Daily Training Log · ${name}` : 'Daily Training Log';
+}
+
+document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+  const name = document.getElementById('profileNameInput').value.trim();
+  const msg = document.getElementById('profileSavedMsg');
+  if (!name) {
+    msg.textContent = 'Enter a name first.';
+    msg.classList.add('error');
+    return;
+  }
+  msg.classList.remove('error');
+  try {
+    const { error } = await supabaseClient
+      .from('profiles')
+      .upsert({ id: currentUser.id, name });
+    if (error) throw error;
+    applyGreeting(name);
+    msg.textContent = 'Profile saved ✓';
+    setTimeout(() => { msg.textContent = ''; }, 2000);
+  } catch (err) {
+    msg.textContent = "Couldn't save — try again.";
+    msg.classList.add('error');
+  }
+});
+
+async function init() {
+  renderSuggestions();
+  await loadProfile();
+  await loadGoals();
+  await loadBodyStats();
+  await loadToday();
+  await renderHistory();
+}
+
+</script>
+</body>
+</html>
