@@ -1,7 +1,7 @@
 // POST { imageBase64: string, mediaType: "image/jpeg" | "image/png" | "image/webp", note?: string }
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic } = require('./_shared');
+const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, extractJSON } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Plated, a macro-tracking app.
 You will be shown a photo of a food or meal. Estimate its nutritional content from what's visible —
@@ -54,10 +54,10 @@ exports.handler = async (event) => {
     const text = await callAnthropic({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userContent }],
-      maxTokens: 300,
+      maxTokens: 1000,
     });
 
-    const parsed = JSON.parse(text);
+    const parsed = extractJSON(text);
     return jsonResponse(200, { ...parsed, remaining: rateLimit.remaining });
   } catch (err) {
     return jsonResponse(502, { error: 'Could not estimate macros from that photo.', detail: String(err.message || err) });
