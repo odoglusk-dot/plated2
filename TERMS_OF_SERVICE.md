@@ -1,65 +1,77 @@
 # Terms of Service — Plated
 
-*Last updated: [DATE — fill in when published]*
+**Last updated:** 2026-07-29
 
-**⚠️ Before you publish this: have an actual lawyer review this document, especially the age-requirement and liability sections. This is a solid starting draft, not a substitute for legal counsel — particularly because this app is likely to be used by minors and touches health-adjacent data, both of which carry real legal weight depending on your jurisdiction.**
+*This is a starting draft, not legal advice. Have a lawyer review it —
+especially the age-requirement section below — before you let strangers
+sign up.*
 
----
+## 1. What Plated is
 
-## 1. Acceptance of Terms
+Plated is a personal nutrition and supplement tracking tool. It uses an AI
+model to estimate the macronutrient content of foods you describe or
+photograph, and to answer questions about your own logged history. Plated
+is **not** a medical device, does not provide medical advice, and is not a
+substitute for guidance from a doctor, registered dietitian, or other
+qualified professional.
 
-By creating an account or using Plated ("the App," "we," "us"), you agree to these Terms of Service. If you don't agree, don't use the App.
+## 2. Who can use Plated
 
-## 2. What Plated Is
+You must be at least 13 years old to create an account. If you are under
+18, you should have a parent or guardian's permission to use Plated,
+particularly before acting on anything in the Supplements guide. Plated is
+not directed at children under 13, and accounts found to belong to users
+under 13 will be removed.
 
-Plated is a food, macro, and supplement tracking tool. It uses AI (via the Anthropic API) to estimate nutritional content from text descriptions or photos of food. It is a **tracking and estimation tool**, not a medical device, diagnostic tool, or substitute for professional nutrition, medical, or dietary advice.
+## 3. Your account
 
-## 3. Not Medical Advice
+You're responsible for the accuracy of what you log and for keeping your
+password confidential. You can delete your account at any time from the
+Profile tab; doing so permanently removes your data (see the Privacy
+Policy for exactly what that includes).
 
-**Nothing in this App constitutes medical, dietary, or health advice.** Macro and calorie estimates — whether from the AI, the built-in food database, or manual entry — are approximations and may be inaccurate. The supplement and vitamin information in the App is general education, not a recommendation to take any specific supplement. Always consult a doctor, registered dietitian, or other qualified professional before making decisions about your diet, supplements, or health, especially if you are a minor, pregnant, have a medical condition, or are training at a competitive athletic level.
+## 4. AI-generated estimates
 
-## 4. Age Requirements
+Macro estimates from a text description or photo, and answers from Ask
+Your Data, are AI-generated approximations. They can be wrong — meaningfully
+wrong, especially for photos with unclear portions or unusual foods. Don't
+rely on them for a medical condition (e.g. diabetes carb-counting) without
+independent verification.
 
-You must be at least 13 years old to create an account. If you are under 18, we recommend involving a parent or guardian, especially when it comes to supplement use, calorie targets, or any significant change to your diet. [Confirm with a lawyer whether your specific rollout plan requires parental consent mechanisms beyond an age gate, particularly if you know a meaningful share of users will be under 13 or under 18 in specific jurisdictions.]
+## 5. Supplements content
 
-## 5. Your Account
+The Supplements & Vitamins guide is educational information, not a
+recommendation to take any particular supplement. It intentionally
+presents both benefits and drawbacks, including cautions for some
+categories. Starting, stopping, or changing any supplement is a decision
+between you and a healthcare provider.
 
-- You're responsible for keeping your login credentials secure and for all activity under your account.
-- You agree to provide accurate information and not impersonate anyone else.
-- You may delete your account at any time; see Section 9 (Data & Deletion).
+## 6. Acceptable use
 
-## 6. Acceptable Use
+Don't use Plated to log or share content that is illegal, abusive, or
+infringes someone else's rights. Don't attempt to access another user's
+account or data — every account's data is private by design (see Privacy
+Policy), and attempting to bypass that is a violation of these Terms.
 
-You agree not to:
-- Use the App for anything illegal or to harm others
-- Attempt to abuse, overload, or reverse-engineer the AI estimation features
-- Share your account with others or use the App to scrape or resell nutrition data
-- Upload photos containing anything other than food for the photo-logging feature
+## 7. Subscriptions (if/when introduced)
 
-## 7. AI-Generated Content Disclaimer
+If Plated introduces a paid tier, its terms (pricing, billing cycle,
+cancellation) will be presented at the point of purchase and will
+supplement, not replace, this document.
 
-Macro/calorie estimates are generated by an AI model and may be wrong, sometimes significantly. Estimates from photos are especially approximate. You are responsible for verifying anything important (e.g., if you have a medical condition requiring precise nutrition tracking) against a more authoritative source.
+## 8. Disclaimers and limitation of liability
 
-## 8. Subscriptions & Payment *(if/when a paywall is added)*
+Plated is provided "as is," without warranties of any kind. To the maximum
+extent permitted by law, Plated's operator is not liable for any damages
+arising from your use of the app, including decisions made based on
+AI-generated estimates or the Supplements guide.
 
-[Fill in once pricing is finalized: what's free vs. paid, billing cycle, cancellation policy, refund policy. If using Stripe, note that payment processing is handled by Stripe and subject to Stripe's own terms.]
+## 9. Changes to these terms
 
-## 9. Your Data & Deletion
+We may update these Terms as the app changes. Material changes will be
+noted with an updated "Last updated" date above.
 
-You own your logged data. You can request deletion of your account and all associated data at any time [via Settings / by contacting X]. See the Privacy Policy for details on what we collect and how it's stored.
+## 10. Contact
 
-## 10. Disclaimer of Warranties
-
-The App is provided "as is." We don't guarantee it will be error-free, uninterrupted, or that AI estimates will be accurate. Use of the App and any decisions based on its output are at your own risk.
-
-## 11. Limitation of Liability
-
-To the fullest extent permitted by law, Plated and its operators are not liable for any indirect, incidental, or consequential damages arising from your use of the App, including but not limited to reliance on inaccurate macro/nutrition estimates or supplement information.
-
-## 12. Changes to These Terms
-
-We may update these terms from time to time. Continued use of the App after changes means you accept the updated terms.
-
-## 13. Contact
-
-Questions about these terms: [your contact email]
+Questions about these Terms can be directed to the app operator's contact
+address (add one here before publishing).

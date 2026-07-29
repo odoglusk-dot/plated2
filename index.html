@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plated — Macro &amp; Supplement Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #16171a;
+    --surface: #1f2023;
+    --surface-2: #26272b;
+    --surface-3: #2e3035;
+    --border: #34363b;
+    --text: #eef0f2;
+    --text-dim: #9599a1;
+    --hazard: #f5c518;
+    --red: #e0483c;
+    --blue: #3b82c4;
+    --gold: #e0ab2b;
+    --steel: #8b909a;
+    --green: #35c26a;
+    --danger: #e0483c;
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background-color: var(--bg);
+    background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.015) 0 2px, transparent 2px 10px);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+  }
+  h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0.03em; font-weight: 400; }
+  .mono { font-family: var(--font-mono); }
+  a { color: var(--hazard); }
+  button { font-family: inherit; }
+  .hidden { display: none !important; }
+
+  .hazard-divider { height: 6px; background-image: repeating-linear-gradient(135deg, var(--hazard) 0 10px, #161200 10px 20px); }
+
+  /* ── Buttons / inputs ─────────────────────────────────────────── */
+  .btn { font-weight: 600; border-radius: 8px; padding: 0.65rem 1.1rem; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); cursor: pointer; transition: filter .15s, border-color .15s; font-size: 0.92rem; }
+  .btn:hover { border-color: var(--hazard); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--hazard); color: #1a1500; border-color: var(--hazard); }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-danger { background: transparent; border-color: var(--red); color: var(--red); }
+  .btn-danger:hover { background: rgba(224,72,60,0.1); }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+  .btn-block { width: 100%; }
+  .input, select, textarea {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 0.6rem 0.8rem; font-family: inherit; width: 100%; font-size: 0.92rem;
+  }
+  textarea { resize: vertical; min-height: 4.5rem; }
+  label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.3rem; font-weight: 600; }
+  .field { margin-bottom: 0.9rem; }
+  .row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 120px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; }
+  .card h3 { margin: 0 0 0.75rem; font-size: 1.3rem; }
+  .muted { color: var(--text-dim); font-size: 0.85rem; }
+  .toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: var(--surface-3);
+    border: 1px solid var(--hazard); color: var(--text); padding: 0.7rem 1.2rem; border-radius: 10px; z-index: 999;
+    font-size: 0.9rem; max-width: 90vw; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.03em; background: var(--surface-3); color: var(--text-dim); }
+  .badge.on { color: #1a1500; background: var(--hazard); }
+
+  /* ── Auth screen ──────────────────────────────────────────────── */
+  #authScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  .auth-box { width: 100%; max-width: 380px; }
+  .auth-logo { text-align: center; font-size: 3rem; color: var(--hazard); margin-bottom: 0.1rem; }
+  .auth-tagline { text-align: center; color: var(--text-dim); margin-bottom: 1.75rem; font-size: 0.9rem; }
+  .auth-toggle { display: flex; margin-bottom: 1.25rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .auth-toggle button { flex: 1; padding: 0.6rem; background: var(--surface); border: none; color: var(--text-dim); cursor: pointer; font-weight: 600; }
+  .auth-toggle button.active { background: var(--hazard); color: #1a1500; }
+  #authError { color: var(--red); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
+  #authNote { color: var(--green); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
+  .consent-line { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.75rem; display: flex; gap: 0.4rem; align-items: flex-start; }
+  .consent-line input { width: auto; margin-top: 0.2rem; }
+
+  /* ── App shell ────────────────────────────────────────────────── */
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 20; }
+  .logo { font-size: 1.7rem; color: var(--hazard); }
+  .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
+  .streak-pill { font-family: var(--font-mono); font-size: 0.85rem; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 0.3rem 0.8rem; }
+
+  .tab-nav { display: flex; gap: 0.15rem; overflow-x: auto; padding: 0 0.75rem; background: var(--surface);
+    border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 19; }
+  .tab-btn { font-family: var(--font-display); letter-spacing: 0.03em; font-size: 1.05rem; padding: 0.55rem 0.9rem;
+    border-radius: 8px 8px 0 0; background: transparent; border: none; color: var(--text-dim); cursor: pointer; white-space: nowrap; }
+  .tab-btn.active { color: var(--hazard); background: var(--surface-2); }
+
+  main.tab-panels { padding: 1.25rem; max-width: 880px; margin: 0 auto; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Plate scoreboard ─────────────────────────────────────────── */
+  .scoreboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+  .plate { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+  .ring-wrap { width: 104px; height: 104px; position: relative; }
+  .ring-wrap svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+  .ring-track { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 10; }
+  .ring-progress { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
+  .ring-inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .ring-value { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 600; }
+  .ring-goal { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); }
+  .plate-label { font-family: var(--font-display); letter-spacing: 0.05em; color: var(--text-dim); font-size: 0.85rem; }
+
+  /* ── Lists ────────────────────────────────────────────────────── */
+  .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
+  .log-row:last-child { border-bottom: none; }
+  .log-row .name { font-weight: 600; }
+  .log-row .macros { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim); }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0.4rem 0.8rem;
+    cursor: pointer; font-size: 0.85rem; }
+  .chip:hover { border-color: var(--hazard); }
+
+  .sub-nav { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .sub-nav button { flex: none; }
+
+  table.plain { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  table.plain th, table.plain td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
+  table.plain th { color: var(--text-dim); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+
+  .guide-card { border-left: 3px solid var(--hazard); }
+  .guide-card.caution { border-left-color: var(--red); }
+  .guide-card .col-title { display: flex; align-items: center; gap: 0.6rem; }
+  .caution-box { background: rgba(224,72,60,0.1); border: 1px solid rgba(224,72,60,0.4); border-radius: 8px; padding: 0.6rem 0.8rem; margin-top: 0.6rem; font-size: 0.85rem; }
+
+  .ask-msg { padding: 0.75rem 0.9rem; border-radius: 10px; margin-bottom: 0.6rem; max-width: 90%; font-size: 0.9rem; line-height: 1.4; }
+  .ask-msg.user { background: var(--surface-3); margin-left: auto; }
+  .ask-msg.assistant { background: var(--surface-2); border: 1px solid var(--border); }
+
+  footer.legal { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.78rem; }
+  footer.legal a { color: var(--text-dim); text-decoration: underline; }
+
+  @media (max-width: 480px) {
+    .ring-wrap { width: 82px; height: 82px; }
+    .ring-value { font-size: 0.9rem; }
+  }
+</style>
+</head>
+<body>
+
+<div id="authScreen">
+  <div class="auth-box">
+    <div class="auth-logo">PLATED</div>
+    <div class="auth-tagline">Macro &amp; supplement tracking, built for training days.</div>
+    <div class="hazard-divider" style="margin-bottom:1.5rem;"></div>
+
+    <div class="auth-toggle">
+      <button id="toggleSignIn" class="active" type="button">Sign In</button>
+      <button id="toggleSignUp" type="button">Sign Up</button>
+    </div>
+
+    <form id="authForm">
+      <div class="field" id="displayNameField" style="display:none;">
+        <label for="displayName">Display name</label>
+        <input class="input" id="displayName" type="text" autocomplete="nickname" placeholder="What should we call you?">
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input class="input" id="email" type="email" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input class="input" id="password" type="password" autocomplete="current-password" minlength="6" required>
+      </div>
+      <div id="consentField" class="consent-line" style="display:none;">
+        <input type="checkbox" id="consentCheck">
+        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="consentCheck">
+          By creating an account, you agree to our <a href="TERMS_OF_SERVICE.md" target="_blank">Terms</a>
+          and <a href="PRIVACY_POLICY.md" target="_blank">Privacy Policy</a>.
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" style="margin-top:1rem;" id="authSubmitBtn">Sign In</button>
+      <div id="authError"></div>
+      <div id="authNote"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar">
+    <div class="logo">PLATED</div>
+    <div class="topbar-right">
+      <span class="streak-pill" id="streakPill" title="Current protein-goal streak">🔥 0 day streak</span>
+      <button class="btn btn-sm" id="signOutBtn">Sign Out</button>
+    </div>
+  </div>
+
+  <nav class="tab-nav" id="tabNav">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="log">Log Food</button>
+    <button class="tab-btn" data-tab="history">History</button>
+    <button class="tab-btn" data-tab="weight">Weight</button>
+    <button class="tab-btn" data-tab="supplements">Supplements</button>
+    <button class="tab-btn" data-tab="meals">Meals</button>
+    <button class="tab-btn" data-tab="ask">Ask AI</button>
+    <button class="tab-btn" data-tab="profile">Profile</button>
+  </nav>
+
+  <main class="tab-panels">
+    <section class="tab-panel active" data-tab="dashboard" id="panel-dashboard"></section>
+    <section class="tab-panel" data-tab="log" id="panel-log"></section>
+    <section class="tab-panel" data-tab="history" id="panel-history"></section>
+    <section class="tab-panel" data-tab="weight" id="panel-weight"></section>
+    <section class="tab-panel" data-tab="supplements" id="panel-supplements"></section>
+    <section class="tab-panel" data-tab="meals" id="panel-meals"></section>
+    <section class="tab-panel" data-tab="ask" id="panel-ask"></section>
+    <section class="tab-panel" data-tab="profile" id="panel-profile"></section>
+  </main>
+
+  <footer class="legal">
+    Plated is not a medical device and does not provide medical advice.
+    <a href="TERMS_OF_SERVICE.md">Terms</a> · <a href="PRIVACY_POLICY.md">Privacy</a>
+  </footer>
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// ── Configuration ────────────────────────────────────────────────────
+// Fill these in with your Supabase project's values (Project Settings → API).
+// The anon key is safe to expose client-side — Row Level Security is what
+// actually enforces per-account privacy, not secrecy of this key.
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── Small DOM helpers ────────────────────────────────────────────────
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const round = (n, d = 0) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
+
+function toast(msg, ms = 3200) {
+  let t = $('#toastEl');
+  if (t) t.remove();
+  t = document.createElement('div');
+  t.id = 'toastEl';
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+
+function localDateStr(d = new Date()) {
+  const yr = d.getFullYear(), mo = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${day}`;
+}
+
+// ── App state ────────────────────────────────────────────────────────
+const state = {
+  session: null,
+  user: null,
+  profile: null,
+  goals: { calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70 },
+  bodyStats: null,
+  todayLogs: [],
+  historyLogs: [], // last 90 days, used by dashboard streaks + history tab + CSV export
+  favorites: [],
+  weightLog: [],
+  supplementLogs: [],
+  activeTab: 'dashboard',
+  aiRemaining: null,
+};
+
+// ── Static reference data ───────────────────────────────────────────
+const COMMON_FOODS = [
+  { name: 'Chicken breast (6oz, cooked)', calories: 280, protein_g: 53, carbs_g: 0, fat_g: 6 },
+  { name: 'Large egg (1)', calories: 72, protein_g: 6, carbs_g: 0.4, fat_g: 5 },
+  { name: 'White rice (1 cup, cooked)', calories: 205, protein_g: 4.3, carbs_g: 45, fat_g: 0.4 },
+  { name: 'Greek yogurt, plain nonfat (1 cup)', calories: 130, protein_g: 23, carbs_g: 9, fat_g: 0.7 },
+  { name: 'Banana (1 medium)', calories: 105, protein_g: 1.3, carbs_g: 27, fat_g: 0.4 },
+  { name: 'Whey protein shake (1 scoop)', calories: 120, protein_g: 24, carbs_g: 3, fat_g: 1.5 },
+  { name: 'Peanut butter (2 tbsp)', calories: 190, protein_g: 8, carbs_g: 7, fat_g: 16 },
+  { name: 'Oatmeal (1 cup, cooked)', calories: 166, protein_g: 6, carbs_g: 28, fat_g: 3.6 },
+  { name: 'Salmon (6oz, cooked)', calories: 350, protein_g: 40, carbs_g: 0, fat_g: 21 },
+  { name: 'Broccoli (1 cup, cooked)', calories: 55, protein_g: 3.7, carbs_g: 11, fat_g: 0.6 },
+  { name: 'Sweet potato (1 medium, baked)', calories: 103, protein_g: 2.3, carbs_g: 24, fat_g: 0.2 },
+  { name: 'Avocado (1/2)', calories: 120, protein_g: 1.5, carbs_g: 6, fat_g: 11 },
+  { name: 'Cottage cheese (1 cup, 2%)', calories: 180, protein_g: 26, carbs_g: 8, fat_g: 4 },
+  { name: 'Almonds (1oz, ~23)', calories: 164, protein_g: 6, carbs_g: 6, fat_g: 14 },
+  { name: 'Whole wheat bread (1 slice)', calories: 80, protein_g: 4, carbs_g: 14, fat_g: 1 },
+];
+
+const SUPPLEMENT_GUIDE = [
+  { name: 'Whey Protein', benefits: ['Convenient way to hit a daily protein target', 'Fast-digesting — good post-workout', 'Complete amino acid profile'],
+    drawbacks: ['Can cause GI discomfort/bloating if lactose sensitive (try isolate instead)', 'Not a replacement for whole-food protein sources', 'Unnecessary if diet already meets protein goals'],
+    notes: 'Typical dose: 1 scoop (~24g protein) post-workout or as a snack.' },
+  { name: 'Creatine Monohydrate', benefits: ['One of the most researched sports supplements that exists', 'Supports strength/power output and recovery', 'Safe at standard doses per available research'],
+    drawbacks: ['Can cause temporary water retention (mostly intracellular, not fat)', 'Minor GI upset if taken in one large dose', 'More relevant to strength/power sports than pure endurance'],
+    notes: 'Typical dose: 3–5g/day, any time of day. No "loading phase" needed.' },
+  { name: 'Multivitamin', benefits: ['Simple backstop against gaps in a busy training diet', 'Inexpensive insurance'],
+    drawbacks: ['No benefit above what a varied diet already provides', 'Megadoses of fat-soluble vitamins (A, D, E, K) can actually be harmful'],
+    notes: 'Pick one near 100% daily value — skip ones advertising "1000%".' },
+  { name: 'Vitamin D3', benefits: ['Many indoor/northern-climate athletes run low', 'Supports bone health and immune function — both relevant to injury recovery'],
+    drawbacks: ['Hard to overdose by accident, but very high long-term doses can cause toxicity', 'Guessing a dose is worse than testing blood levels'],
+    notes: 'Common starting range: 1000–2000 IU/day. Ask a doctor for bloodwork-based dosing.' },
+  { name: 'Omega-3 Fish Oil', benefits: ['Supports cardiovascular and joint health', 'Some evidence for reduced exercise-induced inflammation'],
+    drawbacks: ['Fishy aftertaste/burps for some people', 'Blood-thinning effect at high doses matters around injuries/surgery', 'Quality varies a lot between brands'],
+    notes: 'Look for combined EPA+DHA around 1–2g/day, or eat fatty fish twice a week instead.' },
+  { name: 'Magnesium', benefits: ['Involved in muscle contraction/relaxation', 'Some athletes report better sleep, fewer cramps'],
+    drawbacks: ['Excess magnesium (citrate/oxide forms) is a common, immediate laxative', 'Not a proven cramp cure in controlled studies despite the popular belief'],
+    notes: 'Glycinate form is gentler on digestion. Often taken in the evening.' },
+  { name: 'Zinc', benefits: ['Supports immune function and injury/wound healing'],
+    drawbacks: ['Chronic excess interferes with copper absorption and can suppress immune function long-term', 'Easy to get enough from diet (meat, dairy) without supplementing'],
+    notes: "Check you're not double-dosing via a multivitamin that already contains zinc." },
+  { name: 'Iron', benefits: ['Genuinely important for endurance athletes and anyone with heavy training volume', 'Deficiency shows up as fatigue and worse performance'],
+    drawbacks: ['This is the one entry here that should never be started on a whim — iron overload is toxic and hard to reverse', 'Supplementing without an actual deficiency does nothing helpful'],
+    notes: 'Get a blood ferritin test before supplementing. Do not self-prescribe.' },
+  { name: 'Caffeine / Pre-Workout Blends', caution: true,
+    benefits: ['Caffeine has solid evidence for improved focus and perceived exertion during training'],
+    drawbacks: ['Many commercial pre-workout blends pack 300mg+ caffeine per scoop, well above what is appropriate for a teenage athlete', 'Proprietary stimulant blends often under-disclose ingredients', 'Can cause jitteriness, disrupted sleep, and a dependency on stimulants to feel "ready" to train'],
+    notes: 'For a teenage athlete specifically: skip stimulant-heavy pre-workout products entirely. Sleep, food, and hydration do more for training quality with none of the downside.' },
+  { name: 'BCAAs / EAAs', benefits: ['Essential amino acids can support recovery when taken around training'],
+    drawbacks: ['If total daily protein is already adequate (which whey/whole food usually covers), this adds little extra benefit', 'Largely redundant spend for most people'],
+    notes: 'Prioritize hitting your total daily protein target first — treat this as optional on top.' },
+];
+
+const MEAL_SUGGESTIONS = [
+  { name: 'Lentils (1 cup, cooked)', cost: 0.35, calories: 230, protein_g: 18, carbs_g: 40, fat_g: 0.8 },
+  { name: 'Black beans (1 cup, cooked)', cost: 0.40, calories: 227, protein_g: 15, carbs_g: 41, fat_g: 0.9 },
+  { name: 'Eggs (2 large)', cost: 0.50, calories: 144, protein_g: 12, carbs_g: 0.8, fat_g: 10 },
+  { name: 'Peanut butter (2 tbsp)', cost: 0.25, calories: 190, protein_g: 8, carbs_g: 7, fat_g: 16 },
+  { name: 'Milk, 2% (1 cup)', cost: 0.35, calories: 122, protein_g: 8, carbs_g: 12, fat_g: 5 },
+  { name: 'Canned tuna (1 can, 5oz)', cost: 1.20, calories: 175, protein_g: 32, carbs_g: 0, fat_g: 1.5 },
+  { name: 'Chicken thighs (4oz, cooked)', cost: 0.90, calories: 250, protein_g: 24, carbs_g: 0, fat_g: 15 },
+  { name: 'Greek yogurt, plain nonfat (1 cup)', cost: 1.00, calories: 130, protein_g: 23, carbs_g: 9, fat_g: 0.7 },
+  { name: 'Cottage cheese (1 cup, 2%)', cost: 1.10, calories: 180, protein_g: 26, carbs_g: 8, fat_g: 4 },
+  { name: 'Whey protein (1 scoop)', cost: 0.60, calories: 120, protein_g: 24, carbs_g: 3, fat_g: 1.5 },
+  { name: 'Ground turkey 93/7 (4oz, cooked)', cost: 1.30, calories: 210, protein_g: 28, carbs_g: 0, fat_g: 11 },
+  { name: 'Tofu, firm (1/2 block, ~150g)', cost: 1.50, calories: 180, protein_g: 20, carbs_g: 4, fat_g: 11 },
+  { name: 'Sardines (1 can)', cost: 1.00, calories: 190, protein_g: 23, carbs_g: 0, fat_g: 11 },
+  { name: 'Edamame (1 cup, shelled)', cost: 0.80, calories: 189, protein_g: 17, carbs_g: 15, fat_g: 8 },
+];
+// Rough grocery-price approximations for comparison, not live pricing.
+
+// ══════════════════════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════════════════════
+let authMode = 'signin';
+
+$('#toggleSignIn').addEventListener('click', () => setAuthMode('signin'));
+$('#toggleSignUp').addEventListener('click', () => setAuthMode('signup'));
+
+function setAuthMode(mode) {
+  authMode = mode;
+  $('#toggleSignIn').classList.toggle('active', mode === 'signin');
+  $('#toggleSignUp').classList.toggle('active', mode === 'signup');
+  $('#displayNameField').style.display = mode === 'signup' ? 'block' : 'none';
+  $('#consentField').style.display = mode === 'signup' ? 'flex' : 'none';
+  $('#authSubmitBtn').textContent = mode === 'signup' ? 'Create Account' : 'Sign In';
+  $('#authError').textContent = '';
+  $('#authNote').textContent = '';
+}
+
+$('#authForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('#authError').textContent = '';
+  $('#authNote').textContent = '';
+  const email = $('#email').value.trim();
+  const password = $('#password').value;
+  const btn = $('#authSubmitBtn');
+  btn.disabled = true;
+
+  try {
+    if (authMode === 'signup') {
+      if (!$('#consentCheck').checked) {
+        throw new Error('Please agree to the Terms and Privacy Policy to continue.');
+      }
+      const displayName = $('#displayName').value.trim() || 'Athlete';
+      const { data, error } = await supabase.auth.signUp({
+        email, password, options: { data: { display_name: displayName } },
+      });
+      if (error) throw error;
+      // Only write profile/goals rows here if sign-up produced an active
+      // session (email confirmation disabled). If confirmation is required,
+      // auth.uid() is null until the user confirms + signs in, so an insert
+      // here would just be rejected by RLS — ensureProfileAndGoals() below
+      // creates these rows on first real sign-in instead, using the
+      // display_name stashed in user metadata above.
+      if (data.session) {
+        await ensureProfileAndGoals(data.user, displayName);
+      } else {
+        $('#authNote').textContent = 'Account created! Check your email to confirm, then sign in.';
+        setAuthMode('signin');
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    }
+  } catch (err) {
+    $('#authError').textContent = err.message || 'Something went wrong.';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#signOutBtn').addEventListener('click', async () => {
+  await supabase.auth.signOut();
+});
+
+supabase.auth.onAuthStateChange((_event, session) => {
+  state.session = session;
+  state.user = session?.user || null;
+  if (session) {
+    $('#authScreen').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    bootstrapApp();
+  } else {
+    $('#app').classList.add('hidden');
+    $('#authScreen').classList.remove('hidden');
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// DATA LOADING
+// ══════════════════════════════════════════════════════════════════
+async function bootstrapApp() {
+  await ensureProfileAndGoals(state.user);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs()]);
+  renderAll();
+}
+
+// Idempotent: creates a profile + default goals row the first time a user
+// actually has an authenticated session (covers both the "no email
+// confirmation needed" signup path and the "confirm, then sign in" path).
+async function ensureProfileAndGoals(user, displayNameHint) {
+  const { data: existing } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
+  if (existing) return;
+  const display_name = displayNameHint || user.user_metadata?.display_name || 'Athlete';
+  await supabase.from('profiles').insert({ id: user.id, display_name });
+  await supabase.from('goals').insert({ user_id: user.id });
+}
+
+async function loadProfile() {
+  const { data } = await supabase.from('profiles').select('*').eq('id', state.user.id).maybeSingle();
+  state.profile = data || null;
+}
+
+async function loadGoals() {
+  const { data } = await supabase.from('goals').select('*').eq('user_id', state.user.id).maybeSingle();
+  if (data) state.goals = data;
+}
+
+async function loadBodyStats() {
+  const { data } = await supabase.from('body_stats').select('*').eq('user_id', state.user.id).maybeSingle();
+  state.bodyStats = data || null;
+}
+
+async function loadFavorites() {
+  const { data } = await supabase.from('favorites').select('*').eq('user_id', state.user.id).order('created_at', { ascending: false });
+  state.favorites = data || [];
+}
+
+async function loadHistory() {
+  const since = new Date();
+  since.setDate(since.getDate() - 90);
+  const { data } = await supabase.from('food_logs').select('*').eq('user_id', state.user.id)
+    .gte('logged_at', since.toISOString()).order('logged_at', { ascending: false });
+  state.historyLogs = data || [];
+  const today = localDateStr();
+  state.todayLogs = state.historyLogs.filter((l) => localDateStr(new Date(l.logged_at)) === today);
+}
+
+async function loadWeightLog() {
+  const { data } = await supabase.from('weight_log').select('*').eq('user_id', state.user.id).order('logged_date', { ascending: false }).limit(90);
+  state.weightLog = data || [];
+}
+
+async function loadSupplementLogs() {
+  const since = new Date();
+  since.setDate(since.getDate() - 14);
+  const { data } = await supabase.from('supplement_logs').select('*').eq('user_id', state.user.id)
+    .gte('logged_at', since.toISOString()).order('logged_at', { ascending: false });
+  state.supplementLogs = data || [];
+}
+
+function renderAll() {
+  renderDashboard();
+  renderLogTab();
+  renderHistory();
+  renderWeight();
+  renderSupplements();
+  renderMeals();
+  renderAsk();
+  renderProfile();
+  updateStreakPill();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB NAVIGATION
+// ══════════════════════════════════════════════════════════════════
+$$('.tab-btn').forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
+
+function setActiveTab(tab) {
+  state.activeTab = tab;
+  $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SHARED: sum + streaks
+// ══════════════════════════════════════════════════════════════════
+function sumMacros(logs) {
+  return logs.reduce((acc, l) => {
+    acc.calories += Number(l.calories) || 0;
+    acc.protein_g += Number(l.protein_g) || 0;
+    acc.carbs_g += Number(l.carbs_g) || 0;
+    acc.fat_g += Number(l.fat_g) || 0;
+    return acc;
+  }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+}
+
+function groupByDay(logs) {
+  const map = new Map();
+  for (const l of logs) {
+    const day = localDateStr(new Date(l.logged_at));
+    if (!map.has(day)) map.set(day, []);
+    map.get(day).push(l);
+  }
+  return map;
+}
+
+function computeStreaks(logs, proteinGoal) {
+  const byDay = groupByDay(logs);
+  const today = localDateStr();
+  const days = Array.from(byDay.keys()).sort(); // ascending
+  const metGoal = new Set();
+  for (const [day, dayLogs] of byDay) {
+    if (sumMacros(dayLogs).protein_g >= proteinGoal) metGoal.add(day);
+  }
+
+  // Best streak: longest run of consecutive calendar days in metGoal.
+  let best = 0, run = 0, prev = null;
+  for (const day of days) {
+    if (prev) {
+      const prevDate = new Date(prev), curDate = new Date(day);
+      const diffDays = Math.round((curDate - prevDate) / 86400000);
+      if (diffDays !== 1) run = 0;
+    }
+    if (metGoal.has(day)) { run += 1; best = Math.max(best, run); } else { run = 0; }
+    prev = day;
+  }
+
+  // Current streak: walk backward from today; today not yet meeting goal doesn't break it
+  // (the day isn't over), any earlier missed day does.
+  let current = 0;
+  const cursor = new Date();
+  let first = true;
+  while (true) {
+    const dayStr = localDateStr(cursor);
+    if (metGoal.has(dayStr)) {
+      current += 1;
+    } else if (first && dayStr === today) {
+      // today not logged/met yet — skip without breaking the streak
+    } else {
+      break;
+    }
+    first = false;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return { current, best };
+}
+
+function updateStreakPill() {
+  const { current } = computeStreaks(state.historyLogs, state.goals.protein_g);
+  $('#streakPill').textContent = `🔥 ${current} day streak`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RING SVG
+// ══════════════════════════════════════════════════════════════════
+function ringSvg(pct, color) {
+  const r = 46, c = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(1, pct));
+  const offset = c * (1 - clamped);
+  return `<svg viewBox="0 0 104 104">
+    <circle class="ring-track" cx="52" cy="52" r="${r}"></circle>
+    <circle class="ring-progress" cx="52" cy="52" r="${r}" stroke="${color}"
+      stroke-dasharray="${c}" stroke-dashoffset="${offset}"></circle>
+  </svg>`;
+}
+
+function plateHtml(label, value, goal, color) {
+  const pct = goal > 0 ? value / goal : 0;
+  return `<div class="plate">
+    <div class="ring-wrap">
+      ${ringSvg(pct, color)}
+      <div class="ring-inner">
+        <div class="ring-value">${round(value)}</div>
+        <div class="ring-goal">/ ${round(goal)}</div>
+      </div>
+    </div>
+    <div class="plate-label">${label}</div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════════════
+function renderDashboard() {
+  const totals = sumMacros(state.todayLogs);
+  const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
+  const g = state.goals;
+
+  const panel = $('#panel-dashboard');
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Today's Plate</h3>
+      <div class="scoreboard">
+        ${plateHtml('CALORIES', totals.calories, g.calories, 'var(--steel)')}
+        ${plateHtml('PROTEIN', totals.protein_g, g.protein_g, 'var(--red)')}
+        ${plateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--blue)')}
+        ${plateHtml('FAT', totals.fat_g, g.fat_g, 'var(--gold)')}
+      </div>
+      <div class="row" style="margin-top:0.5rem;">
+        <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
+        <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Logged Today</h3>
+      ${state.todayLogs.length === 0
+        ? `<p class="muted">Nothing logged yet — head to the Log Food tab.</p>`
+        : state.todayLogs.map((l) => `
+          <div class="log-row">
+            <div>
+              <div class="name">${esc(l.food_name)}</div>
+              <div class="macros">${round(l.calories)} kcal · P${round(l.protein_g)} C${round(l.carbs_g)} F${round(l.fat_g)}</div>
+            </div>
+            <button class="btn btn-sm btn-ghost" data-delete-log="${l.id}">✕</button>
+          </div>`).join('')}
+    </div>
+
+    ${state.favorites.length ? `
+    <div class="card">
+      <h3>Quick Add</h3>
+      <div class="chip-row">
+        ${state.favorites.slice(0, 8).map((f) => `<button class="chip" data-quicklog-fav="${f.id}">${esc(f.food_name)}</button>`).join('')}
+      </div>
+    </div>` : ''}
+  `;
+
+  $$('[data-delete-log]', panel).forEach((btn) => btn.addEventListener('click', () => deleteLog(btn.dataset.deleteLog)));
+  $$('[data-quicklog-fav]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const fav = state.favorites.find((f) => f.id === btn.dataset.quicklogFav);
+    if (fav) logFood({ food_name: fav.food_name, calories: fav.calories, protein_g: fav.protein_g, carbs_g: fav.carbs_g, fat_g: fav.fat_g, source: 'favorite' });
+  }));
+}
+
+async function deleteLog(id) {
+  const { error } = await supabase.from('food_logs').delete().eq('id', id);
+  if (error) return toast('Could not delete: ' + error.message);
+  await loadHistory();
+  renderAll();
+}
+
+async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source }) {
+  const { error } = await supabase.from('food_logs').insert({
+    user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source,
+  });
+  if (error) return toast('Could not log food: ' + error.message);
+  toast(`Logged: ${food_name}`);
+  await loadHistory();
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LOG FOOD TAB
+// ══════════════════════════════════════════════════════════════════
+let logSubTab = 'ai';
+
+function renderLogTab() {
+  const panel = $('#panel-log');
+  panel.innerHTML = `
+    <div class="sub-nav">
+      <button class="btn ${logSubTab === 'ai' ? 'btn-primary' : ''}" data-sub="ai">Describe It</button>
+      <button class="btn ${logSubTab === 'photo' ? 'btn-primary' : ''}" data-sub="photo">Snap a Photo</button>
+      <button class="btn ${logSubTab === 'common' ? 'btn-primary' : ''}" data-sub="common">Common Foods</button>
+      <button class="btn ${logSubTab === 'manual' ? 'btn-primary' : ''}" data-sub="manual">Manual Entry</button>
+      <button class="btn ${logSubTab === 'favorites' ? 'btn-primary' : ''}" data-sub="favorites">Favorites</button>
+    </div>
+    <div id="logSubPanel"></div>
+  `;
+  $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => { logSubTab = btn.dataset.sub; renderLogTab(); }));
+  renderLogSubPanel();
+}
+
+function resultCardHtml(result) {
+  return `
+    <div class="card" id="estimateResult">
+      <h3>Estimate</h3>
+      <p class="muted">Confidence: ${esc(result.confidence || 'unknown')}${state.aiRemaining != null ? ` · ${state.aiRemaining} AI lookups left today` : ''}</p>
+      <div class="field"><label>Food</label><input class="input" id="res_name" value="${esc(result.food_name)}"></div>
+      <div class="row">
+        <div class="field"><label>Calories</label><input class="input mono" id="res_cal" type="number" value="${round(result.calories)}"></div>
+        <div class="field"><label>Protein (g)</label><input class="input mono" id="res_pro" type="number" value="${round(result.protein_g)}"></div>
+        <div class="field"><label>Carbs (g)</label><input class="input mono" id="res_carb" type="number" value="${round(result.carbs_g)}"></div>
+        <div class="field"><label>Fat (g)</label><input class="input mono" id="res_fat" type="number" value="${round(result.fat_g)}"></div>
+      </div>
+      <div class="row">
+        <button class="btn btn-primary" id="logResultBtn">Log It</button>
+        <button class="btn" id="favResultBtn">Save as Favorite</button>
+      </div>
+    </div>`;
+}
+
+function wireResultCard() {
+  const readValues = () => ({
+    food_name: $('#res_name').value.trim() || 'Food',
+    calories: Number($('#res_cal').value) || 0,
+    protein_g: Number($('#res_pro').value) || 0,
+    carbs_g: Number($('#res_carb').value) || 0,
+    fat_g: Number($('#res_fat').value) || 0,
+  });
+  $('#logResultBtn')?.addEventListener('click', () => logFood({ ...readValues(), source: logSubTab === 'photo' ? 'ai_photo' : 'ai_text' }));
+  $('#favResultBtn')?.addEventListener('click', () => saveFavorite(readValues()));
+}
+
+async function saveFavorite(f) {
+  const { error } = await supabase.from('favorites').insert({ user_id: state.user.id, ...f });
+  if (error) return toast('Could not save favorite: ' + error.message);
+  toast(`Saved "${f.food_name}" to favorites`);
+  await loadFavorites();
+  renderAll();
+}
+
+function renderLogSubPanel() {
+  const el = $('#logSubPanel');
+  if (logSubTab === 'ai') {
+    el.innerHTML = `
+      <div class="card">
+        <h3>Describe your food</h3>
+        <div class="field"><textarea id="aiDescription" placeholder="e.g. grilled chicken breast with a cup of rice and steamed broccoli"></textarea></div>
+        <button class="btn btn-primary" id="aiEstimateBtn">Estimate Macros</button>
+        <div id="aiError" class="muted" style="color:var(--red);margin-top:0.5rem;"></div>
+      </div>
+      <div id="aiResultSlot"></div>`;
+    $('#aiEstimateBtn').addEventListener('click', async () => {
+      const description = $('#aiDescription').value.trim();
+      if (!description) return;
+      const btn = $('#aiEstimateBtn'); btn.disabled = true; btn.textContent = 'Estimating…';
+      $('#aiError').textContent = '';
+      try {
+        const result = await callFunction('estimate-macros', { description });
+        state.aiRemaining = result.remaining;
+        $('#aiResultSlot').innerHTML = resultCardHtml(result);
+        wireResultCard();
+      } catch (err) {
+        $('#aiError').textContent = err.message;
+      } finally {
+        btn.disabled = false; btn.textContent = 'Estimate Macros';
+      }
+    });
+  } else if (logSubTab === 'photo') {
+    el.innerHTML = `
+      <div class="card">
+        <h3>Snap a photo</h3>
+        <div class="field"><input class="input" id="photoInput" type="file" accept="image/*" capture="environment"></div>
+        <div class="field"><input class="input" id="photoNote" placeholder="Optional note (e.g. 'no dressing on the salad')"></div>
+        <button class="btn btn-primary" id="photoEstimateBtn">Estimate Macros</button>
+        <div id="photoError" class="muted" style="color:var(--red);margin-top:0.5rem;"></div>
+      </div>
+      <div id="photoResultSlot"></div>`;
+    $('#photoEstimateBtn').addEventListener('click', async () => {
+      const file = $('#photoInput').files[0];
+      if (!file) { $('#photoError').textContent = 'Choose a photo first.'; return; }
+      const btn = $('#photoEstimateBtn'); btn.disabled = true; btn.textContent = 'Estimating…';
+      $('#photoError').textContent = '';
+      try {
+        const { base64, mediaType } = await fileToBase64(file);
+        const result = await callFunction('estimate-macros-photo', { imageBase64: base64, mediaType, note: $('#photoNote').value.trim() });
+        state.aiRemaining = result.remaining;
+        $('#photoResultSlot').innerHTML = resultCardHtml(result);
+        wireResultCard();
+      } catch (err) {
+        $('#photoError').textContent = err.message;
+      } finally {
+        btn.disabled = false; btn.textContent = 'Estimate Macros';
+      }
+    });
+  } else if (logSubTab === 'common') {
+    el.innerHTML = `
+      <div class="card">
+        <h3>Common Foods</h3>
+        <p class="muted">Free, instant logging — no AI lookup used.</p>
+        ${COMMON_FOODS.map((f, i) => `
+          <div class="log-row">
+            <div><div class="name">${esc(f.name)}</div><div class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</div></div>
+            <button class="btn btn-sm btn-primary" data-common="${i}">Log</button>
+          </div>`).join('')}
+      </div>`;
+    $$('[data-common]', el).forEach((btn) => btn.addEventListener('click', () => {
+      const f = COMMON_FOODS[Number(btn.dataset.common)];
+      logFood({ food_name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g, source: 'common' });
+    }));
+  } else if (logSubTab === 'manual') {
+    el.innerHTML = `
+      <div class="card">
+        <h3>Manual Entry</h3>
+        <div class="field"><label>Food name</label><input class="input" id="man_name"></div>
+        <div class="row">
+          <div class="field"><label>Calories</label><input class="input mono" id="man_cal" type="number"></div>
+          <div class="field"><label>Protein (g)</label><input class="input mono" id="man_pro" type="number"></div>
+          <div class="field"><label>Carbs (g)</label><input class="input mono" id="man_carb" type="number"></div>
+          <div class="field"><label>Fat (g)</label><input class="input mono" id="man_fat" type="number"></div>
+        </div>
+        <div class="row">
+          <button class="btn btn-primary" id="manLogBtn">Log It</button>
+          <button class="btn" id="manFavBtn">Save as Favorite</button>
+        </div>
+      </div>`;
+    const readManual = () => ({
+      food_name: $('#man_name').value.trim() || 'Food',
+      calories: Number($('#man_cal').value) || 0,
+      protein_g: Number($('#man_pro').value) || 0,
+      carbs_g: Number($('#man_carb').value) || 0,
+      fat_g: Number($('#man_fat').value) || 0,
+    });
+    $('#manLogBtn').addEventListener('click', () => logFood({ ...readManual(), source: 'manual' }));
+    $('#manFavBtn').addEventListener('click', () => saveFavorite(readManual()));
+  } else if (logSubTab === 'favorites') {
+    el.innerHTML = `
+      <div class="card">
+        <h3>Favorites</h3>
+        ${state.favorites.length === 0 ? `<p class="muted">No favorites saved yet — save one from an estimate or manual entry.</p>` :
+          state.favorites.map((f) => `
+            <div class="log-row">
+              <div><div class="name">${esc(f.food_name)}</div><div class="macros">${round(f.calories)} kcal · P${round(f.protein_g)} C${round(f.carbs_g)} F${round(f.fat_g)}</div></div>
+              <div class="row" style="flex:none;gap:0.4rem;">
+                <button class="btn btn-sm btn-primary" data-fav-log="${f.id}">Log</button>
+                <button class="btn btn-sm btn-ghost" data-fav-del="${f.id}">✕</button>
+              </div>
+            </div>`).join('')}
+      </div>`;
+    $$('[data-fav-log]', el).forEach((btn) => btn.addEventListener('click', () => {
+      const f = state.favorites.find((x) => x.id === btn.dataset.favLog);
+      logFood({ food_name: f.food_name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g, source: 'favorite' });
+    }));
+    $$('[data-fav-del]', el).forEach((btn) => btn.addEventListener('click', async () => {
+      await supabase.from('favorites').delete().eq('id', btn.dataset.favDel);
+      await loadFavorites();
+      renderAll();
+    }));
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result; // data:image/jpeg;base64,xxxx
+      const [, mediaType] = /^data:([^;]+);base64,/.exec(result) || [];
+      const base64 = result.split(',')[1];
+      resolve({ base64, mediaType: mediaType || file.type });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function callFunction(name, body) {
+  const token = state.session?.access_token;
+  const res = await fetch(`/.netlify/functions/${name}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// HISTORY TAB
+// ══════════════════════════════════════════════════════════════════
+function renderHistory() {
+  const panel = $('#panel-history');
+  const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
+  const byDay = groupByDay(state.historyLogs);
+  const days = Array.from(byDay.keys()).sort().reverse();
+
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Streaks</h3>
+      <div class="row">
+        <span class="badge on">🔥 Current: ${current} day${current === 1 ? '' : 's'}</span>
+        <span class="badge">🏆 Best: ${best} day${best === 1 ? '' : 's'}</span>
+      </div>
+      <p class="muted" style="margin-top:0.5rem;">A day counts when logged protein meets your goal of ${round(state.goals.protein_g)}g.</p>
+    </div>
+    <div class="card">
+      <div class="row" style="align-items:center;">
+        <h3 style="margin:0;">History (last 90 days)</h3>
+        <button class="btn" id="exportCsvBtn" style="flex:none;">Export CSV</button>
+      </div>
+      ${days.length === 0 ? `<p class="muted">No history yet.</p>` : days.map((day) => {
+        const dayLogs = byDay.get(day);
+        const totals = sumMacros(dayLogs);
+        const met = totals.protein_g >= state.goals.protein_g;
+        return `<div style="margin-top:0.9rem;">
+          <div class="row" style="align-items:center;">
+            <strong>${day}</strong>
+            <span class="badge ${met ? 'on' : ''}">${round(totals.protein_g)}g protein</span>
+            <span class="muted">${round(totals.calories)} kcal</span>
+          </div>
+          ${dayLogs.map((l) => `<div class="log-row"><div class="name">${esc(l.food_name)}</div><div class="macros">${round(l.calories)} kcal · P${round(l.protein_g)} C${round(l.carbs_g)} F${round(l.fat_g)}</div></div>`).join('')}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  $('#exportCsvBtn')?.addEventListener('click', exportHistoryCsv);
+}
+
+function exportHistoryCsv() {
+  const header = ['Date', 'Time', 'Food', 'Calories', 'Protein (g)', 'Carbs (g)', 'Fat (g)', 'Source'];
+  const rows = state.historyLogs.map((l) => {
+    const d = new Date(l.logged_at);
+    return [localDateStr(d), d.toLocaleTimeString(), l.food_name, round(l.calories), round(l.protein_g), round(l.carbs_g), round(l.fat_g), l.source];
+  });
+  const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `plated-history-${localDateStr()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// WEIGHT TAB
+// ══════════════════════════════════════════════════════════════════
+function renderWeight() {
+  const panel = $('#panel-weight');
+  const sorted = [...state.weightLog].sort((a, b) => a.logged_date.localeCompare(b.logged_date));
+
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Log Weight</h3>
+      <div class="row">
+        <div class="field"><label>Date</label><input class="input" id="wt_date" type="date" value="${localDateStr()}"></div>
+        <div class="field"><label>Weight (lb)</label><input class="input mono" id="wt_lb" type="number" step="0.1"></div>
+      </div>
+      <div class="field"><label>Note (optional)</label><input class="input" id="wt_note"></div>
+      <button class="btn btn-primary" id="wt_save">Save</button>
+    </div>
+    <div class="card">
+      <h3>Trend</h3>
+      ${sorted.length < 2 ? `<p class="muted">Log at least two entries to see a trend line.</p>` : weightChartSvg(sorted)}
+    </div>
+    <div class="card">
+      <h3>Recent Entries</h3>
+      ${sorted.length === 0 ? `<p class="muted">No entries yet.</p>` :
+        [...sorted].reverse().map((w) => `
+          <div class="log-row">
+            <div><div class="name">${w.logged_date}</div><div class="macros">${round(w.weight_lb, 1)} lb${w.note ? ' · ' + esc(w.note) : ''}</div></div>
+            <button class="btn btn-sm btn-ghost" data-wt-del="${w.id}">✕</button>
+          </div>`).join('')}
+    </div>
+  `;
+
+  $('#wt_save').addEventListener('click', async () => {
+    const logged_date = $('#wt_date').value || localDateStr();
+    const weight_lb = Number($('#wt_lb').value);
+    if (!weight_lb) return toast('Enter a weight first.');
+    const note = $('#wt_note').value.trim() || null;
+    const { error } = await supabase.from('weight_log').insert({ user_id: state.user.id, logged_date, weight_lb, note });
+    if (error) return toast('Could not save: ' + error.message);
+    await Promise.all([loadWeightLog(), upsertBodyStatsWeight(weight_lb)]);
+    renderAll();
+  });
+
+  $$('[data-wt-del]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    await supabase.from('weight_log').delete().eq('id', btn.dataset.wtDel);
+    await loadWeightLog();
+    renderAll();
+  }));
+}
+
+async function upsertBodyStatsWeight(weight_lb) {
+  const weight_kg = round(weight_lb * 0.453592, 2);
+  await supabase.from('body_stats').upsert({ user_id: state.user.id, weight_kg, updated_at: new Date().toISOString() });
+  await loadBodyStats();
+}
+
+function weightChartSvg(sorted) {
+  const w = 600, h = 200, pad = 24;
+  const weights = sorted.map((s) => s.weight_lb);
+  const min = Math.min(...weights), max = Math.max(...weights);
+  const span = max - min || 1;
+  const points = sorted.map((s, i) => {
+    const x = pad + (i / (sorted.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((s.weight_lb - min) / span) * (h - pad * 2);
+    return `${x},${y}`;
+  });
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
+    <polyline points="${points.join(' ')}" fill="none" stroke="var(--hazard)" stroke-width="2.5" />
+    ${points.map((p) => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--hazard)" />`).join('')}
+    <text x="${pad}" y="14" fill="var(--text-dim)" font-size="11" font-family="monospace">${round(max, 1)} lb</text>
+    <text x="${pad}" y="${h - 8}" fill="var(--text-dim)" font-size="11" font-family="monospace">${round(min, 1)} lb</text>
+  </svg>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SUPPLEMENTS TAB
+// ══════════════════════════════════════════════════════════════════
+function renderSupplements() {
+  const panel = $('#panel-supplements');
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Log a Supplement</h3>
+      <div class="row">
+        <div class="field"><label>Supplement</label>
+          <select id="sup_name">
+            ${SUPPLEMENT_GUIDE.map((s) => `<option>${esc(s.name)}</option>`).join('')}
+            <option value="__other">Other…</option>
+          </select>
+        </div>
+        <div class="field"><label>Dose</label><input class="input" id="sup_dose" placeholder="e.g. 5g"></div>
+      </div>
+      <div class="field hidden" id="sup_other_wrap"><label>Custom name</label><input class="input" id="sup_other"></div>
+      <button class="btn btn-primary" id="sup_save">Log It</button>
+    </div>
+    <div class="card">
+      <h3>Recent Log</h3>
+      ${state.supplementLogs.length === 0 ? `<p class="muted">Nothing logged yet.</p>` :
+        state.supplementLogs.map((s) => `
+          <div class="log-row">
+            <div><div class="name">${esc(s.supplement_name)}</div><div class="macros">${s.dose ? esc(s.dose) + ' · ' : ''}${new Date(s.logged_at).toLocaleString()}</div></div>
+            <button class="btn btn-sm btn-ghost" data-sup-del="${s.id}">✕</button>
+          </div>`).join('')}
+    </div>
+    <div class="card">
+      <h3>Supplement Guide</h3>
+      <p class="muted">Educational only — not medical advice. Talk to a doctor before starting anything new, especially as a teenage athlete.</p>
+      ${SUPPLEMENT_GUIDE.map((s) => `
+        <div class="card guide-card ${s.caution ? 'caution' : ''}" style="margin-bottom:0.75rem;">
+          <div class="col-title"><h3 style="margin:0;">${esc(s.name)}</h3>${s.caution ? '<span class="badge" style="background:var(--red);color:#fff;">CAUTION</span>' : ''}</div>
+          <strong style="font-size:0.85rem;color:var(--green);">Benefits</strong>
+          <ul style="margin:0.3rem 0 0.7rem 1.1rem; font-size:0.88rem;">${s.benefits.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
+          <strong style="font-size:0.85rem;color:var(--red);">Drawbacks</strong>
+          <ul style="margin:0.3rem 0 0.5rem 1.1rem; font-size:0.88rem;">${s.drawbacks.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
+          ${s.caution ? `<div class="caution-box">${esc(s.notes)}</div>` : `<p class="muted" style="margin:0;">${esc(s.notes)}</p>`}
+        </div>`).join('')}
+    </div>
+  `;
+
+  $('#sup_name').addEventListener('change', (e) => {
+    $('#sup_other_wrap').classList.toggle('hidden', e.target.value !== '__other');
+  });
+  $('#sup_save').addEventListener('click', async () => {
+    const sel = $('#sup_name').value;
+    const supplement_name = sel === '__other' ? ($('#sup_other').value.trim() || 'Supplement') : sel;
+    const dose = $('#sup_dose').value.trim() || null;
+    const { error } = await supabase.from('supplement_logs').insert({ user_id: state.user.id, supplement_name, dose });
+    if (error) return toast('Could not log: ' + error.message);
+    await loadSupplementLogs();
+    renderAll();
+  });
+  $$('[data-sup-del]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    await supabase.from('supplement_logs').delete().eq('id', btn.dataset.supDel);
+    await loadSupplementLogs();
+    renderAll();
+  }));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MEALS TAB (budget suggestions)
+// ══════════════════════════════════════════════════════════════════
+function renderMeals() {
+  const panel = $('#panel-meals');
+  const ranked = [...MEAL_SUGGESTIONS]
+    .map((m) => ({ ...m, costPerGProtein: m.cost / m.protein_g }))
+    .sort((a, b) => a.costPerGProtein - b.costPerGProtein);
+
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Budget-Optimized Protein</h3>
+      <p class="muted">Sorted by cost per gram of protein — best value first. Prices are rough grocery approximations, not live pricing.</p>
+      <table class="plain">
+        <thead><tr><th>Food</th><th>Cost</th><th>Protein</th><th>Calories</th><th>$ / g protein</th></tr></thead>
+        <tbody>
+          ${ranked.map((m) => `<tr>
+            <td>${esc(m.name)}</td>
+            <td class="mono">$${m.cost.toFixed(2)}</td>
+            <td class="mono">${m.protein_g}g</td>
+            <td class="mono">${m.calories}</td>
+            <td class="mono">$${m.costPerGProtein.toFixed(3)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ASK YOUR DATA TAB
+// ══════════════════════════════════════════════════════════════════
+let askMessages = [];
+
+function renderAsk() {
+  const panel = $('#panel-ask');
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Ask Your Data</h3>
+      <p class="muted">Ask questions about your own logged history — grounded only in what you've actually logged.</p>
+      <div id="askThread" style="margin:1rem 0;">${askMessages.map((m) => `<div class="ask-msg ${m.role}">${esc(m.text)}</div>`).join('')}</div>
+      <div class="row">
+        <input class="input" id="askInput" placeholder="e.g. how's my protein trending this week?">
+        <button class="btn btn-primary" id="askBtn" style="flex:none;">Ask</button>
+      </div>
+      <div id="askError" class="muted" style="color:var(--red);margin-top:0.5rem;"></div>
+    </div>
+  `;
+  $('#askBtn').addEventListener('click', handleAsk);
+  $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAsk(); });
+}
+
+async function buildDataSummary() {
+  const lines = [];
+  lines.push(`Goals: ${round(state.goals.calories)} kcal, P${round(state.goals.protein_g)}g C${round(state.goals.carbs_g)}g F${round(state.goals.fat_g)}g`);
+
+  const byDay = groupByDay(state.historyLogs);
+  const days = Array.from(byDay.keys()).sort().reverse().slice(0, 30);
+  lines.push('\nDaily totals (most recent first):');
+  for (const day of days) {
+    const t = sumMacros(byDay.get(day));
+    lines.push(`${day}: ${round(t.calories)} kcal, P${round(t.protein_g)}g C${round(t.carbs_g)}g F${round(t.fat_g)}g`);
+  }
+
+  if (state.weightLog.length) {
+    lines.push('\nRecent weight entries (lb):');
+    state.weightLog.slice(0, 10).forEach((w) => lines.push(`${w.logged_date}: ${round(w.weight_lb, 1)} lb`));
+  }
+
+  if (state.supplementLogs.length) {
+    lines.push('\nSupplements logged in the last 14 days:');
+    const counts = {};
+    state.supplementLogs.forEach((s) => { counts[s.supplement_name] = (counts[s.supplement_name] || 0) + 1; });
+    Object.entries(counts).forEach(([name, n]) => lines.push(`${name}: ${n}x`));
+  }
+
+  return lines.join('\n').slice(0, 7000);
+}
+
+async function handleAsk() {
+  const input = $('#askInput');
+  const question = input.value.trim();
+  if (!question) return;
+  $('#askError').textContent = '';
+  askMessages.push({ role: 'user', text: question });
+  renderAsk();
+  input.value = '';
+  const btn = $('#askBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Thinking…'; }
+
+  try {
+    const dataSummary = await buildDataSummary();
+    const result = await callFunction('ask-data', { question, dataSummary });
+    state.aiRemaining = result.remaining;
+    askMessages.push({ role: 'assistant', text: result.answer });
+    renderAsk();
+  } catch (err) {
+    $('#askError').textContent = err.message;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PROFILE TAB
+// ══════════════════════════════════════════════════════════════════
+const ACTIVITY_MULTIPLIERS = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 };
+
+function renderProfile() {
+  const panel = $('#panel-profile');
+  const p = state.profile || {};
+  const bs = state.bodyStats || {};
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Profile</h3>
+      <div class="field"><label>Display name</label><input class="input" id="prof_name" value="${esc(p.display_name || '')}"></div>
+      <button class="btn" id="prof_save">Save</button>
+    </div>
+
+    <div class="card">
+      <h3>Goals</h3>
+      <div class="row">
+        <div class="field"><label>Calories</label><input class="input mono" id="goal_cal" type="number" value="${round(state.goals.calories)}"></div>
+        <div class="field"><label>Protein (g)</label><input class="input mono" id="goal_pro" type="number" value="${round(state.goals.protein_g)}"></div>
+        <div class="field"><label>Carbs (g)</label><input class="input mono" id="goal_carb" type="number" value="${round(state.goals.carbs_g)}"></div>
+        <div class="field"><label>Fat (g)</label><input class="input mono" id="goal_fat" type="number" value="${round(state.goals.fat_g)}"></div>
+      </div>
+      <button class="btn btn-primary" id="goal_save">Save Goals</button>
+    </div>
+
+    <div class="card">
+      <h3>Goal Calculator</h3>
+      <p class="muted">Mifflin-St Jeor based estimate. Calorie target is never recommended below your resting metabolic rate or 1500 kcal, whichever is higher.</p>
+      <div class="row">
+        <div class="field"><label>Age</label><input class="input mono" id="calc_age" type="number" value="${p.age || ''}"></div>
+        <div class="field"><label>Sex</label>
+          <select id="calc_sex">
+            <option value="male" ${p.sex === 'male' ? 'selected' : ''}>Male</option>
+            <option value="female" ${p.sex === 'female' ? 'selected' : ''}>Female</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Height (in)</label><input class="input mono" id="calc_height" type="number" value="${p.height_cm ? round(p.height_cm / 2.54, 1) : ''}"></div>
+        <div class="field"><label>Weight (lb)</label><input class="input mono" id="calc_weight" type="number" value="${bs.weight_kg ? round(bs.weight_kg / 0.453592, 1) : ''}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Activity level</label>
+          <select id="calc_activity">
+            <option value="sedentary" ${p.activity_level === 'sedentary' ? 'selected' : ''}>Sedentary</option>
+            <option value="light" ${p.activity_level === 'light' ? 'selected' : ''}>Light (1-3 days/wk)</option>
+            <option value="moderate" ${!p.activity_level || p.activity_level === 'moderate' ? 'selected' : ''}>Moderate (3-5 days/wk)</option>
+            <option value="active" ${p.activity_level === 'active' ? 'selected' : ''}>Active (6-7 days/wk)</option>
+            <option value="very_active" ${p.activity_level === 'very_active' ? 'selected' : ''}>Very Active (2x/day training)</option>
+          </select>
+        </div>
+        <div class="field"><label>Goal</label>
+          <select id="calc_goal">
+            <option value="lose">Lose fat</option>
+            <option value="maintain" selected>Maintain</option>
+            <option value="gain">Gain / bulk</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn" id="calc_run">Calculate</button>
+      <div id="calc_result" style="margin-top:1rem;"></div>
+    </div>
+
+    <div class="card">
+      <h3>Account</h3>
+      <p class="muted">Signed in as ${esc(state.user.email)}</p>
+      <button class="btn btn-danger" id="delete_account_btn">Delete My Account</button>
+      <div id="delete_confirm" class="hidden" style="margin-top:0.75rem;">
+        <p class="muted">This permanently deletes your account and all logged data. Type DELETE to confirm.</p>
+        <input class="input" id="delete_confirm_input" style="margin-bottom:0.5rem;">
+        <button class="btn btn-danger" id="delete_confirm_btn">Permanently Delete</button>
+      </div>
+    </div>
+  `;
+
+  $('#prof_save').addEventListener('click', async () => {
+    const display_name = $('#prof_name').value.trim() || 'Athlete';
+    const { error } = await supabase.from('profiles').upsert({ id: state.user.id, display_name });
+    if (error) return toast('Could not save: ' + error.message);
+    toast('Profile saved');
+    await loadProfile();
+  });
+
+  $('#goal_save').addEventListener('click', async () => {
+    const goals = {
+      user_id: state.user.id,
+      calories: Number($('#goal_cal').value) || 0,
+      protein_g: Number($('#goal_pro').value) || 0,
+      carbs_g: Number($('#goal_carb').value) || 0,
+      fat_g: Number($('#goal_fat').value) || 0,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('goals').upsert(goals);
+    if (error) return toast('Could not save goals: ' + error.message);
+    toast('Goals updated');
+    await loadGoals();
+    renderAll();
+  });
+
+  $('#calc_run').addEventListener('click', async () => {
+    const age = Number($('#calc_age').value);
+    const sex = $('#calc_sex').value;
+    const heightIn = Number($('#calc_height').value);
+    const weightLb = Number($('#calc_weight').value);
+    const activity = $('#calc_activity').value;
+    const goalType = $('#calc_goal').value;
+
+    if (!age || !heightIn || !weightLb) {
+      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--red);">Fill in age, height, and weight first.</p>`;
+      return;
+    }
+
+    const heightCm = heightIn * 2.54;
+    const weightKg = weightLb * 0.453592;
+    const bmr = sex === 'male'
+      ? 10 * weightKg + 6.25 * heightCm - 5 * age + 5
+      : 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
+    const tdee = bmr * ACTIVITY_MULTIPLIERS[activity];
+    const adjusted = goalType === 'lose' ? tdee - 500 : goalType === 'gain' ? tdee + 300 : tdee;
+
+    // Safety floor: never recommend below resting metabolic rate or 1500, whichever is higher.
+    const safetyFloor = Math.max(bmr, 1500);
+    const targetCalories = Math.round(Math.max(adjusted, safetyFloor) / 10) * 10;
+
+    const proteinG = Math.round(weightLb * 1.0);
+    const fatG = Math.round((targetCalories * 0.25) / 9);
+    const remaining = Math.max(targetCalories - proteinG * 4 - fatG * 9, 0);
+    const carbsG = Math.round(remaining / 4);
+
+    $('#calc_result').innerHTML = `
+      <div class="row">
+        <span class="badge on">${targetCalories} kcal</span>
+        <span class="badge">P ${proteinG}g</span>
+        <span class="badge">C ${carbsG}g</span>
+        <span class="badge">F ${fatG}g</span>
+      </div>
+      <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
+      <button class="btn btn-primary" id="calc_apply" style="margin-top:0.5rem;">Apply to My Goals</button>
+    `;
+
+    $('#calc_apply').addEventListener('click', async () => {
+      await supabase.from('profiles').upsert({ id: state.user.id, age, sex, height_cm: round(heightCm, 1), activity_level: activity });
+      await supabase.from('body_stats').upsert({ user_id: state.user.id, weight_kg: round(weightKg, 2), updated_at: new Date().toISOString() });
+      await supabase.from('goals').upsert({ user_id: state.user.id, calories: targetCalories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG, updated_at: new Date().toISOString() });
+      toast('Goals updated from calculator');
+      await Promise.all([loadProfile(), loadBodyStats(), loadGoals()]);
+      renderAll();
+    });
+  });
+
+  $('#delete_account_btn').addEventListener('click', () => $('#delete_confirm').classList.remove('hidden'));
+  $('#delete_confirm_btn').addEventListener('click', async () => {
+    if ($('#delete_confirm_input').value !== 'DELETE') return toast('Type DELETE exactly to confirm.');
+    try {
+      await callFunction('delete-account', {});
+      await supabase.auth.signOut();
+      toast('Account deleted.');
+    } catch (err) {
+      toast('Could not delete account: ' + err.message);
+    }
+  });
+}
+
+// ── Initial session check (in case one already exists on load) ─────
+supabase.auth.getSession().then(({ data }) => {
+  if (data.session) {
+    state.session = data.session;
+    state.user = data.session.user;
+    $('#authScreen').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    bootstrapApp();
+  }
+});
+</script>
+</body>
+</html>

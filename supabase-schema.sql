@@ -1,20 +1,21 @@
--- ============================================================
--- Plated · Macro Log — Supabase schema
--- Run this in your Supabase project: SQL Editor → New query → paste → Run
--- ============================================================
--- This relies on Supabase Auth (auth.users) for real authentication —
--- password hashing, sessions, everything — instead of anything homemade.
--- Every table below is locked down with Row-Level Security (RLS) so that,
--- at the database level, a user can only ever read or write their own rows.
--- This is what actually enforces "can't see other people's data," not
--- just the app's UI choosing not to show it.
+-- Plated — core schema
+-- Run this first in the Supabase SQL editor, then supabase-schema-additions.sql.
+-- Every personal table is scoped to auth.uid() via Row Level Security so one
+-- account can never read or write another account's rows.
 
--- ---------- profiles ----------
--- One row per user, keyed by their auth.users id.
-create table if not exists profiles (
+-- ── profiles ────────────────────────────────────────────────────────────
+-- One row per user, created right after sign-up. Holds identity + the
+-- physical stats the goal calculator needs.
+create table profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  name text,
-  created_at timestamptz default now()
+  display_name text,
+  age int,
+  sex text check (sex in ('male', 'female')),
+  height_cm numeric,
+  activity_level text check (
+    activity_level in ('sedentary', 'light', 'moderate', 'active', 'very_active')
+  ),
+  created_at timestamptz not null default now()
 );
 
 alter table profiles enable row level security;
@@ -26,15 +27,15 @@ create policy "profiles: insert own" on profiles
 create policy "profiles: update own" on profiles
   for update using (auth.uid() = id);
 
--- ---------- goals ----------
--- One row per user. Upserted whenever they save/calculate goals.
-create table if not exists goals (
+-- ── goals ───────────────────────────────────────────────────────────────
+-- One row per user. Either set manually or by the Mifflin-St Jeor calculator.
+create table goals (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  protein int not null default 160,
-  calories int not null default 2600,
-  carbs int not null default 280,
-  fat int not null default 80,
-  updated_at timestamptz default now()
+  calories int not null default 2200,
+  protein_g int not null default 150,
+  carbs_g int not null default 250,
+  fat_g int not null default 70,
+  updated_at timestamptz not null default now()
 );
 
 alter table goals enable row level security;
@@ -46,18 +47,14 @@ create policy "goals: insert own" on goals
 create policy "goals: update own" on goals
   for update using (auth.uid() = user_id);
 
--- ---------- body_stats ----------
--- One row per user — inputs to the Mifflin-St Jeor goal calculator.
-create table if not exists body_stats (
+-- ── body_stats ──────────────────────────────────────────────────────────
+-- Current body weight, used as an input to the goal calculator. Overwritten
+-- in place (not a history — see weight_log below for the tracked-over-time
+-- feature and its chart).
+create table body_stats (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  sex text,
-  age int,
-  height_ft int,
-  height_in int,
-  weight numeric,
-  goal_weight numeric,
-  activity numeric,
-  updated_at timestamptz default now()
+  weight_kg numeric not null,
+  updated_at timestamptz not null default now()
 );
 
 alter table body_stats enable row level security;
@@ -69,23 +66,23 @@ create policy "body_stats: insert own" on body_stats
 create policy "body_stats: update own" on body_stats
   for update using (auth.uid() = user_id);
 
--- ---------- food_logs ----------
--- One row per logged food item. log_date is a plain date (not timestamp)
--- so "today's entries" and "history by day" are simple date-equality/range
--- queries instead of parsing JSON blobs.
-create table if not exists food_logs (
+-- ── food_logs ───────────────────────────────────────────────────────────
+create table food_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  log_date date not null,
-  food text not null,
-  serving text,
-  calories int not null default 0,
-  protein int not null default 0,
-  carbs int not null default 0,
-  fat int not null default 0,
-  source text not null default 'manual', -- 'ai' | 'cache' | 'common' | 'suggestion' | 'manual'
-  created_at timestamptz default now()
+  food_name text not null,
+  calories numeric not null,
+  protein_g numeric not null,
+  carbs_g numeric not null,
+  fat_g numeric not null,
+  source text not null default 'manual' check (
+    source in ('manual', 'ai_text', 'ai_photo', 'favorite', 'common')
+  ),
+  logged_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
 );
+
+create index food_logs_user_logged_idx on food_logs (user_id, logged_at desc);
 
 alter table food_logs enable row level security;
 
@@ -98,34 +95,23 @@ create policy "food_logs: update own" on food_logs
 create policy "food_logs: delete own" on food_logs
   for delete using (auth.uid() = user_id);
 
-create index if not exists food_logs_user_date_idx on food_logs (user_id, log_date);
-
--- ---------- food_cache ----------
--- Shared across ALL users on purpose — this is generic nutrition data
--- ("grilled chicken breast" → macros), not anyone's personal log, so it's
--- fine for every signed-in user to read and contribute to it. This is what
--- keeps AI lookup costs down site-wide: once anyone estimates a food, nobody
--- pays to estimate it again.
-create table if not exists food_cache (
-  cache_key text primary key,
-  food text not null,
-  serving text,
-  calories int not null,
-  protein int not null,
-  carbs int not null,
-  fat int not null,
-  created_at timestamptz default now()
+-- ── food_cache ──────────────────────────────────────────────────────────
+-- Shared across every signed-in user on purpose — it's generic nutrition
+-- data (not personal), so caching AI estimates here cuts duplicate API
+-- spend when two users log the same common food.
+create table food_cache (
+  description_key text primary key,
+  food_name text not null,
+  calories numeric not null,
+  protein_g numeric not null,
+  carbs_g numeric not null,
+  fat_g numeric not null,
+  created_at timestamptz not null default now()
 );
 
 alter table food_cache enable row level security;
 
-create policy "food_cache: read by any signed-in user" on food_cache
+create policy "food_cache: select all signed-in" on food_cache
   for select using (auth.role() = 'authenticated');
-create policy "food_cache: insert by any signed-in user" on food_cache
+create policy "food_cache: insert all signed-in" on food_cache
   for insert with check (auth.role() = 'authenticated');
-
--- ============================================================
--- That's it. After running this, come back to the app — signing up
--- creates a real auth.users row automatically; the app creates the
--- matching profiles/goals rows the first time someone saves something.
--- ============================================================
