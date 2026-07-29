@@ -237,8 +237,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // Fill these in with your Supabase project's values (Project Settings → API).
 // The anon key is safe to expose client-side — Row Level Security is what
 // actually enforces per-account privacy, not secrecy of this key.
-const SUPABASE_URL = 'https://putoyzpixaktjwcnrwwh.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1dG95enBpeGFrdGp3Y25yd3doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNTUyOTYsImV4cCI6MjEwMDkzMTI5Nn0.qSb-WHL3ni0M92pscjLO1ruvfrZWfxfd9y7kEV75WOA';
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -1224,7 +1224,8 @@ function renderProfile() {
         </div>
       </div>
       <div class="row">
-        <div class="field"><label>Height (in)</label><input class="input mono" id="calc_height" type="number" value="${p.height_cm ? round(p.height_cm / 2.54, 1) : ''}"></div>
+        <div class="field"><label>Height (ft)</label><input class="input mono" id="calc_height_ft" type="number" value="${p.height_cm ? Math.floor(round(p.height_cm / 2.54 / 12, 0)) : ''}"></div>
+        <div class="field"><label>Height (in)</label><input class="input mono" id="calc_height_in" type="number" min="0" max="11" value="${p.height_cm ? round((round(p.height_cm / 2.54, 1) % 12), 1) : ''}"></div>
         <div class="field"><label>Weight (lb)</label><input class="input mono" id="calc_weight" type="number" value="${bs.weight_kg ? round(bs.weight_kg / 0.453592, 1) : ''}"></div>
       </div>
       <div class="row">
@@ -1237,13 +1238,7 @@ function renderProfile() {
             <option value="very_active" ${p.activity_level === 'very_active' ? 'selected' : ''}>Very Active (2x/day training)</option>
           </select>
         </div>
-        <div class="field"><label>Goal</label>
-          <select id="calc_goal">
-            <option value="lose">Lose fat</option>
-            <option value="maintain" selected>Maintain</option>
-            <option value="gain">Gain / bulk</option>
-          </select>
-        </div>
+        <div class="field"><label>Goal Weight (lb)</label><input class="input mono" id="calc_goal_weight" type="number" placeholder="e.g. 185"></div>
       </div>
       <button class="btn" id="calc_run">Calculate</button>
       <div id="calc_result" style="margin-top:1rem;"></div>
@@ -1288,23 +1283,26 @@ function renderProfile() {
   $('#calc_run').addEventListener('click', async () => {
     const age = Number($('#calc_age').value);
     const sex = $('#calc_sex').value;
-    const heightIn = Number($('#calc_height').value);
+    const heightFt = Number($('#calc_height_ft').value) || 0;
+    const heightIn = Number($('#calc_height_in').value) || 0;
+    const totalHeightIn = heightFt * 12 + heightIn;
     const weightLb = Number($('#calc_weight').value);
+    const goalWeightLb = Number($('#calc_goal_weight').value);
     const activity = $('#calc_activity').value;
-    const goalType = $('#calc_goal').value;
 
-    if (!age || !heightIn || !weightLb) {
-      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--red);">Fill in age, height, and weight first.</p>`;
+    if (!age || totalHeightIn <= 0 || !weightLb || !goalWeightLb) {
+      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--red);">Fill in age, height, weight, and goal weight first.</p>`;
       return;
     }
 
-    const heightCm = heightIn * 2.54;
+    const heightCm = totalHeightIn * 2.54;
     const weightKg = weightLb * 0.453592;
     const bmr = sex === 'male'
       ? 10 * weightKg + 6.25 * heightCm - 5 * age + 5
       : 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
     const tdee = bmr * ACTIVITY_MULTIPLIERS[activity];
-    const adjusted = goalType === 'lose' ? tdee - 500 : goalType === 'gain' ? tdee + 300 : tdee;
+    const weightDiff = goalWeightLb - weightLb;
+    const adjusted = Math.abs(weightDiff) < 2 ? tdee : weightDiff > 0 ? tdee + 300 : tdee - 500;
 
     // Safety floor: never recommend below resting metabolic rate or 1500, whichever is higher.
     const safetyFloor = Math.max(bmr, 1500);
@@ -1315,6 +1313,10 @@ function renderProfile() {
     const remaining = Math.max(targetCalories - proteinG * 4 - fatG * 9, 0);
     const carbsG = Math.round(remaining / 4);
 
+    const goalMode = Math.abs(weightDiff) < 2 ? 'maintain' : weightDiff > 0 ? 'gain' : 'lose';
+    const goalModeLabel = goalMode === 'maintain' ? 'Maintain weight' : goalMode === 'gain' ? 'Gain weight' : 'Lose weight';
+    const weightDiffAbs = Math.abs(weightDiff).toFixed(1);
+
     $('#calc_result').innerHTML = `
       <div class="row">
         <span class="badge on">${targetCalories} kcal</span>
@@ -1322,7 +1324,7 @@ function renderProfile() {
         <span class="badge">C ${carbsG}g</span>
         <span class="badge">F ${fatG}g</span>
       </div>
-      <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
+      <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal · Goal: ${goalModeLabel} (${Math.abs(weightDiff) >= 2 ? weightDiff > 0 ? '+' : '−' : ''}${weightDiffAbs} lb)${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
       <button class="btn btn-primary" id="calc_apply" style="margin-top:0.5rem;">Apply to My Goals</button>
     `;
 
