@@ -1,7 +1,8 @@
 // POST { imageBase64: string, mediaType: "image/jpeg" | "image/png" | "image/webp", note?: string }
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, extractJSON } = require('./_shared');
+// Checks food_cache first using a hash of image + note; if hit, returns immediately without using API budget.
+const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Plated, a macro-tracking app.
 You will be shown a photo of a food or meal. Estimate its nutritional content from what's visible —
@@ -39,6 +40,37 @@ exports.handler = async (event) => {
     return jsonResponse(400, { error: 'Image is too large.' });
   }
 
+  // Check cache first using image + note hash — if found, return immediately without using AI budget.
+  const cacheKey = getPhotoCacheKey(imageBase64, note);
+  const cached = await checkFoodCache(cacheKey, true);
+  if (cached) {
+    // Still need to return remaining count, so fetch it without incrementing.
+    const today = new Date().toISOString().slice(0, 10);
+    const countRes = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/ai_usage?user_id=eq.${auth.user.id}&usage_date=eq.${today}&select=count`,
+      {
+        headers: {
+          apikey: process.env.SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${auth.token}`,
+          'content-type': 'application/json',
+        },
+      }
+    );
+    const countRows = await countRes.json().catch(() => []);
+    const currentCount = countRows.length ? countRows[0].count : 0;
+    const remaining = Math.max(0, 20 - currentCount);
+    return jsonResponse(200, {
+      food_name: cached.food_name,
+      calories: cached.calories,
+      protein_g: cached.protein_g,
+      carbs_g: cached.carbs_g,
+      fat_g: cached.fat_g,
+      confidence: cached.confidence || 'high',
+      cached: true,
+      remaining,
+    });
+  }
+
   const rateLimit = await checkAndIncrementRateLimit(auth.user.id, auth.token);
   if (!rateLimit.ok) return jsonResponse(rateLimit.status || 500, { error: rateLimit.message });
 
@@ -58,6 +90,29 @@ exports.handler = async (event) => {
     });
 
     const parsed = extractJSON(text);
+    // Cache the result using the photo cache key.
+    // We need to modify cacheFood to accept a custom cache key, or do it inline.
+    const photoCacheKey = getPhotoCacheKey(imageBase64, note);
+    try {
+      await fetch(`${process.env.SUPABASE_URL}/rest/v1/food_cache`, {
+        method: 'POST',
+        headers: {
+          apikey: process.env.SUPABASE_ANON_KEY,
+          'content-type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          description_key: photoCacheKey,
+          food_name: parsed.food_name,
+          calories: parsed.calories,
+          protein_g: parsed.protein_g,
+          carbs_g: parsed.carbs_g,
+          fat_g: parsed.fat_g,
+        }),
+      });
+    } catch {
+      // Cache write failure is non-fatal.
+    }
     return jsonResponse(200, { ...parsed, remaining: rateLimit.remaining });
   } catch (err) {
     return jsonResponse(502, { error: 'Could not estimate macros from that photo.', detail: String(err.message || err) });
