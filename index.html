@@ -1144,12 +1144,15 @@ function renderCommonFoodsList() {
           <div><div class="name">${esc(f.name)}</div><div class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</div></div>
           <div class="row" style="flex:none;gap:0.4rem;align-items:center;">
             ${inputHtml}
+            <button class="btn btn-sm btn-ghost" data-common-fav="${i}" title="Save as favorite">☆</button>
             <button class="btn btn-sm btn-primary" data-common="${i}">Log</button>
           </div>
         </div>`;
       }).join(''));
-  $$('[data-common]', listEl).forEach((btn) => btn.addEventListener('click', () => {
-    const idx = Number(btn.dataset.common);
+
+  // Reads a row's current oz/servings input and returns the scaled macros —
+  // shared by both the Log and Save-as-favorite buttons so they never drift.
+  const computeScaledFood = (idx) => {
     const f = COMMON_FOODS[idx];
     const ozInput = listEl.querySelector(`[data-oz="${idx}"]`);
     let factor, food_name;
@@ -1164,14 +1167,20 @@ function renderCommonFoodsList() {
       factor = servings;
       food_name = servings === 1 ? f.name : `${f.name} × ${servings}`;
     }
-    logFood({
+    return {
       food_name,
       calories: round(f.calories * factor, 1),
       protein_g: round(f.protein_g * factor, 1),
       carbs_g: round(f.carbs_g * factor, 1),
       fat_g: round(f.fat_g * factor, 1),
-      source: 'common',
-    });
+    };
+  };
+
+  $$('[data-common]', listEl).forEach((btn) => btn.addEventListener('click', () => {
+    logFood({ ...computeScaledFood(Number(btn.dataset.common)), source: 'common' });
+  }));
+  $$('[data-common-fav]', listEl).forEach((btn) => btn.addEventListener('click', () => {
+    saveFavorite(computeScaledFood(Number(btn.dataset.commonFav)));
   }));
 }
 
