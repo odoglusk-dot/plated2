@@ -296,66 +296,66 @@ const state = {
 // ── Static reference data ───────────────────────────────────────────
 const COMMON_FOODS = [
   // ════════════════════════ POULTRY ════════════════════════
-  { name: 'Chicken breast (8oz, cooked)', calories: 374, protein_g: 71, carbs_g: 0, fat_g: 8 },
-  { name: 'Chicken breast (6oz, cooked)', calories: 280, protein_g: 53, carbs_g: 0, fat_g: 6 },
-  { name: 'Chicken breast (4oz, cooked)', calories: 185, protein_g: 35, carbs_g: 0, fat_g: 4 },
-  { name: 'Chicken breast (3oz, cooked)', calories: 140, protein_g: 26, carbs_g: 0, fat_g: 3 },
-  { name: 'Chicken thighs (4oz, cooked)', calories: 250, protein_g: 24, carbs_g: 0, fat_g: 15 },
-  { name: 'Chicken wings (3oz, cooked)', calories: 245, protein_g: 26, carbs_g: 0, fat_g: 15 },
-  { name: 'Rotisserie chicken (3oz)', calories: 220, protein_g: 26, carbs_g: 0, fat_g: 12 },
-  { name: 'Turkey breast (6oz, cooked)', calories: 240, protein_g: 53, carbs_g: 0, fat_g: 1.5 },
-  { name: 'Turkey breast (4oz, cooked)', calories: 160, protein_g: 35, carbs_g: 0, fat_g: 1 },
-  { name: 'Ground turkey 93/7 (4oz, cooked)', calories: 210, protein_g: 28, carbs_g: 0, fat_g: 11 },
-  { name: 'Ground chicken 90/10 (4oz, cooked)', calories: 210, protein_g: 27, carbs_g: 0, fat_g: 11 },
-  { name: 'Duck breast (4oz, cooked)', calories: 290, protein_g: 28, carbs_g: 0, fat_g: 19 },
+  { name: 'Chicken breast (8oz, cooked)', calories: 374, protein_g: 71, carbs_g: 0, fat_g: 8, meat: true },
+  { name: 'Chicken breast (6oz, cooked)', calories: 280, protein_g: 53, carbs_g: 0, fat_g: 6, meat: true },
+  { name: 'Chicken breast (4oz, cooked)', calories: 185, protein_g: 35, carbs_g: 0, fat_g: 4, meat: true },
+  { name: 'Chicken breast (3oz, cooked)', calories: 140, protein_g: 26, carbs_g: 0, fat_g: 3, meat: true },
+  { name: 'Chicken thighs (4oz, cooked)', calories: 250, protein_g: 24, carbs_g: 0, fat_g: 15, meat: true },
+  { name: 'Chicken wings (3oz, cooked)', calories: 245, protein_g: 26, carbs_g: 0, fat_g: 15, meat: true },
+  { name: 'Rotisserie chicken (3oz)', calories: 220, protein_g: 26, carbs_g: 0, fat_g: 12, meat: true },
+  { name: 'Turkey breast (6oz, cooked)', calories: 240, protein_g: 53, carbs_g: 0, fat_g: 1.5, meat: true },
+  { name: 'Turkey breast (4oz, cooked)', calories: 160, protein_g: 35, carbs_g: 0, fat_g: 1, meat: true },
+  { name: 'Ground turkey 93/7 (4oz, cooked)', calories: 210, protein_g: 28, carbs_g: 0, fat_g: 11, meat: true },
+  { name: 'Ground chicken 90/10 (4oz, cooked)', calories: 210, protein_g: 27, carbs_g: 0, fat_g: 11, meat: true },
+  { name: 'Duck breast (4oz, cooked)', calories: 290, protein_g: 28, carbs_g: 0, fat_g: 19, meat: true },
 
   // ════════════════════════ FISH & SEAFOOD ════════════════════════
-  { name: 'Salmon (8oz, cooked)', calories: 560, protein_g: 64, carbs_g: 0, fat_g: 33 },
-  { name: 'Salmon (6oz, cooked)', calories: 350, protein_g: 40, carbs_g: 0, fat_g: 21 },
-  { name: 'Salmon (4oz, cooked)', calories: 230, protein_g: 26, carbs_g: 0, fat_g: 14 },
-  { name: 'Tilapia (8oz, cooked)', calories: 420, protein_g: 90, carbs_g: 0, fat_g: 4 },
-  { name: 'Tilapia (6oz, cooked)', calories: 210, protein_g: 45, carbs_g: 0, fat_g: 2 },
-  { name: 'Halibut (6oz, cooked)', calories: 280, protein_g: 53, carbs_g: 0, fat_g: 6 },
-  { name: 'Haddock (6oz, cooked)', calories: 240, protein_g: 52, carbs_g: 0, fat_g: 2 },
-  { name: 'Tuna, canned in water (5oz)', calories: 120, protein_g: 26, carbs_g: 0, fat_g: 1 },
-  { name: 'Tuna, canned in oil (5oz)', calories: 210, protein_g: 24, carbs_g: 0, fat_g: 12 },
-  { name: 'Tuna steak (6oz, cooked)', calories: 280, protein_g: 50, carbs_g: 0, fat_g: 9 },
-  { name: 'Cod (8oz, cooked)', calories: 420, protein_g: 90, carbs_g: 0, fat_g: 3 },
-  { name: 'Cod (6oz, cooked)', calories: 210, protein_g: 45, carbs_g: 0, fat_g: 2 },
-  { name: 'Sardines (1 can, 3.75oz)', calories: 190, protein_g: 23, carbs_g: 0, fat_g: 11 },
-  { name: 'Mackerel (4oz, cooked)', calories: 280, protein_g: 28, carbs_g: 0, fat_g: 18 },
-  { name: 'Shrimp (8oz, cooked)', calories: 280, protein_g: 59, carbs_g: 3, fat_g: 2 },
-  { name: 'Shrimp (6oz, cooked)', calories: 210, protein_g: 44, carbs_g: 2, fat_g: 1.5 },
-  { name: 'Scallops (6oz, cooked)', calories: 180, protein_g: 35, carbs_g: 3, fat_g: 1.5 },
-  { name: 'Clams (3oz, cooked)', calories: 126, protein_g: 22, carbs_g: 4, fat_g: 1.7 },
-  { name: 'Crab meat (3oz)', calories: 102, protein_g: 21, carbs_g: 0, fat_g: 1.5 },
-  { name: 'Lobster (3oz, cooked)', calories: 95, protein_g: 20, carbs_g: 1, fat_g: 0.5 },
-  { name: 'Oysters (3oz)', calories: 69, protein_g: 7, carbs_g: 4, fat_g: 2.5 },
-  { name: 'Mussels (3oz)', calories: 73, protein_g: 10, carbs_g: 3, fat_g: 1.9 },
+  { name: 'Salmon (8oz, cooked)', calories: 560, protein_g: 64, carbs_g: 0, fat_g: 33, meat: true },
+  { name: 'Salmon (6oz, cooked)', calories: 350, protein_g: 40, carbs_g: 0, fat_g: 21, meat: true },
+  { name: 'Salmon (4oz, cooked)', calories: 230, protein_g: 26, carbs_g: 0, fat_g: 14, meat: true },
+  { name: 'Tilapia (8oz, cooked)', calories: 420, protein_g: 90, carbs_g: 0, fat_g: 4, meat: true },
+  { name: 'Tilapia (6oz, cooked)', calories: 210, protein_g: 45, carbs_g: 0, fat_g: 2, meat: true },
+  { name: 'Halibut (6oz, cooked)', calories: 280, protein_g: 53, carbs_g: 0, fat_g: 6, meat: true },
+  { name: 'Haddock (6oz, cooked)', calories: 240, protein_g: 52, carbs_g: 0, fat_g: 2, meat: true },
+  { name: 'Tuna, canned in water (5oz)', calories: 120, protein_g: 26, carbs_g: 0, fat_g: 1, meat: true },
+  { name: 'Tuna, canned in oil (5oz)', calories: 210, protein_g: 24, carbs_g: 0, fat_g: 12, meat: true },
+  { name: 'Tuna steak (6oz, cooked)', calories: 280, protein_g: 50, carbs_g: 0, fat_g: 9, meat: true },
+  { name: 'Cod (8oz, cooked)', calories: 420, protein_g: 90, carbs_g: 0, fat_g: 3, meat: true },
+  { name: 'Cod (6oz, cooked)', calories: 210, protein_g: 45, carbs_g: 0, fat_g: 2, meat: true },
+  { name: 'Sardines (1 can, 3.75oz)', calories: 190, protein_g: 23, carbs_g: 0, fat_g: 11, meat: true },
+  { name: 'Mackerel (4oz, cooked)', calories: 280, protein_g: 28, carbs_g: 0, fat_g: 18, meat: true },
+  { name: 'Shrimp (8oz, cooked)', calories: 280, protein_g: 59, carbs_g: 3, fat_g: 2, meat: true },
+  { name: 'Shrimp (6oz, cooked)', calories: 210, protein_g: 44, carbs_g: 2, fat_g: 1.5, meat: true },
+  { name: 'Scallops (6oz, cooked)', calories: 180, protein_g: 35, carbs_g: 3, fat_g: 1.5, meat: true },
+  { name: 'Clams (3oz, cooked)', calories: 126, protein_g: 22, carbs_g: 4, fat_g: 1.7, meat: true },
+  { name: 'Crab meat (3oz)', calories: 102, protein_g: 21, carbs_g: 0, fat_g: 1.5, meat: true },
+  { name: 'Lobster (3oz, cooked)', calories: 95, protein_g: 20, carbs_g: 1, fat_g: 0.5, meat: true },
+  { name: 'Oysters (3oz)', calories: 69, protein_g: 7, carbs_g: 4, fat_g: 2.5, meat: true },
+  { name: 'Mussels (3oz)', calories: 73, protein_g: 10, carbs_g: 3, fat_g: 1.9, meat: true },
 
   // ════════════════════════ BEEF & PORK ════════════════════════
-  { name: 'Sirloin steak (8oz, cooked)', calories: 550, protein_g: 85, carbs_g: 0, fat_g: 22 },
-  { name: 'Sirloin steak (6oz, cooked)', calories: 330, protein_g: 53, carbs_g: 0, fat_g: 13 },
-  { name: 'Ribeye steak (6oz, cooked)', calories: 520, protein_g: 48, carbs_g: 0, fat_g: 37 },
-  { name: 'NY Strip steak (6oz, cooked)', calories: 380, protein_g: 54, carbs_g: 0, fat_g: 17 },
-  { name: 'Filet mignon (6oz, cooked)', calories: 360, protein_g: 55, carbs_g: 0, fat_g: 15 },
-  { name: 'Ground beef 93/7 (6oz, cooked)', calories: 315, protein_g: 42, carbs_g: 0, fat_g: 16.5 },
-  { name: 'Ground beef 93/7 (4oz, cooked)', calories: 210, protein_g: 28, carbs_g: 0, fat_g: 11 },
-  { name: 'Ground beef 85/15 (4oz, cooked)', calories: 285, protein_g: 27, carbs_g: 0, fat_g: 20 },
-  { name: 'Ground beef 80/20 (4oz, cooked)', calories: 320, protein_g: 24, carbs_g: 0, fat_g: 26 },
-  { name: 'Lean beef (6oz, cooked)', calories: 315, protein_g: 54, carbs_g: 0, fat_g: 10.5 },
-  { name: 'Lean beef (4oz, cooked)', calories: 210, protein_g: 36, carbs_g: 0, fat_g: 7 },
-  { name: 'Beef liver (3oz, cooked)', calories: 149, protein_g: 21, carbs_g: 5, fat_g: 5 },
-  { name: 'Beef stew meat (4oz, cooked)', calories: 240, protein_g: 35, carbs_g: 0, fat_g: 10 },
-  { name: 'Pork tenderloin (6oz, cooked)', calories: 280, protein_g: 53, carbs_g: 0, fat_g: 7.5 },
-  { name: 'Pork tenderloin (4oz, cooked)', calories: 185, protein_g: 35, carbs_g: 0, fat_g: 5 },
-  { name: 'Pork chop (6oz, cooked)', calories: 360, protein_g: 48, carbs_g: 0, fat_g: 18 },
-  { name: 'Pork chop (4oz, cooked)', calories: 240, protein_g: 32, carbs_g: 0, fat_g: 11 },
-  { name: 'Pork ribs (4oz, cooked)', calories: 280, protein_g: 32, carbs_g: 0, fat_g: 16 },
-  { name: 'Pork shoulder (4oz, cooked)', calories: 250, protein_g: 28, carbs_g: 0, fat_g: 14 },
-  { name: 'Ham (4oz, cooked)', calories: 180, protein_g: 24, carbs_g: 2, fat_g: 8 },
-  { name: 'Lamb (4oz, cooked)', calories: 290, protein_g: 30, carbs_g: 0, fat_g: 18 },
-  { name: 'Veal (4oz, cooked)', calories: 200, protein_g: 35, carbs_g: 0, fat_g: 6 },
+  { name: 'Sirloin steak (8oz, cooked)', calories: 550, protein_g: 85, carbs_g: 0, fat_g: 22, meat: true },
+  { name: 'Sirloin steak (6oz, cooked)', calories: 330, protein_g: 53, carbs_g: 0, fat_g: 13, meat: true },
+  { name: 'Ribeye steak (6oz, cooked)', calories: 520, protein_g: 48, carbs_g: 0, fat_g: 37, meat: true },
+  { name: 'NY Strip steak (6oz, cooked)', calories: 380, protein_g: 54, carbs_g: 0, fat_g: 17, meat: true },
+  { name: 'Filet mignon (6oz, cooked)', calories: 360, protein_g: 55, carbs_g: 0, fat_g: 15, meat: true },
+  { name: 'Ground beef 93/7 (6oz, cooked)', calories: 315, protein_g: 42, carbs_g: 0, fat_g: 16.5, meat: true },
+  { name: 'Ground beef 93/7 (4oz, cooked)', calories: 210, protein_g: 28, carbs_g: 0, fat_g: 11, meat: true },
+  { name: 'Ground beef 85/15 (4oz, cooked)', calories: 285, protein_g: 27, carbs_g: 0, fat_g: 20, meat: true },
+  { name: 'Ground beef 80/20 (4oz, cooked)', calories: 320, protein_g: 24, carbs_g: 0, fat_g: 26, meat: true },
+  { name: 'Lean beef (6oz, cooked)', calories: 315, protein_g: 54, carbs_g: 0, fat_g: 10.5, meat: true },
+  { name: 'Lean beef (4oz, cooked)', calories: 210, protein_g: 36, carbs_g: 0, fat_g: 7, meat: true },
+  { name: 'Beef liver (3oz, cooked)', calories: 149, protein_g: 21, carbs_g: 5, fat_g: 5, meat: true },
+  { name: 'Beef stew meat (4oz, cooked)', calories: 240, protein_g: 35, carbs_g: 0, fat_g: 10, meat: true },
+  { name: 'Pork tenderloin (6oz, cooked)', calories: 280, protein_g: 53, carbs_g: 0, fat_g: 7.5, meat: true },
+  { name: 'Pork tenderloin (4oz, cooked)', calories: 185, protein_g: 35, carbs_g: 0, fat_g: 5, meat: true },
+  { name: 'Pork chop (6oz, cooked)', calories: 360, protein_g: 48, carbs_g: 0, fat_g: 18, meat: true },
+  { name: 'Pork chop (4oz, cooked)', calories: 240, protein_g: 32, carbs_g: 0, fat_g: 11, meat: true },
+  { name: 'Pork ribs (4oz, cooked)', calories: 280, protein_g: 32, carbs_g: 0, fat_g: 16, meat: true },
+  { name: 'Pork shoulder (4oz, cooked)', calories: 250, protein_g: 28, carbs_g: 0, fat_g: 14, meat: true },
+  { name: 'Ham (4oz, cooked)', calories: 180, protein_g: 24, carbs_g: 2, fat_g: 8, meat: true },
+  { name: 'Lamb (4oz, cooked)', calories: 290, protein_g: 30, carbs_g: 0, fat_g: 18, meat: true },
+  { name: 'Veal (4oz, cooked)', calories: 200, protein_g: 35, carbs_g: 0, fat_g: 6, meat: true },
 
   // ════════════════════════ EGGS & DAIRY ════════════════════════
   { name: 'Large egg (1)', calories: 72, protein_g: 6, carbs_g: 0.4, fat_g: 5 },
@@ -1118,6 +1118,13 @@ function matchCommonFoods(query, limit = 8) {
   return filterCommonFoods(query).slice(0, limit);
 }
 
+// Pulls the base ounce amount out of a meat food's name, e.g. "6" from
+// "Chicken breast (6oz, cooked)" or "3.75" from "Sardines (1 can, 3.75oz)".
+function extractOz(name) {
+  const m = name.match(/(\d+(?:\.\d+)?)\s*oz/i);
+  return m ? parseFloat(m[1]) : null;
+}
+
 function renderCommonFoodsList() {
   const listEl = $('#commonFoodsList');
   if (!listEl) return;
@@ -1128,11 +1135,15 @@ function renderCommonFoodsList() {
     ? `<p class="muted">No foods match "${esc(commonSearchQuery)}". Try Describe It or Snap a Photo instead.</p>`
     : filtered.map((f) => {
         const i = COMMON_FOODS.indexOf(f);
+        const baseOz = f.meat ? extractOz(f.name) : null;
+        const inputHtml = baseOz
+          ? `<input class="input mono" type="number" min="0.5" step="1" value="${baseOz}" title="Ounces" data-oz="${i}" data-base-oz="${baseOz}" style="width:64px;padding:0.4rem 0.5rem;"> <span class="muted" style="flex:none;">oz</span>`
+          : `<input class="input mono" type="number" min="1" step="1" value="1" title="Servings" data-serving="${i}" style="width:56px;padding:0.4rem 0.5rem;">`;
         return `
         <div class="log-row">
           <div><div class="name">${esc(f.name)}</div><div class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</div></div>
           <div class="row" style="flex:none;gap:0.4rem;align-items:center;">
-            <input class="input mono" type="number" min="0.25" step="0.25" value="1" title="Servings" data-serving="${i}" style="width:64px;padding:0.4rem 0.5rem;">
+            ${inputHtml}
             <button class="btn btn-sm btn-primary" data-common="${i}">Log</button>
           </div>
         </div>`;
@@ -1140,15 +1151,25 @@ function renderCommonFoodsList() {
   $$('[data-common]', listEl).forEach((btn) => btn.addEventListener('click', () => {
     const idx = Number(btn.dataset.common);
     const f = COMMON_FOODS[idx];
-    const servingInput = listEl.querySelector(`[data-serving="${idx}"]`);
-    const servings = Math.max(0.25, Number(servingInput?.value) || 1);
-    const food_name = servings === 1 ? f.name : `${f.name} × ${servings}`;
+    const ozInput = listEl.querySelector(`[data-oz="${idx}"]`);
+    let factor, food_name;
+    if (ozInput) {
+      const baseOz = Number(ozInput.dataset.baseOz);
+      const enteredOz = Math.max(0.5, Number(ozInput.value) || baseOz);
+      factor = enteredOz / baseOz;
+      food_name = f.name.replace(/(\d+(?:\.\d+)?)(\s*oz)/i, `${enteredOz}$2`);
+    } else {
+      const servingInput = listEl.querySelector(`[data-serving="${idx}"]`);
+      const servings = Math.max(1, Math.round(Number(servingInput?.value) || 1));
+      factor = servings;
+      food_name = servings === 1 ? f.name : `${f.name} × ${servings}`;
+    }
     logFood({
       food_name,
-      calories: round(f.calories * servings, 1),
-      protein_g: round(f.protein_g * servings, 1),
-      carbs_g: round(f.carbs_g * servings, 1),
-      fat_g: round(f.fat_g * servings, 1),
+      calories: round(f.calories * factor, 1),
+      protein_g: round(f.protein_g * factor, 1),
+      carbs_g: round(f.carbs_g * factor, 1),
+      fat_g: round(f.fat_g * factor, 1),
       source: 'common',
     });
   }));
@@ -1343,7 +1364,7 @@ function renderLogSubPanel() {
     el.innerHTML = `
       <div class="card">
         <h3>Common Foods</h3>
-        <p class="muted">Free, instant logging — no AI lookup used. Adjust servings before logging.</p>
+        <p class="muted">Free, instant logging — no AI lookup used. Meats let you type the exact ounces; everything else scales by whole servings.</p>
         <div class="field"><input class="input" id="commonSearch" placeholder="Search ${COMMON_FOODS.length} foods (e.g. chicken, rice, banana)…" value="${esc(commonSearchQuery)}"></div>
         <div id="commonFoodsList"></div>
       </div>`;
