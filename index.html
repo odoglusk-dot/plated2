@@ -1087,29 +1087,57 @@ async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source 
 let logSubTab = 'ai';
 let commonSearchQuery = '';
 
-// Case-insensitive substring match against the common foods database.
+// Word-token match against the common foods database — no AI, just string
+// comparison. A food matches if every word in the query appears somewhere in
+// its name (case-insensitive, any order), so "cooked chicken" matches
+// "Chicken breast (6oz, cooked)" even though the words are reversed.
+function filterCommonFoods(query) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return COMMON_FOODS;
+  return COMMON_FOODS.filter((f) => {
+    const name = f.name.toLowerCase();
+    return words.every((w) => name.includes(w));
+  });
+}
+
 function matchCommonFoods(query, limit = 8) {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  return COMMON_FOODS.filter((f) => f.name.toLowerCase().includes(q)).slice(0, limit);
+  if (!query.trim()) return [];
+  return filterCommonFoods(query).slice(0, limit);
 }
 
 function renderCommonFoodsList() {
   const listEl = $('#commonFoodsList');
   if (!listEl) return;
-  const q = commonSearchQuery.trim().toLowerCase();
-  const filtered = q ? COMMON_FOODS.filter((f) => f.name.toLowerCase().includes(q)) : COMMON_FOODS;
-  const countLine = q ? `<p class="muted">${filtered.length} match${filtered.length === 1 ? '' : 'es'} for "${esc(commonSearchQuery)}"</p>` : '';
+  const filtered = filterCommonFoods(commonSearchQuery);
+  const countLine = commonSearchQuery.trim()
+    ? `<p class="muted">${filtered.length} match${filtered.length === 1 ? '' : 'es'} for "${esc(commonSearchQuery)}"</p>` : '';
   listEl.innerHTML = countLine + (filtered.length === 0
     ? `<p class="muted">No foods match "${esc(commonSearchQuery)}". Try Describe It or Snap a Photo instead.</p>`
-    : filtered.map((f) => `
+    : filtered.map((f) => {
+        const i = COMMON_FOODS.indexOf(f);
+        return `
         <div class="log-row">
           <div><div class="name">${esc(f.name)}</div><div class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</div></div>
-          <button class="btn btn-sm btn-primary" data-common="${COMMON_FOODS.indexOf(f)}">Log</button>
-        </div>`).join(''));
+          <div class="row" style="flex:none;gap:0.4rem;align-items:center;">
+            <input class="input mono" type="number" min="0.25" step="0.25" value="1" title="Servings" data-serving="${i}" style="width:64px;padding:0.4rem 0.5rem;">
+            <button class="btn btn-sm btn-primary" data-common="${i}">Log</button>
+          </div>
+        </div>`;
+      }).join(''));
   $$('[data-common]', listEl).forEach((btn) => btn.addEventListener('click', () => {
-    const f = COMMON_FOODS[Number(btn.dataset.common)];
-    logFood({ food_name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g, source: 'common' });
+    const idx = Number(btn.dataset.common);
+    const f = COMMON_FOODS[idx];
+    const servingInput = listEl.querySelector(`[data-serving="${idx}"]`);
+    const servings = Math.max(0.25, Number(servingInput?.value) || 1);
+    const food_name = servings === 1 ? f.name : `${f.name} × ${servings}`;
+    logFood({
+      food_name,
+      calories: round(f.calories * servings, 1),
+      protein_g: round(f.protein_g * servings, 1),
+      carbs_g: round(f.carbs_g * servings, 1),
+      fat_g: round(f.fat_g * servings, 1),
+      source: 'common',
+    });
   }));
 }
 
@@ -1253,7 +1281,7 @@ function renderLogSubPanel() {
     el.innerHTML = `
       <div class="card">
         <h3>Common Foods</h3>
-        <p class="muted">Free, instant logging — no AI lookup used.</p>
+        <p class="muted">Free, instant logging — no AI lookup used. Adjust servings before logging.</p>
         <div class="field"><input class="input" id="commonSearch" placeholder="Search ${COMMON_FOODS.length} foods (e.g. chicken, rice, banana)…" value="${esc(commonSearchQuery)}"></div>
         <div id="commonFoodsList"></div>
       </div>`;
