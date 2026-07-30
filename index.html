@@ -1085,6 +1085,33 @@ async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source 
 // LOG FOOD TAB
 // ══════════════════════════════════════════════════════════════════
 let logSubTab = 'ai';
+let commonSearchQuery = '';
+
+// Case-insensitive substring match against the common foods database.
+function matchCommonFoods(query, limit = 8) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return COMMON_FOODS.filter((f) => f.name.toLowerCase().includes(q)).slice(0, limit);
+}
+
+function renderCommonFoodsList() {
+  const listEl = $('#commonFoodsList');
+  if (!listEl) return;
+  const q = commonSearchQuery.trim().toLowerCase();
+  const filtered = q ? COMMON_FOODS.filter((f) => f.name.toLowerCase().includes(q)) : COMMON_FOODS;
+  const countLine = q ? `<p class="muted">${filtered.length} match${filtered.length === 1 ? '' : 'es'} for "${esc(commonSearchQuery)}"</p>` : '';
+  listEl.innerHTML = countLine + (filtered.length === 0
+    ? `<p class="muted">No foods match "${esc(commonSearchQuery)}". Try Describe It or Snap a Photo instead.</p>`
+    : filtered.map((f) => `
+        <div class="log-row">
+          <div><div class="name">${esc(f.name)}</div><div class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</div></div>
+          <button class="btn btn-sm btn-primary" data-common="${COMMON_FOODS.indexOf(f)}">Log</button>
+        </div>`).join(''));
+  $$('[data-common]', listEl).forEach((btn) => btn.addEventListener('click', () => {
+    const f = COMMON_FOODS[Number(btn.dataset.common)];
+    logFood({ food_name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g, source: 'common' });
+  }));
+}
 
 function renderLogTab() {
   const panel = $('#panel-log');
@@ -1121,7 +1148,7 @@ function resultCardHtml(result) {
     </div>`;
 }
 
-function wireResultCard() {
+function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text')) {
   const readValues = () => ({
     food_name: $('#res_name').value.trim() || 'Food',
     calories: Number($('#res_cal').value) || 0,
@@ -1129,7 +1156,7 @@ function wireResultCard() {
     carbs_g: Number($('#res_carb').value) || 0,
     fat_g: Number($('#res_fat').value) || 0,
   });
-  $('#logResultBtn')?.addEventListener('click', () => logFood({ ...readValues(), source: logSubTab === 'photo' ? 'ai_photo' : 'ai_text' }));
+  $('#logResultBtn')?.addEventListener('click', () => logFood({ ...readValues(), source }));
   $('#favResultBtn')?.addEventListener('click', () => saveFavorite(readValues()));
 }
 
@@ -1148,20 +1175,47 @@ function renderLogSubPanel() {
       <div class="card">
         <h3>Describe your food</h3>
         <div class="field"><textarea id="aiDescription" placeholder="e.g. grilled chicken breast with a cup of rice and steamed broccoli"></textarea></div>
+        <div id="aiSuggestions"></div>
         <button class="btn btn-primary" id="aiEstimateBtn">Estimate Macros</button>
         <div id="aiError" class="muted" style="color:var(--red);margin-top:0.5rem;"></div>
       </div>
       <div id="aiResultSlot"></div>`;
+    const useCommonMatch = (f) => {
+      $('#aiResultSlot').innerHTML = resultCardHtml({
+        food_name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g,
+        confidence: 'exact match (common foods)',
+      });
+      wireResultCard('common');
+    };
+    const renderAiSuggestions = () => {
+      const matches = matchCommonFoods($('#aiDescription').value);
+      const slot = $('#aiSuggestions');
+      if (matches.length === 0) { slot.innerHTML = ''; return; }
+      slot.innerHTML = `
+        <div class="card" style="margin:0.5rem 0;">
+          <p class="muted" style="margin:0 0 0.5rem;">Matches in common foods — instant, no AI lookup used:</p>
+          ${matches.map((f) => `
+            <div class="log-row">
+              <div><div class="name">${esc(f.name)}</div><div class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</div></div>
+              <button class="btn btn-sm btn-primary" data-ai-common="${COMMON_FOODS.indexOf(f)}">Use This</button>
+            </div>`).join('')}
+        </div>`;
+      $$('[data-ai-common]', slot).forEach((btn) => btn.addEventListener('click', () => useCommonMatch(COMMON_FOODS[Number(btn.dataset.aiCommon)])));
+    };
+    $('#aiDescription').addEventListener('input', renderAiSuggestions);
     $('#aiEstimateBtn').addEventListener('click', async () => {
       const description = $('#aiDescription').value.trim();
       if (!description) return;
+      // Exact match against the common foods database costs nothing — skip the AI call entirely.
+      const exact = COMMON_FOODS.find((f) => f.name.toLowerCase() === description.toLowerCase());
+      if (exact) { useCommonMatch(exact); return; }
       const btn = $('#aiEstimateBtn'); btn.disabled = true; btn.textContent = 'Estimating…';
       $('#aiError').textContent = '';
       try {
         const result = await callFunction('estimate-macros', { description });
         state.aiRemaining = result.remaining;
         $('#aiResultSlot').innerHTML = resultCardHtml(result);
-        wireResultCard();
+        wireResultCard('ai_text');
       } catch (err) {
         $('#aiError').textContent = err.message;
       } finally {
@@ -1188,7 +1242,7 @@ function renderLogSubPanel() {
         const result = await callFunction('estimate-macros-photo', { imageBase64: base64, mediaType, note: $('#photoNote').value.trim() });
         state.aiRemaining = result.remaining;
         $('#photoResultSlot').innerHTML = resultCardHtml(result);
-        wireResultCard();
+        wireResultCard('ai_photo');
       } catch (err) {
         $('#photoError').textContent = err.message;
       } finally {
@@ -1200,16 +1254,15 @@ function renderLogSubPanel() {
       <div class="card">
         <h3>Common Foods</h3>
         <p class="muted">Free, instant logging — no AI lookup used.</p>
-        ${COMMON_FOODS.map((f, i) => `
-          <div class="log-row">
-            <div><div class="name">${esc(f.name)}</div><div class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</div></div>
-            <button class="btn btn-sm btn-primary" data-common="${i}">Log</button>
-          </div>`).join('')}
+        <div class="field"><input class="input" id="commonSearch" placeholder="Search ${COMMON_FOODS.length} foods (e.g. chicken, rice, banana)…" value="${esc(commonSearchQuery)}"></div>
+        <div id="commonFoodsList"></div>
       </div>`;
-    $$('[data-common]', el).forEach((btn) => btn.addEventListener('click', () => {
-      const f = COMMON_FOODS[Number(btn.dataset.common)];
-      logFood({ food_name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g, source: 'common' });
-    }));
+    const searchInput = $('#commonSearch');
+    searchInput.addEventListener('input', () => {
+      commonSearchQuery = searchInput.value;
+      renderCommonFoodsList();
+    });
+    renderCommonFoodsList();
   } else if (logSubTab === 'manual') {
     el.innerHTML = `
       <div class="card">
