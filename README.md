@@ -5,9 +5,22 @@ built on Supabase (auth + Postgres + RLS) and Netlify serverless functions.
 No build step — `index.html` is a single static file that talks directly to
 Supabase and to the functions in `netlify/functions/`.
 
+**373 foods in instant lookup** — zero API calls for common meals.
+**Smart caching** — shared cache means once any user estimates a food, all subsequent
+users get it free.
+
+## Documentation
+
+- **[QUICKSTART.md](QUICKSTART.md)** — Deploy and run in 10 minutes
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** — Complete technical setup guide
+- **[COMMON_FOODS_DATABASE_CURRENT.md](COMMON_FOODS_DATABASE_CURRENT.md)** — Full food database (373 items across 18 categories)
+- **[SCHEMA-REFERENCE.md](SCHEMA-REFERENCE.md)** — Database schema & RLS policies
+- **[TERMS_OF_SERVICE.md](TERMS_OF_SERVICE.md)** — Legal
+- **[PRIVACY_POLICY.md](PRIVACY_POLICY.md)** — Privacy
+
 ## Architecture
 
-- **Frontend**: `plated/index.html` — vanilla JS, loads `@supabase/supabase-js`
+- **Frontend**: `index.html` — vanilla JS, loads `@supabase/supabase-js`
   from esm.sh. No bundler, no npm install needed for the frontend.
 - **Auth + database**: Supabase. Every personal table is scoped to
   `auth.uid()` via Row Level Security — the app never has a broader "logged
@@ -17,67 +30,67 @@ Supabase and to the functions in `netlify/functions/`.
   the caller's Supabase session token before doing anything, and shares a
   per-user daily rate limit (`ai_usage` table) so one account can't rack up
   unlimited API spend by switching browsers/devices.
+- **Smart food caching**: Text descriptions and photo hashes are cached in
+  `food_cache` with merge-duplicates strategy. Repeat lookups return instantly
+  (zero API calls). Users share the cache — popular foods become free for everyone.
 
-## 1. Set up Supabase
+## Quick Setup
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. In the SQL editor, run `supabase-schema.sql`, then
-   `supabase-schema-additions.sql`, in that order.
-3. Under Authentication → Providers, email/password is enabled by default —
-   that's all this app uses. Decide whether you want email confirmation on
-   sign-up (Authentication → Settings); the frontend handles either case.
-4. Grab your Project URL and anon/public key from Project Settings → API.
+**See [QUICKSTART.md](QUICKSTART.md) for a 10-minute deploy guide.**
 
-## 2. Configure the frontend
+### Setup Overview
 
-Open `plated/index.html` and fill in the two placeholders near the top of
-the `<script type="module">` block:
+1. **Supabase**: Create project, run `reset-schema.sql` in SQL editor
+2. **Netlify**: Connect GitHub repo, add 3 environment variables
+3. **Frontend**: Update `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `index.html`
+4. **Done**: App is live
 
-```js
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
-```
+### Detailed Setup
 
-The anon key is safe to ship in client-side code — RLS is what actually
-enforces privacy, not secrecy of this key.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full technical guide, including:
+- Database schema explanation (9 tables, RLS policies)
+- All required environment variables
+- API endpoint documentation
+- Monitoring and troubleshooting
 
-## 3. Deploy to Netlify
+## Food Database
 
-The repo root already has `netlify.toml` pointing Netlify at
-`netlify/functions`. Connect the repo (or `netlify deploy`) and set these
-environment variables in Site settings → Environment variables:
+**373 foods** available for instant lookup (zero API calls):
+- 12 poultry options (chicken, turkey, duck)
+- 22 fish & seafood (salmon, tuna, shrimp, clams, etc.)
+- 22 beef & pork (steaks, ground, pork chops, etc.)
+- 32 eggs & dairy (eggs, milk, yogurt, cheese)
+- 10 alternative proteins (tofu, tempeh, seitan, etc.)
+- 10 legumes & beans (lentils, chickpeas, black beans, etc.)
+- 47 grains & starches (rice, pasta, bread, quinoa, oats, etc.)
+- 44 vegetables (broccoli, spinach, peppers, etc.)
+- 9 potatoes & tubers (baked, sweet, fries, etc.)
+- 34 fruits (bananas, apples, berries, etc.)
+- 20 nuts & seeds
+- 11 nut butters & spreads
+- 11 healthy oils
+- 13 beverages (coffee, juice, soda, etc.)
+- 23 fast food chains (McDonald's, Subway, Chipotle, etc.)
+- 21 snacks & bars
+- 8 soups & broths
+- 12 condiments & sauces
 
-| Variable | Where to get it | Used by |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | console.anthropic.com | all AI functions |
-| `SUPABASE_URL` | Supabase → Project Settings → API | all functions |
-| `SUPABASE_ANON_KEY` | Supabase → Project Settings → API | all functions |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API (**server-side only, never in frontend code**) | `delete-account.js` only |
+See [COMMON_FOODS_DATABASE_CURRENT.md](COMMON_FOODS_DATABASE_CURRENT.md) for the complete list with macros.
 
-The app itself is served at `/plated/` on whatever domain the site is
-deployed to (Netlify serves `plated/index.html` automatically for requests
-to `/plated/`). The existing `saltflow-v5.html` at the repo root is
-untouched.
+## AI Rate Limiting
 
-## 4. Smoke test
-
-1. Sign up with a real email, confirm if your project requires it, sign in.
-2. Log a food manually (Log Food → Manual Entry) and confirm it shows up on
-   the Dashboard and persists after a refresh.
-3. Try an AI text estimate (Log Food → Describe It) — this is the function
-   that proves the Netlify → Anthropic proxy works end-to-end.
-4. Create a second test account and confirm it cannot see the first
-   account's logs, goals, or favorites — that's the actual guarantee the
-   whole Supabase migration exists for. Do this before letting anyone else
-   use the app.
-
-## Rate limiting
-
-`ai_usage` caps each account at 20 AI calls/day (text estimate + photo
+`ai_usage` caps each account at **20 AI calls/day** (text estimate + photo
 estimate + Ask Your Data share one counter). Enforced server-side inside
 `netlify/functions/_shared.js`, scoped to `user_id` via RLS using the
 caller's own JWT — not per-browser, so it can't be bypassed by switching
-devices. Adjust `DAILY_AI_LIMIT` in `_shared.js` if you want a different cap.
+devices.
+
+**Smart caching reduces API calls dramatically:**
+- Food not in common database → estimate via AI (1 call)
+- Same food estimated again → returned from cache (0 calls) ✓
+- Multiple users estimate same food → all share the cache hit ✓
+
+Adjust `DAILY_AI_LIMIT` in `_shared.js` if you want a different cap.
 
 ## Phase 2: Paywall (not built yet)
 
