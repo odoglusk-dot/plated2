@@ -131,6 +131,19 @@
   .sub-nav { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
   .sub-nav button { flex: none; }
 
+  /* ── Autocomplete dropdown (Describe It → common food matches) ──── */
+  .autocomplete-wrap { position: relative; }
+  .autocomplete-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; z-index: 30;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; overflow-y: auto;
+    max-height: 280px; box-shadow: 0 10px 28px rgba(0,0,0,0.45); }
+  .autocomplete-item { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    padding: 0.55rem 0.8rem; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover, .autocomplete-item.active { background: var(--surface-3); }
+  .autocomplete-item .name { font-weight: 600; font-size: 0.9rem; }
+  .autocomplete-item .macros { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
+  .autocomplete-hint { padding: 0.4rem 0.8rem; font-size: 0.72rem; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+
   table.plain { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   table.plain th, table.plain td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
   table.plain th { color: var(--text-dim); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -1202,38 +1215,87 @@ function renderLogSubPanel() {
     el.innerHTML = `
       <div class="card">
         <h3>Describe your food</h3>
-        <div class="field"><textarea id="aiDescription" placeholder="e.g. grilled chicken breast with a cup of rice and steamed broccoli"></textarea></div>
-        <div id="aiSuggestions"></div>
+        <div class="field autocomplete-wrap">
+          <textarea id="aiDescription" autocomplete="off" placeholder="e.g. grilled chicken breast with a cup of rice and steamed broccoli"></textarea>
+          <div id="aiDropdown"></div>
+        </div>
         <button class="btn btn-primary" id="aiEstimateBtn">Estimate Macros</button>
         <div id="aiError" class="muted" style="color:var(--red);margin-top:0.5rem;"></div>
       </div>
       <div id="aiResultSlot"></div>`;
+
+    let aiMatches = [];
+    let aiActiveIndex = -1;
+
     const useCommonMatch = (f) => {
+      $('#aiDescription').value = f.name;
+      closeDropdown();
       $('#aiResultSlot').innerHTML = resultCardHtml({
         food_name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g,
         confidence: 'exact match (common foods)',
       });
       wireResultCard('common');
     };
-    const renderAiSuggestions = () => {
-      const matches = matchCommonFoods($('#aiDescription').value);
-      const slot = $('#aiSuggestions');
-      if (matches.length === 0) { slot.innerHTML = ''; return; }
-      slot.innerHTML = `
-        <div class="card" style="margin:0.5rem 0;">
-          <p class="muted" style="margin:0 0 0.5rem;">Matches in common foods — instant, no AI lookup used:</p>
-          ${matches.map((f) => `
-            <div class="log-row">
-              <div><div class="name">${esc(f.name)}</div><div class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</div></div>
-              <button class="btn btn-sm btn-primary" data-ai-common="${COMMON_FOODS.indexOf(f)}">Use This</button>
+
+    function closeDropdown() {
+      aiMatches = []; aiActiveIndex = -1;
+      const dd = $('#aiDropdown');
+      if (dd) dd.innerHTML = '';
+    }
+
+    function paintActive() {
+      $$('.autocomplete-item', $('#aiDropdown')).forEach((row, i) => row.classList.toggle('active', i === aiActiveIndex));
+    }
+
+    function openDropdown(query) {
+      aiMatches = matchCommonFoods(query, 8);
+      aiActiveIndex = -1;
+      const dd = $('#aiDropdown');
+      if (aiMatches.length === 0) { dd.innerHTML = ''; return; }
+      dd.innerHTML = `
+        <div class="autocomplete-dropdown">
+          <div class="autocomplete-hint">Common foods — instant, no AI lookup used</div>
+          ${aiMatches.map((f) => `
+            <div class="autocomplete-item" data-ai-common="${COMMON_FOODS.indexOf(f)}">
+              <span class="name">${esc(f.name)}</span>
+              <span class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</span>
             </div>`).join('')}
         </div>`;
-      $$('[data-ai-common]', slot).forEach((btn) => btn.addEventListener('click', () => useCommonMatch(COMMON_FOODS[Number(btn.dataset.aiCommon)])));
-    };
-    $('#aiDescription').addEventListener('input', renderAiSuggestions);
+      $$('.autocomplete-item', dd).forEach((row) => {
+        // mousedown (not click) fires before the textarea's blur, so selection
+        // registers before the dropdown would otherwise get closed.
+        row.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          useCommonMatch(COMMON_FOODS[Number(row.dataset.aiCommon)]);
+        });
+      });
+    }
+
+    const textarea = $('#aiDescription');
+    textarea.addEventListener('input', () => openDropdown(textarea.value));
+    textarea.addEventListener('keydown', (e) => {
+      if (aiMatches.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        aiActiveIndex = (aiActiveIndex + 1) % aiMatches.length;
+        paintActive();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        aiActiveIndex = (aiActiveIndex - 1 + aiMatches.length) % aiMatches.length;
+        paintActive();
+      } else if (e.key === 'Enter' && aiActiveIndex >= 0) {
+        e.preventDefault();
+        useCommonMatch(aiMatches[aiActiveIndex]);
+      } else if (e.key === 'Escape') {
+        closeDropdown();
+      }
+    });
+    textarea.addEventListener('blur', () => setTimeout(closeDropdown, 150));
+
     $('#aiEstimateBtn').addEventListener('click', async () => {
       const description = $('#aiDescription').value.trim();
       if (!description) return;
+      closeDropdown();
       // Exact match against the common foods database costs nothing — skip the AI call entirely.
       const exact = COMMON_FOODS.find((f) => f.name.toLowerCase() === description.toLowerCase());
       if (exact) { useCommonMatch(exact); return; }
