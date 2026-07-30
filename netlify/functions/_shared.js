@@ -3,7 +3,7 @@
 // global `fetch` available in the Node 18+ Netlify Functions runtime, so
 // there's no bundling/dependency-install step to break.
 
-const DAILY_AI_LIMIT = 20;
+const DAILY_AI_LIMIT = 13;
 
 function jsonResponse(statusCode, body) {
   return {

@@ -79,7 +79,7 @@ See [COMMON_FOODS_DATABASE_CURRENT.md](COMMON_FOODS_DATABASE_CURRENT.md) for the
 
 ## AI Rate Limiting
 
-`ai_usage` caps each account at **20 AI calls/day** (text estimate + photo
+`ai_usage` caps each account at **13 AI calls/day** (text estimate + photo
 estimate + Ask Your Data share one counter). Enforced server-side inside
 `netlify/functions/_shared.js`, scoped to `user_id` via RLS using the
 caller's own JWT — not per-browser, so it can't be bypassed by switching

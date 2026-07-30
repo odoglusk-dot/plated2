@@ -33,7 +33,7 @@ Plated is a macro & supplement tracker built with:
 - `favorites` — user's saved food items
 - `weight_log` — weight tracking history
 - `supplement_logs` — supplement usage
-- `ai_usage` — daily API call counter (20 calls/day limit per user)
+- `ai_usage` — daily API call counter (13 calls/day limit per user)
 
 ### 2. Netlify Functions Setup
 
@@ -90,7 +90,7 @@ Estimate macros from a text description.
 }
 ```
 
-**Rate limit:** 20 calls per day per user (shared cache reduces usage)
+**Rate limit:** 13 calls per day per user (shared cache reduces usage)
 
 ### POST `/api/estimate-macros-photo`
 

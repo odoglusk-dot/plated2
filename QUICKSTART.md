@@ -61,7 +61,7 @@ That's it. Daily macro tracking is now live.
 - **Exact match search**: Type "Chicken breast (6oz, cooked)" from the database
 - **AI estimation**: "chicken breast 6oz with rice" → auto-fills macros
 - **Photo estimation**: Take a pic of your meal → get macros instantly
-- **Daily limit**: 20 AI estimates per day (but cache hits are free!)
+- **Daily limit**: 13 AI estimates per day (but cache hits are free!)
 - **Streaks**: Hit your protein goal daily to build your streak
 
 ## Costs

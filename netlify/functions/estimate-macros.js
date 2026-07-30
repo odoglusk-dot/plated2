@@ -2,7 +2,7 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
 // Checks food_cache first; if hit, returns immediately without using API budget.
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, extractJSON, checkFoodCache, cacheFood } = require('./_shared');
+const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, extractJSON, checkFoodCache, cacheFood, DAILY_AI_LIMIT } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Plated, a macro-tracking app.
 Given a short description of a food or meal, estimate its nutritional content.
@@ -48,7 +48,7 @@ exports.handler = async (event) => {
     );
     const countRows = await countRes.json().catch(() => []);
     const currentCount = countRows.length ? countRows[0].count : 0;
-    const remaining = Math.max(0, 20 - currentCount);
+    const remaining = Math.max(0, DAILY_AI_LIMIT - currentCount);
     return jsonResponse(200, {
       food_name: cached.food_name,
       calories: cached.calories,
