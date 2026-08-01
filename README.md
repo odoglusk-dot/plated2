@@ -34,6 +34,16 @@ users get it free.
   `food_cache` with merge-duplicates strategy. Repeat lookups return instantly
   (zero API calls). Users share the cache — popular foods become free for everyone.
 
+## Installable on phones (Add to Home Screen)
+
+Plated ships a web app manifest (`manifest.json`) and icons (`icons/`), so
+visiting the site on a phone and choosing "Add to Home Screen" (iOS Safari)
+or the install prompt (Android Chrome) drops a Plated icon on the home
+screen that opens full-screen, no browser chrome. This is just the
+manifest + icons + meta tags — there's no service worker, so it isn't an
+offline-capable PWA, just an installable shortcut. Requires HTTPS, which
+Netlify provides by default.
+
 ## Quick Setup
 
 **See [QUICKSTART.md](QUICKSTART.md) for a 10-minute deploy guide.**
