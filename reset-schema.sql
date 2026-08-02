@@ -215,6 +215,9 @@ create table ai_usage (
   user_id uuid not null references auth.users(id) on delete cascade,
   usage_date date not null default current_date,
   count int not null default 0,
+  input_tokens bigint not null default 0,
+  output_tokens bigint not null default 0,
+  estimated_cost_usd numeric(10, 6) not null default 0,
   primary key (user_id, usage_date)
 );
 

@@ -33,7 +33,8 @@ Plated is a macro & supplement tracker built with:
 - `favorites` — user's saved food items
 - `weight_log` — weight tracking history
 - `supplement_logs` — supplement usage
-- `ai_usage` — daily API call counter (13 calls/day limit per user)
+- `ai_usage` — daily API call counter (13 calls/day limit per user), plus
+  real token usage and estimated cost per user per day
 
 ### 2. Netlify Functions Setup
 
@@ -197,7 +198,7 @@ Or if goal weight is set: calculate deficit/surplus based on weight difference.
 
 ## Daily AI Budget
 
-**20 API calls per day per user** (shared cache):
+**13 API calls per day per user** (shared cache):
 
 - Estimate from text = 1 call
 - Estimate from photo = 1 call
@@ -234,6 +235,50 @@ FROM ai_usage
 WHERE usage_date = current_date 
 ORDER BY count DESC;
 ```
+
+### Migrating an existing database for cost tracking
+
+If your `ai_usage` table was created before real token/cost tracking was
+added, `reset-schema.sql` will DROP and recreate every table — don't run it
+against a live database with real user data. Instead, run this one-time
+migration in the Supabase SQL Editor to add the new columns in place:
+
+```sql
+alter table ai_usage add column if not exists input_tokens bigint not null default 0;
+alter table ai_usage add column if not exists output_tokens bigint not null default 0;
+alter table ai_usage add column if not exists estimated_cost_usd numeric(10, 6) not null default 0;
+```
+
+### Real AI cost per user per month (admin-only)
+
+`ai_usage` now logs the actual `input_tokens`/`output_tokens` Anthropic
+returns on every call, priced against the model that really served the
+request (see `getPricingTable()` in `netlify/functions/_shared.js`) and
+accumulated into `estimated_cost_usd` per user per day. This is for your
+own cost monitoring — there's no in-app UI for it, just run this in the
+Supabase SQL Editor whenever you want to check real margin against the
+$4.99/month subscription price:
+
+```sql
+SELECT
+  user_id,
+  date_trunc('month', usage_date) AS month,
+  sum(count) AS ai_calls,
+  sum(input_tokens) AS input_tokens,
+  sum(output_tokens) AS output_tokens,
+  round(sum(estimated_cost_usd), 4) AS estimated_cost_usd,
+  round(4.99 - sum(estimated_cost_usd), 4) AS estimated_margin_usd
+FROM ai_usage
+GROUP BY user_id, date_trunc('month', usage_date)
+ORDER BY month DESC, estimated_cost_usd DESC;
+```
+
+Costs are estimates based on Anthropic's published per-model $/MTok rates
+at the time each call was made — they won't include Anthropic's own
+prompt-caching discounts if those are ever turned on for these calls, and
+Sonnet 5's introductory pricing (through 2026-08-31) is baked into
+`getPricingTable()` with an automatic switch to standard pricing after that
+date. Treat this as a close approximation, not an invoice-exact figure.
 
 ### Check Food Cache Hits
 ```sql

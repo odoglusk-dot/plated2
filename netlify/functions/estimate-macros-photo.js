@@ -2,7 +2,7 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
 // Checks food_cache first using a hash of image + note; if hit, returns immediately without using API budget.
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, DAILY_AI_LIMIT } = require('./_shared');
+const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, DAILY_AI_LIMIT } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Plated, a macro-tracking app.
 You will be shown a photo of a food or meal. Estimate its nutritional content from what's visible —
@@ -83,11 +83,12 @@ exports.handler = async (event) => {
   ];
 
   try {
-    const text = await callAnthropic({
+    const { text, model, inputTokens, outputTokens } = await callAnthropic({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userContent }],
       maxTokens: 1000,
     });
+    await recordUsageCost(auth.user.id, auth.token, { model, inputTokens, outputTokens });
 
     const parsed = extractJSON(text);
     // Cache the result using the photo cache key.

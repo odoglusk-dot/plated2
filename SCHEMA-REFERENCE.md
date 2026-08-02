@@ -121,15 +121,25 @@ created_at       timestamptz
 
 ---
 
-### `ai_usage` — Daily AI call rate limiting
+### `ai_usage` — Daily AI call rate limiting + real cost tracking
 ```sql
-user_id      uuid
-usage_date   date
-count        int (default: 0)
-primary key  (user_id, usage_date)
+user_id             uuid
+usage_date          date
+count               int (default: 0)
+input_tokens        bigint (default: 0)
+output_tokens       bigint (default: 0)
+estimated_cost_usd  numeric(10,6) (default: 0)
+primary key         (user_id, usage_date)
 ```
-**Backend reads/writes:** `user_id, usage_date, count`  
+**Backend reads/writes:** `user_id, usage_date, count, input_tokens, output_tokens, estimated_cost_usd`
 (Frontend never touches this table directly)
+
+`count` is incremented before each Anthropic call for rate limiting.
+`input_tokens`/`output_tokens`/`estimated_cost_usd` are accumulated
+*after* each successful call from Anthropic's real `usage` response and the
+model that actually served it — see `recordUsageCost()` and
+`getPricingTable()` in `netlify/functions/_shared.js`, and the admin-only
+monthly cost query in `DEPLOYMENT.md`.
 
 ---
 

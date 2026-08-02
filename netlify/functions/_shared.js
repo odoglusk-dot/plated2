@@ -71,6 +71,7 @@ async function checkAndIncrementRateLimit(userId, token) {
 }
 
 async function callAnthropic({ system, messages, maxTokens = 500 }) {
+  const model = 'claude-sonnet-5';
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -79,7 +80,7 @@ async function callAnthropic({ system, messages, maxTokens = 500 }) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-5',
+      model,
       max_tokens: maxTokens,
       system,
       messages,
@@ -93,7 +94,75 @@ async function callAnthropic({ system, messages, maxTokens = 500 }) {
 
   const data = await res.json();
   const textBlock = (data.content || []).find((b) => b.type === 'text');
-  return textBlock ? textBlock.text : '';
+  const usage = data.usage || {};
+  return {
+    text: textBlock ? textBlock.text : '',
+    // Echo back whatever model actually served the request (not just what we asked
+    // for) so cost tracking stays correct even if that ever diverges.
+    model: data.model || model,
+    inputTokens: usage.input_tokens || 0,
+    outputTokens: usage.output_tokens || 0,
+  };
+}
+
+// $/MTok by model. Sonnet 5 has introductory pricing through 2026-08-31 —
+// this table switches to standard pricing automatically after that date.
+function getPricingTable() {
+  const sonnetIsIntro = new Date() < new Date('2026-09-01T00:00:00Z');
+  return {
+    'claude-haiku-4-5': { input: 1.0, output: 5.0 },
+    'claude-sonnet-5': sonnetIsIntro ? { input: 2.0, output: 10.0 } : { input: 3.0, output: 15.0 },
+    'claude-opus-5': { input: 5.0, output: 25.0 },
+  };
+}
+
+// Looks up the actual model returned by Anthropic (which may carry a date
+// suffix) against our known-model prefixes, so cost tracking is correct per
+// call even if different functions end up on different models.
+function calculateCost(model, inputTokens, outputTokens) {
+  const pricing = getPricingTable();
+  const key = Object.keys(pricing).find((k) => model && model.startsWith(k));
+  const rate = pricing[key] || pricing['claude-sonnet-5'];
+  return (inputTokens / 1e6) * rate.input + (outputTokens / 1e6) * rate.output;
+}
+
+// Accumulates today's real token usage + cost onto the ai_usage row that
+// checkAndIncrementRateLimit already created for this user/day. Read-then-upsert
+// so repeated calls in the same day add up; `count` is omitted from the upsert
+// body so merge-duplicates leaves it untouched.
+async function recordUsageCost(userId, token, { model, inputTokens, outputTokens }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const base = process.env.SUPABASE_URL;
+  const headers = {
+    apikey: process.env.SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${token}`,
+    'content-type': 'application/json',
+  };
+  const costUsd = calculateCost(model, inputTokens, outputTokens);
+
+  try {
+    const getRes = await fetch(
+      `${base}/rest/v1/ai_usage?user_id=eq.${userId}&usage_date=eq.${today}&select=input_tokens,output_tokens,estimated_cost_usd`,
+      { headers }
+    );
+    if (!getRes.ok) return;
+    const rows = await getRes.json();
+    const prev = rows[0] || { input_tokens: 0, output_tokens: 0, estimated_cost_usd: 0 };
+
+    await fetch(`${base}/rest/v1/ai_usage`, {
+      method: 'POST',
+      headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({
+        user_id: userId,
+        usage_date: today,
+        input_tokens: prev.input_tokens + inputTokens,
+        output_tokens: prev.output_tokens + outputTokens,
+        estimated_cost_usd: Number((Number(prev.estimated_cost_usd) + costUsd).toFixed(6)),
+      }),
+    });
+  } catch {
+    // Cost tracking is best-effort; never fail the request over it.
+  }
 }
 
 // Extracts the last complete JSON object {...} from text.
@@ -188,6 +257,8 @@ module.exports = {
   verifyUser,
   checkAndIncrementRateLimit,
   callAnthropic,
+  calculateCost,
+  recordUsageCost,
   extractJSON,
   getCacheKey,
   getPhotoCacheKey,

@@ -10,7 +10,7 @@
 // query patterns for food_logs/goals/weight_log/supplement_logs in place for
 // the Dashboard/History tabs — reusing them here avoids a second, parallel
 // data-access path server-side.
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic } = require('./_shared');
+const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost } = require('./_shared');
 
 const SYSTEM_PROMPT = (dataSummary) => `You are Plated's data assistant. Answer the user's question about
 their own logged nutrition/supplement/weight history using ONLY the summary below — never invent numbers
@@ -46,11 +46,12 @@ exports.handler = async (event) => {
   if (!rateLimit.ok) return jsonResponse(rateLimit.status || 500, { error: rateLimit.message });
 
   try {
-    const answer = await callAnthropic({
+    const { text: answer, model, inputTokens, outputTokens } = await callAnthropic({
       system: SYSTEM_PROMPT(dataSummary || '(no logged data yet)'),
       messages: [{ role: 'user', content: question }],
       maxTokens: 500,
     });
+    await recordUsageCost(auth.user.id, auth.token, { model, inputTokens, outputTokens });
     return jsonResponse(200, { answer, remaining: rateLimit.remaining });
   } catch (err) {
     return jsonResponse(502, { error: 'Could not get an answer right now.', detail: String(err.message || err) });
