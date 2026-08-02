@@ -63,14 +63,27 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full technical guide, including:
 - API endpoint documentation
 - Monitoring and troubleshooting
 
-### One setting people forget: password reset redirect URL
+### Two settings people forget: password reset URLs
 
-"Forgot password?" calls `supabase.auth.resetPasswordForEmail()`, which emails
-a link back to wherever the app is deployed. Supabase only allows redirecting
-to URLs on an allow-list — add your deployed URL under **Authentication →
-URL Configuration → Redirect URLs** in the Supabase dashboard (e.g.
-`https://your-site.netlify.app/*`), or the emailed link will fail to return
-the user to the app. This is a one-time setup step per deployment.
+"Forgot password?" calls `supabase.auth.resetPasswordForEmail()`, which asks
+Supabase to email a link back to wherever the app is deployed. Supabase only
+honors that request if the URL matches an entry on its allow-list —
+**otherwise it silently falls back to the project's Site URL, which every
+new Supabase project defaults to `http://localhost:3000`.** If you skip this
+step, the emailed link will open `localhost` on the recipient's device
+instead of your real site (this is not a bug in the app — the app is
+already asking for the right URL, Supabase is just rejecting it).
+
+Fix both in the Supabase dashboard under **Authentication → URL
+Configuration**:
+1. **Site URL** — change it from the `localhost` default to your actual
+   deployed URL (e.g. `https://your-site.netlify.app`).
+2. **Redirect URLs** — add that same domain with a wildcard (e.g.
+   `https://your-site.netlify.app/*`).
+
+This is a one-time setup step per deployment. Any reset email sent *before*
+you save these settings has the broken localhost link already baked in —
+send a fresh one afterward.
 
 ## Food Database
 
