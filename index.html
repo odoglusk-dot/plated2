@@ -7,7 +7,7 @@
 
 <!-- Add to Home Screen (Android + iOS) — manifest, icons, theme color -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1f2023">
+<meta name="theme-color" content="#FFFFFF">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -19,20 +19,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #16171a;
-    --surface: #1f2023;
-    --surface-2: #26272b;
-    --surface-3: #2e3035;
-    --border: #34363b;
-    --text: #eef0f2;
-    --text-dim: #9599a1;
-    --hazard: #f5c518;
-    --red: #e0483c;
-    --blue: #3b82c4;
-    --gold: #e0ab2b;
-    --steel: #8b909a;
-    --green: #35c26a;
-    --danger: #e0483c;
+    --bg: #FAFAF9;
+    --surface: #FFFFFF;
+    --surface-2: #F2F0EB;
+    --surface-3: #EAE7E0;
+    --border: #E5E3DE;
+    --text: #1C1B18;
+    --text-dim: #6B6862;
+    --accent: #D97706;
+    --danger: #DC5B4A;
+    --success: #4E9A5A;
+    --macro-protein: #DC5B4A;
+    --macro-calories: #3B7FBF;
+    --macro-carbs: #D97706;
+    --macro-fat: #4E9A5A;
     --font-display: 'Bebas Neue', sans-serif;
     --font-body: 'Inter', sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
@@ -41,28 +41,28 @@
   html, body { margin: 0; padding: 0; }
   body {
     background-color: var(--bg);
-    background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.015) 0 2px, transparent 2px 10px);
+    background-image: repeating-linear-gradient(135deg, rgba(28,27,24,0.025) 0 2px, transparent 2px 10px);
     color: var(--text);
     font-family: var(--font-body);
     min-height: 100vh;
   }
   h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0.03em; font-weight: 400; }
   .mono { font-family: var(--font-mono); }
-  a { color: var(--hazard); }
+  a { color: var(--accent); }
   button { font-family: inherit; }
   .hidden { display: none !important; }
 
-  .hazard-divider { height: 6px; background-image: repeating-linear-gradient(135deg, var(--hazard) 0 10px, #161200 10px 20px); }
+  .hazard-divider { height: 4px; background: var(--accent); border-radius: 2px; }
 
   /* ── Buttons / inputs ─────────────────────────────────────────── */
   .btn { font-weight: 600; border-radius: 8px; padding: 0.65rem 1.1rem; border: 1px solid var(--border);
     background: var(--surface-2); color: var(--text); cursor: pointer; transition: filter .15s, border-color .15s; font-size: 0.92rem; }
-  .btn:hover { border-color: var(--hazard); }
+  .btn:hover { border-color: var(--accent); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-primary { background: var(--hazard); color: #1a1500; border-color: var(--hazard); }
+  .btn-primary { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
   .btn-primary:hover { filter: brightness(1.08); }
-  .btn-danger { background: transparent; border-color: var(--red); color: var(--red); }
-  .btn-danger:hover { background: rgba(224,72,60,0.1); }
+  .btn-danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: rgba(220,91,74,0.1); }
   .btn-ghost { background: transparent; border-color: transparent; }
   .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
   .btn-block { width: 100%; }
@@ -80,38 +80,46 @@
   .card h3 { margin: 0 0 0.75rem; font-size: 1.3rem; }
   .muted { color: var(--text-dim); font-size: 0.85rem; }
   .toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: var(--surface-3);
-    border: 1px solid var(--hazard); color: var(--text); padding: 0.7rem 1.2rem; border-radius: 10px; z-index: 999;
+    border: 1px solid var(--accent); color: var(--text); padding: 0.7rem 1.2rem; border-radius: 10px; z-index: 999;
     font-size: 0.9rem; max-width: 90vw; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
   .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700;
     letter-spacing: 0.03em; background: var(--surface-3); color: var(--text-dim); }
-  .badge.on { color: #1a1500; background: var(--hazard); }
+  .badge.on { color: #FFFFFF; background: var(--accent); }
 
   /* ── Auth screen ──────────────────────────────────────────────── */
   #authScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
   .auth-box { width: 100%; max-width: 380px; }
-  .auth-logo { text-align: center; font-size: 3rem; color: var(--hazard); margin-bottom: 0.1rem; }
+  .auth-logo { text-align: center; font-size: 3rem; color: var(--accent); margin-bottom: 0.1rem; }
   .auth-tagline { text-align: center; color: var(--text-dim); margin-bottom: 1.75rem; font-size: 0.9rem; }
   .auth-toggle { display: flex; margin-bottom: 1.25rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .auth-toggle button { flex: 1; padding: 0.6rem; background: var(--surface); border: none; color: var(--text-dim); cursor: pointer; font-weight: 600; }
-  .auth-toggle button.active { background: var(--hazard); color: #1a1500; }
-  #authError { color: var(--red); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
-  #authNote { color: var(--green); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
+  .auth-toggle button.active { background: var(--accent); color: #FFFFFF; }
+  #authError { color: var(--danger); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
+  #authNote { color: var(--success); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
   .consent-line { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.75rem; display: flex; gap: 0.4rem; align-items: flex-start; }
   .consent-line input { width: auto; margin-top: 0.2rem; }
+
+  .password-wrap { position: relative; }
+  .password-wrap .input { padding-right: 2.6rem; }
+  .password-toggle { position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%);
+    background: none; border: none; padding: 0.3rem; color: var(--text-dim); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; border-radius: 6px; }
+  .password-toggle:hover { color: var(--text); }
 
   /* ── App shell ────────────────────────────────────────────────── */
   .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.25rem;
     border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 20; }
-  .logo { font-size: 1.7rem; color: var(--hazard); }
+  .logo { font-size: 1.7rem; color: var(--accent); }
   .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
   .streak-pill { font-family: var(--font-mono); font-size: 0.85rem; background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 999px; padding: 0.3rem 0.8rem; }
 
-  .tab-nav { display: flex; gap: 0.15rem; overflow-x: auto; padding: 0 0.75rem; background: var(--surface);
+  .tab-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.15rem; padding: 0.4rem 0.6rem; background: var(--surface);
     border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 19; }
-  .tab-btn { font-family: var(--font-display); letter-spacing: 0.03em; font-size: 1.05rem; padding: 0.55rem 0.9rem;
-    border-radius: 8px 8px 0 0; background: transparent; border: none; color: var(--text-dim); cursor: pointer; white-space: nowrap; }
-  .tab-btn.active { color: var(--hazard); background: var(--surface-2); }
+  .tab-btn { font-family: var(--font-display); letter-spacing: 0.01em; font-size: 0.82rem; padding: 0.5rem 0.1rem;
+    border-radius: 8px; background: transparent; border: none; color: var(--text-dim); cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+  .tab-btn.active { color: var(--accent); background: var(--surface-2); }
 
   main.tab-panels { padding: 1.25rem; max-width: 880px; margin: 0 auto; }
   .tab-panel { display: none; }
@@ -122,12 +130,20 @@
   .plate { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
   .ring-wrap { width: 104px; height: 104px; position: relative; }
   .ring-wrap svg { transform: rotate(-90deg); width: 100%; height: 100%; }
-  .ring-track { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 10; }
+  .ring-track { fill: none; stroke: var(--border); stroke-width: 10; }
   .ring-progress { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
   .ring-inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .ring-value { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 600; }
   .ring-goal { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); }
   .plate-label { font-family: var(--font-display); letter-spacing: 0.05em; color: var(--text-dim); font-size: 0.85rem; }
+
+  /* ── Compact goal rings (Log tab, above the food-logging input) ─── */
+  .card-compact { padding: 0.75rem 0.9rem; }
+  .mini-scoreboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; }
+  .mini-plate { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+  .mini-plate .ring-wrap { width: 54px; height: 54px; }
+  .mini-plate .ring-value { font-size: 0.72rem; }
+  .mini-plate .plate-label { font-size: 0.58rem; }
 
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
@@ -137,7 +153,7 @@
   .chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0.4rem 0.8rem;
     cursor: pointer; font-size: 0.85rem; }
-  .chip:hover { border-color: var(--hazard); }
+  .chip:hover { border-color: var(--accent); }
 
   .sub-nav { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
   .sub-nav button { flex: none; }
@@ -159,10 +175,10 @@
   table.plain th, table.plain td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
   table.plain th { color: var(--text-dim); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
 
-  .guide-card { border-left: 3px solid var(--hazard); }
-  .guide-card.caution { border-left-color: var(--red); }
+  .guide-card { border-left: 3px solid var(--accent); }
+  .guide-card.caution { border-left-color: var(--danger); }
   .guide-card .col-title { display: flex; align-items: center; gap: 0.6rem; }
-  .caution-box { background: rgba(224,72,60,0.1); border: 1px solid rgba(224,72,60,0.4); border-radius: 8px; padding: 0.6rem 0.8rem; margin-top: 0.6rem; font-size: 0.85rem; }
+  .caution-box { background: rgba(220,91,74,0.1); border: 1px solid rgba(220,91,74,0.4); border-radius: 8px; padding: 0.6rem 0.8rem; margin-top: 0.6rem; font-size: 0.85rem; }
 
   .ask-msg { padding: 0.75rem 0.9rem; border-radius: 10px; margin-bottom: 0.6rem; max-width: 90%; font-size: 0.9rem; line-height: 1.4; }
   .ask-msg.user { background: var(--surface-3); margin-left: auto; }
@@ -201,7 +217,10 @@
       </div>
       <div class="field">
         <label for="password">Password</label>
-        <input class="input" id="password" type="password" autocomplete="current-password" minlength="6" required>
+        <div class="password-wrap">
+          <input class="input" id="password" type="password" autocomplete="current-password" minlength="6" required>
+          <button type="button" id="togglePasswordBtn" class="password-toggle" aria-label="Show password" title="Show password"></button>
+        </div>
       </div>
       <div id="consentField" class="consent-line" style="display:none;">
         <input type="checkbox" id="consentCheck">
@@ -777,6 +796,21 @@ const MEAL_SUGGESTIONS = [
 // ══════════════════════════════════════════════════════════════════
 let authMode = 'signin';
 
+const EYE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.6 21.6 0 0 1 5.06-5.94M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 7 11 7a21.7 21.7 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function wirePasswordToggle(inputEl, btnEl) {
+  btnEl.innerHTML = EYE_ICON;
+  btnEl.addEventListener('click', () => {
+    const showing = inputEl.type === 'password';
+    inputEl.type = showing ? 'text' : 'password';
+    btnEl.innerHTML = showing ? EYE_OFF_ICON : EYE_ICON;
+    btnEl.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+    btnEl.title = showing ? 'Hide password' : 'Show password';
+  });
+}
+wirePasswordToggle($('#password'), $('#togglePasswordBtn'));
+
 $('#toggleSignIn').addEventListener('click', () => setAuthMode('signin'));
 $('#toggleSignUp').addEventListener('click', () => setAuthMode('signup'));
 
@@ -1034,6 +1068,22 @@ function plateHtml(label, value, goal, color) {
   </div>`;
 }
 
+// Compact ring — just the current value, no goal line, smaller footprint.
+// Used above the Log tab's food-logging input so today's progress stays
+// visible without switching to Dashboard.
+function miniPlateHtml(label, value, goal, color) {
+  const pct = goal > 0 ? value / goal : 0;
+  return `<div class="mini-plate">
+    <div class="ring-wrap">
+      ${ringSvg(pct, color)}
+      <div class="ring-inner">
+        <div class="ring-value">${round(value)}</div>
+      </div>
+    </div>
+    <div class="plate-label">${label}</div>
+  </div>`;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════════════
@@ -1047,10 +1097,10 @@ function renderDashboard() {
     <div class="card">
       <h3>Today's Plate</h3>
       <div class="scoreboard">
-        ${plateHtml('CALORIES', totals.calories, g.calories, 'var(--steel)')}
-        ${plateHtml('PROTEIN', totals.protein_g, g.protein_g, 'var(--red)')}
-        ${plateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--blue)')}
-        ${plateHtml('FAT', totals.fat_g, g.fat_g, 'var(--gold)')}
+        ${plateHtml('CALORIES', totals.calories, g.calories, 'var(--macro-calories)')}
+        ${plateHtml('PROTEIN', totals.protein_g, g.protein_g, 'var(--macro-protein)')}
+        ${plateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--macro-carbs)')}
+        ${plateHtml('FAT', totals.fat_g, g.fat_g, 'var(--macro-fat)')}
       </div>
       <div class="row" style="margin-top:0.5rem;">
         <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
@@ -1197,7 +1247,17 @@ function renderCommonFoodsList() {
 
 function renderLogTab() {
   const panel = $('#panel-log');
+  const totals = sumMacros(state.todayLogs);
+  const g = state.goals;
   panel.innerHTML = `
+    <div class="card card-compact">
+      <div class="mini-scoreboard">
+        ${miniPlateHtml('CALORIES', totals.calories, g.calories, 'var(--macro-calories)')}
+        ${miniPlateHtml('PROTEIN', totals.protein_g, g.protein_g, 'var(--macro-protein)')}
+        ${miniPlateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--macro-carbs)')}
+        ${miniPlateHtml('FAT', totals.fat_g, g.fat_g, 'var(--macro-fat)')}
+      </div>
+    </div>
     <div class="sub-nav">
       <button class="btn ${logSubTab === 'ai' ? 'btn-primary' : ''}" data-sub="ai">Describe It</button>
       <button class="btn ${logSubTab === 'photo' ? 'btn-primary' : ''}" data-sub="photo">Snap a Photo</button>
@@ -1261,7 +1321,7 @@ function renderLogSubPanel() {
           <div id="aiDropdown"></div>
         </div>
         <button class="btn btn-primary" id="aiEstimateBtn">Estimate Macros</button>
-        <div id="aiError" class="muted" style="color:var(--red);margin-top:0.5rem;"></div>
+        <div id="aiError" class="muted" style="color:var(--danger);margin-top:0.5rem;"></div>
       </div>
       <div id="aiResultSlot"></div>`;
 
@@ -1360,7 +1420,7 @@ function renderLogSubPanel() {
         <div class="field"><input class="input" id="photoInput" type="file" accept="image/*" capture="environment"></div>
         <div class="field"><input class="input" id="photoNote" placeholder="Optional note (e.g. 'no dressing on the salad')"></div>
         <button class="btn btn-primary" id="photoEstimateBtn">Estimate Macros</button>
-        <div id="photoError" class="muted" style="color:var(--red);margin-top:0.5rem;"></div>
+        <div id="photoError" class="muted" style="color:var(--danger);margin-top:0.5rem;"></div>
       </div>
       <div id="photoResultSlot"></div>`;
     $('#photoEstimateBtn').addEventListener('click', async () => {
@@ -1595,8 +1655,8 @@ function weightChartSvg(sorted) {
     return `${x},${y}`;
   });
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
-    <polyline points="${points.join(' ')}" fill="none" stroke="var(--hazard)" stroke-width="2.5" />
-    ${points.map((p) => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--hazard)" />`).join('')}
+    <polyline points="${points.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" />
+    ${points.map((p) => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--accent)" />`).join('')}
     <text x="${pad}" y="14" fill="var(--text-dim)" font-size="11" font-family="monospace">${round(max, 1)} lb</text>
     <text x="${pad}" y="${h - 8}" fill="var(--text-dim)" font-size="11" font-family="monospace">${round(min, 1)} lb</text>
   </svg>`;
@@ -1636,10 +1696,10 @@ function renderSupplements() {
       <p class="muted">Educational only — not medical advice. Talk to a doctor before starting anything new, especially as a teenage athlete.</p>
       ${SUPPLEMENT_GUIDE.map((s) => `
         <div class="card guide-card ${s.caution ? 'caution' : ''}" style="margin-bottom:0.75rem;">
-          <div class="col-title"><h3 style="margin:0;">${esc(s.name)}</h3>${s.caution ? '<span class="badge" style="background:var(--red);color:#fff;">CAUTION</span>' : ''}</div>
-          <strong style="font-size:0.85rem;color:var(--green);">Benefits</strong>
+          <div class="col-title"><h3 style="margin:0;">${esc(s.name)}</h3>${s.caution ? '<span class="badge" style="background:var(--danger);color:#fff;">CAUTION</span>' : ''}</div>
+          <strong style="font-size:0.85rem;color:var(--success);">Benefits</strong>
           <ul style="margin:0.3rem 0 0.7rem 1.1rem; font-size:0.88rem;">${s.benefits.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
-          <strong style="font-size:0.85rem;color:var(--red);">Drawbacks</strong>
+          <strong style="font-size:0.85rem;color:var(--danger);">Drawbacks</strong>
           <ul style="margin:0.3rem 0 0.5rem 1.1rem; font-size:0.88rem;">${s.drawbacks.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
           ${s.caution ? `<div class="caution-box">${esc(s.notes)}</div>` : `<p class="muted" style="margin:0;">${esc(s.notes)}</p>`}
         </div>`).join('')}
@@ -1710,7 +1770,7 @@ function renderAsk() {
         <input class="input" id="askInput" placeholder="e.g. how's my protein trending this week?">
         <button class="btn btn-primary" id="askBtn" style="flex:none;">Ask</button>
       </div>
-      <div id="askError" class="muted" style="color:var(--red);margin-top:0.5rem;"></div>
+      <div id="askError" class="muted" style="color:var(--danger);margin-top:0.5rem;"></div>
     </div>
   `;
   $('#askBtn').addEventListener('click', handleAsk);
@@ -1872,7 +1932,7 @@ function renderProfile() {
     const activity = $('#calc_activity').value;
 
     if (!age || totalHeightIn <= 0 || !weightLb || !goalWeightLb) {
-      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--red);">Fill in age, height, weight, and goal weight first.</p>`;
+      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Fill in age, height, weight, and goal weight first.</p>`;
       return;
     }
 
