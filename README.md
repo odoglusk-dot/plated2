@@ -63,6 +63,15 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full technical guide, including:
 - API endpoint documentation
 - Monitoring and troubleshooting
 
+### One setting people forget: password reset redirect URL
+
+"Forgot password?" calls `supabase.auth.resetPasswordForEmail()`, which emails
+a link back to wherever the app is deployed. Supabase only allows redirecting
+to URLs on an allow-list — add your deployed URL under **Authentication →
+URL Configuration → Redirect URLs** in the Supabase dashboard (e.g.
+`https://your-site.netlify.app/*`), or the emailed link will fail to return
+the user to the app. This is a one-time setup step per deployment.
+
 ## Food Database
 
 **373 foods** available for instant lookup (zero API calls):
