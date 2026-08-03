@@ -262,6 +262,12 @@
       <div id="resetError" style="color:var(--danger);font-size:0.85rem;margin-top:0.5rem;min-height:1em;"></div>
       <div id="resetNote" style="color:var(--success);font-size:0.85rem;margin-top:0.5rem;min-height:1em;"></div>
     </form>
+
+    <div id="confirmEmailScreen" class="hidden">
+      <p style="margin-top:0;">We've sent a confirmation email to <strong id="confirmEmailAddress"></strong>.</p>
+      <p class="muted">Check your inbox (and spam folder) and click the link to activate your account.</p>
+      <button type="button" class="btn btn-primary btn-block" id="confirmBackToSignInBtn" style="margin-top:0.6rem;">Back to Sign In</button>
+    </div>
   </div>
 </div>
 
@@ -860,16 +866,23 @@ function setAuthMode(mode) {
 }
 
 // ── Forgot / reset password ─────────────────────────────────────────
-// Three mutually-exclusive screens live inside #authScreen: the normal
-// sign-in/sign-up form, the "request a reset link" form, and the "set a
+// Four mutually-exclusive screens live inside #authScreen: the normal
+// sign-in/sign-up form, the "request a reset link" form, the "set a
 // new password" form (shown only when Supabase redirects back here after
-// the user clicks the emailed recovery link).
+// the user clicks the emailed recovery link), and the post-signup
+// "check your email" confirmation screen.
 function showAuthScreen(which) {
   $('#authToggle').classList.toggle('hidden', which !== 'signinup');
   $('#authForm').classList.toggle('hidden', which !== 'signinup');
   $('#forgotForm').classList.toggle('hidden', which !== 'forgot');
   $('#resetPasswordForm').classList.toggle('hidden', which !== 'reset');
+  $('#confirmEmailScreen').classList.toggle('hidden', which !== 'confirmEmail');
 }
+
+$('#confirmBackToSignInBtn').addEventListener('click', () => {
+  setAuthMode('signin');
+  showAuthScreen('signinup');
+});
 
 $('#forgotPasswordLink').addEventListener('click', (e) => {
   e.preventDefault();
@@ -971,8 +984,9 @@ $('#authForm').addEventListener('submit', async (e) => {
       if (data.session) {
         await ensureProfileAndGoals(data.user, displayName);
       } else {
-        $('#authNote').textContent = 'Account created! Check your email to confirm, then sign in.';
-        setAuthMode('signin');
+        $('#confirmEmailAddress').textContent = email;
+        $('#authForm').reset();
+        showAuthScreen('confirmEmail');
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
