@@ -124,23 +124,53 @@ devices.
 
 Adjust `DAILY_AI_LIMIT` in `_shared.js` if you want a different cap.
 
-## Phase 2: Paywall (not built yet)
+## Paywall
 
-`supabase-schema-phase2-paywall.sql` has the `subscriptions` table schema.
-Building the paywall means:
+Plated is a whole-app paywall: **$4.99/month with a 3-day free trial**
+(card required up front — Stripe handles the trial timing and auto-charges
+on day 3). No part of the app — dashboard, logging, history, everything —
+renders for a signed-in user without an active trial or subscription.
 
-1. Run that schema file.
-2. Add `netlify/functions/create-checkout-session.js` (verifies the Supabase
-   session, creates a Stripe Checkout Session, returns the redirect URL).
-3. Add `netlify/functions/stripe-webhook.js` (verifies the Stripe signature,
-   writes to `subscriptions` using `SUPABASE_SERVICE_ROLE_KEY` since it must
-   write regardless of RLS).
-4. Gate AI-powered features behind `status = 'active'` (or the existing free
-   daily cap for everyone else); keep manual entry, common foods, and basic
-   logging free for everyone.
+- **`subscriptions` table** (`user_id`, `status`, `stripe_customer_id`,
+  `stripe_subscription_id`, `current_period_end`) — RLS gives every user
+  select-own and nothing else. Only `netlify/functions/stripe-webhook.js`,
+  using `SUPABASE_SERVICE_ROLE_KEY`, ever writes to it.
+- **`netlify/functions/create-checkout-session.js`** — verifies the caller's
+  Supabase session, creates a Stripe Checkout Session (subscription mode,
+  3-day trial, `payment_method_collection: 'always'`), and returns the
+  Checkout URL for the browser to redirect to.
+- **`netlify/functions/stripe-webhook.js`** — verifies the
+  `Stripe-Signature` header itself (HMAC-SHA256 via Node's `crypto`, no
+  Stripe SDK, consistent with the rest of this codebase's zero-dependency
+  functions) and upserts `subscriptions` from
+  `customer.subscription.created` / `.updated` / `.deleted` events. The
+  Supabase user id is threaded through as `subscription_data.metadata`
+  at checkout time, so every subscription event carries it — no separate
+  customer→user lookup table needed.
+- **Frontend gate** (`index.html`, `enterApp()`) — every path into the app
+  (sign-in, sign-up, password reset, page reload with an existing session)
+  checks `subscriptions` before showing `#app`; anything other than
+  `trialing`/`active` shows `#paywallScreen` instead, with a "Start 3-Day
+  Free Trial" button. After Stripe redirects back
+  (`?checkout=success`), the frontend polls briefly for the webhook to land
+  before granting access, so a paying user isn't bounced back to the
+  paywall while it's still in flight.
 
-Additional env vars needed at that point: `STRIPE_SECRET_KEY`,
-`STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`.
+**Setup:**
+1. In Stripe: create a $4.99/month recurring Price, note its ID
+   (`price_...`).
+2. Add a webhook endpoint in the Stripe Dashboard pointed at
+   `https://your-site.netlify.app/.netlify/functions/stripe-webhook`,
+   subscribed to `customer.subscription.created`, `.updated`, and
+   `.deleted`. Copy the signing secret it gives you.
+3. Run `supabase-schema-phase2-paywall.sql` in the Supabase SQL Editor
+   (fresh installs get this table automatically from `reset-schema.sql`
+   instead — no separate step needed).
+4. Add env vars: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+   `STRIPE_PRICE_ID`.
+
+See `DEPLOYMENT.md` for more detail, including how to test the webhook
+locally with the Stripe CLI.
 
 ## Pre-launch checklist
 
@@ -158,6 +188,9 @@ Additional env vars needed at that point: `STRIPE_SECRET_KEY`,
 - [ ] Test on an actual phone browser before calling this launch-ready.
 - [x] Sign-up screen links the Terms and Privacy Policy with a consent
       checkbox required before account creation.
+- [ ] Stripe: live-mode price + webhook endpoint configured (not just test
+      mode), and a real `customer.subscription.created` event confirmed to
+      land in the `subscriptions` table before taking real payments.
 
 ## Known content notes (intentional, don't "clean up")
 

@@ -1,10 +1,14 @@
--- Plated — Phase 2 (paywall) schema. NOT part of the initial merge/deploy —
--- run this only when building the Stripe subscription gating described in
--- plated/README.md's "Phase 2: Paywall" section.
+-- Plated — Phase 2 (paywall) schema.
+-- Run this once in the Supabase SQL Editor against the existing live
+-- database to add subscription gating — it only adds the `subscriptions`
+-- table and does not touch any other table, so it's safe to run without
+-- resetting anything. (Fresh installs get this table automatically from
+-- reset-schema.sql instead.)
 
-create table subscriptions (
+create table if not exists subscriptions (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  status text not null default 'free', -- 'free' | 'active' | 'canceled' | 'past_due'
+  status text not null default 'free'
+    check (status in ('free', 'trialing', 'active', 'canceled', 'past_due')),
   stripe_customer_id text,
   stripe_subscription_id text,
   current_period_end timestamptz,

@@ -143,6 +143,29 @@ monthly cost query in `DEPLOYMENT.md`.
 
 ---
 
+### `subscriptions` — Whole-app paywall (Stripe)
+```sql
+user_id                 uuid (primary key)
+status                  text (default: 'free', check in free/trialing/active/canceled/past_due)
+stripe_customer_id      text
+stripe_subscription_id  text
+current_period_end      timestamptz
+updated_at              timestamptz (default: now())
+```
+**Backend writes:** `netlify/functions/stripe-webhook.js` only, using
+`SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS).
+**Frontend reads:** `status, current_period_end` — RLS grants select-own
+and nothing else; there is deliberately no insert/update policy for the
+`authenticated` role.
+
+One row per user, keyed by `user_id`. `index.html`'s `enterApp()` reads this
+before showing `#app` on every sign-in/reload — anything other than
+`status IN ('trialing', 'active')` shows `#paywallScreen` instead. Status
+transitions are driven entirely by Stripe's `customer.subscription.*`
+webhook events; the app itself never writes to this table.
+
+---
+
 ## Naming Rules — CONSISTENT across ALL tables
 
 | Type | Naming | Example | Notes |
@@ -223,3 +246,8 @@ ORDER BY table_name;
    - `supabase-schema-additions.sql` → creates features
 
 Pick **one approach**: either reset-schema.sql (easiest), or the two incremental files if you prefer to keep data and fix columns one at a time (harder, more error-prone).
+
+Either way, if you already have a live database from before the paywall was
+added, also run **`supabase-schema-phase2-paywall.sql`** — it only adds the
+`subscriptions` table and is safe to run without resetting anything. Fresh
+installs via `reset-schema.sql` get it automatically.

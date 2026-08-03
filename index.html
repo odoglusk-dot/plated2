@@ -87,8 +87,10 @@
   .badge.on { color: #FFFFFF; background: var(--accent); }
 
   /* ── Auth screen ──────────────────────────────────────────────── */
-  #authScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  #authScreen, #paywallScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
   .auth-box { width: 100%; max-width: 380px; }
+  .paywall-price { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; text-align: center; margin: 1rem 0; }
+  .paywall-price .unit { font-size: 0.85rem; font-weight: 400; color: var(--text-dim); }
   .auth-logo { text-align: center; font-size: 3rem; color: var(--accent); margin-bottom: 0.1rem; }
   .auth-tagline { text-align: center; color: var(--text-dim); margin-bottom: 1.75rem; font-size: 0.9rem; }
   .auth-toggle { display: flex; margin-bottom: 1.25rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
@@ -271,6 +273,27 @@
   </div>
 </div>
 
+<div id="paywallScreen" class="hidden">
+  <div class="auth-box">
+    <div class="auth-logo">PLATED</div>
+    <div class="auth-tagline">Macro &amp; supplement tracking, built for training days.</div>
+    <div class="hazard-divider" style="margin-bottom:1.5rem;"></div>
+
+    <div id="paywallProcessing" class="hidden">
+      <p class="muted" style="text-align:center;">Finalizing your subscription…</p>
+    </div>
+
+    <div id="paywallContent">
+      <h2 id="paywallHeading" style="margin:0 0 0.5rem;">Start Your Free Trial</h2>
+      <p id="paywallBody" class="muted" style="margin-top:0;"></p>
+      <div class="paywall-price">$4.99<span class="unit"> / month</span></div>
+      <button type="button" class="btn btn-primary btn-block" id="paywallSubscribeBtn">Start 3-Day Free Trial</button>
+      <div id="paywallError" style="color:var(--danger);font-size:0.85rem;margin-top:0.5rem;min-height:1em;text-align:center;"></div>
+      <button type="button" class="btn btn-ghost btn-block" id="paywallSignOutBtn" style="margin-top:0.5rem;">Sign Out</button>
+    </div>
+  </div>
+</div>
+
 <div id="app" class="hidden">
   <div class="topbar">
     <div class="logo">PLATED</div>
@@ -356,6 +379,7 @@ const state = {
   supplementLogs: [],
   activeTab: 'dashboard',
   aiRemaining: null,
+  subscription: null,
 };
 
 // ── Static reference data ───────────────────────────────────────────
@@ -943,11 +967,7 @@ $('#resetPasswordForm').addEventListener('submit', async (e) => {
     // it from here by re-checking the current session.
     const { data } = await supabase.auth.getSession();
     if (data.session) {
-      state.session = data.session;
-      state.user = data.session.user;
-      $('#authScreen').classList.add('hidden');
-      $('#app').classList.remove('hidden');
-      bootstrapApp();
+      await enterApp(data.session);
     }
   } catch (err) {
     $('#resetError').textContent = err.message || 'Could not update password.';
@@ -1003,6 +1023,23 @@ $('#signOutBtn').addEventListener('click', async () => {
   await supabase.auth.signOut();
 });
 
+$('#paywallSignOutBtn').addEventListener('click', async () => {
+  await supabase.auth.signOut();
+});
+
+$('#paywallSubscribeBtn').addEventListener('click', async () => {
+  $('#paywallError').textContent = '';
+  const btn = $('#paywallSubscribeBtn');
+  btn.disabled = true;
+  try {
+    const { url } = await callFunction('create-checkout-session', {});
+    window.location.href = url;
+  } catch (err) {
+    $('#paywallError').textContent = err.message || 'Could not start checkout.';
+    btn.disabled = false;
+  }
+});
+
 supabase.auth.onAuthStateChange((event, session) => {
   state.session = session;
   state.user = session?.user || null;
@@ -1013,18 +1050,102 @@ supabase.auth.onAuthStateChange((event, session) => {
     isPasswordRecovery = true;
     $('#authScreen').classList.remove('hidden');
     $('#app').classList.add('hidden');
+    $('#paywallScreen').classList.add('hidden');
     showAuthScreen('reset');
     return;
   }
   if (session) {
-    $('#authScreen').classList.add('hidden');
-    $('#app').classList.remove('hidden');
-    bootstrapApp();
+    enterApp(session);
   } else {
     $('#app').classList.add('hidden');
+    $('#paywallScreen').classList.add('hidden');
     $('#authScreen').classList.remove('hidden');
   }
 });
+
+// ══════════════════════════════════════════════════════════════════
+// PAYWALL — whole-app gate. Every path into the app (sign-in, sign-up,
+// password reset, page reload with an existing session) funnels through
+// enterApp() so nothing renders without an active trial/subscription.
+// ══════════════════════════════════════════════════════════════════
+async function fetchSubscription() {
+  const { data } = await supabase
+    .from('subscriptions')
+    .select('status,current_period_end')
+    .eq('user_id', state.user.id)
+    .maybeSingle();
+  state.subscription = data || null;
+  return state.subscription;
+}
+
+function hasAccess(sub) {
+  return !!sub && (sub.status === 'trialing' || sub.status === 'active');
+}
+
+function renderPaywallProcessing() {
+  $('#paywallContent').classList.add('hidden');
+  $('#paywallProcessing').classList.remove('hidden');
+}
+
+function renderPaywallScreen(sub) {
+  let heading = 'Start Your Free Trial';
+  let body = "Plated is $4.99/month after a 3-day free trial — cancel anytime, you won't be charged until the trial ends.";
+  if (sub?.status === 'past_due') {
+    heading = 'Payment Failed';
+    body = "We couldn't process your last payment. Update your card by subscribing again to keep using Plated.";
+  } else if (sub?.status === 'canceled') {
+    heading = 'Your Subscription Has Ended';
+    body = 'Resubscribe to get back into Plated — $4.99/month after a 3-day free trial.';
+  }
+  $('#paywallHeading').textContent = heading;
+  $('#paywallBody').textContent = body;
+  $('#paywallError').textContent = '';
+  $('#paywallSubscribeBtn').disabled = false;
+  $('#paywallProcessing').classList.add('hidden');
+  $('#paywallContent').classList.remove('hidden');
+}
+
+// The whole-app gate: no part of the app — dashboard, logging, history,
+// everything — renders unless the signed-in user has an active trial or
+// subscription. Called from every place a session becomes available.
+async function enterApp(session) {
+  state.session = session;
+  state.user = session.user;
+  $('#authScreen').classList.add('hidden');
+
+  const params = new URLSearchParams(window.location.search);
+  const checkoutResult = params.get('checkout');
+  if (checkoutResult) {
+    // Drop the query param regardless of outcome so a refresh doesn't replay it.
+    history.replaceState(null, '', window.location.pathname);
+  }
+
+  if (checkoutResult === 'success') {
+    // Stripe redirects back here immediately, but the webhook that actually
+    // grants access (customer.subscription.created) can take a moment to
+    // land — poll briefly instead of bouncing a paying user back to the
+    // paywall while it's in flight.
+    $('#app').classList.add('hidden');
+    $('#paywallScreen').classList.remove('hidden');
+    renderPaywallProcessing();
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const sub = await fetchSubscription();
+      if (hasAccess(sub)) break;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
+
+  const sub = await fetchSubscription();
+  if (hasAccess(sub)) {
+    $('#paywallScreen').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    await bootstrapApp();
+  } else {
+    $('#app').classList.add('hidden');
+    renderPaywallScreen(sub);
+    $('#paywallScreen').classList.remove('hidden');
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════
 // DATA LOADING
@@ -2137,11 +2258,7 @@ function renderProfile() {
 // ── Initial session check (in case one already exists on load) ─────
 supabase.auth.getSession().then(({ data }) => {
   if (data.session && !isPasswordRecovery) {
-    state.session = data.session;
-    state.user = data.session.user;
-    $('#authScreen').classList.add('hidden');
-    $('#app').classList.remove('hidden');
-    bootstrapApp();
+    enterApp(data.session);
   }
 });
 </script>

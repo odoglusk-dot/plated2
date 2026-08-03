@@ -5,6 +5,7 @@
 -- ============================================================
 
 -- Drop all tables in correct dependency order (reverse of creation)
+drop table if exists subscriptions cascade;
 drop table if exists ai_usage cascade;
 drop table if exists supplement_logs cascade;
 drop table if exists weight_log cascade;
@@ -229,6 +230,26 @@ create policy "ai_usage: insert own" on ai_usage
   for insert with check (auth.uid() = user_id);
 create policy "ai_usage: update own" on ai_usage
   for update using (auth.uid() = user_id);
+
+-- ── subscriptions ───────────────────────────────────────────────────────
+-- Backs the whole-app paywall (Stripe: $4.99/mo, 3-day trial). One row per
+-- user. Only the Stripe webhook (using the service-role key, which bypasses
+-- RLS) ever writes to this table — there's deliberately no insert/update
+-- policy for the client, only select-own.
+create table subscriptions (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  status text not null default 'free'
+    check (status in ('free', 'trialing', 'active', 'canceled', 'past_due')),
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  current_period_end timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+alter table subscriptions enable row level security;
+
+create policy "subscriptions: select own" on subscriptions
+  for select using (auth.uid() = user_id);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE

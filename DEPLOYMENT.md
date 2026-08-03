@@ -22,7 +22,7 @@ Plated is a macro & supplement tracker built with:
 2. Copy your `Project URL` and `anon key` (find these in Project Settings → API)
 3. Run the schema creation script in SQL Editor:
    - Open `reset-schema.sql` in your Supabase SQL Editor
-   - Execute the entire script to create all 9 tables with RLS policies
+   - Execute the entire script to create all 10 tables with RLS policies
 
 **Tables created:**
 - `profiles` — user metadata
@@ -35,6 +35,9 @@ Plated is a macro & supplement tracker built with:
 - `supplement_logs` — supplement usage
 - `ai_usage` — daily API call counter (13 calls/day limit per user), plus
   real token usage and estimated cost per user per day
+- `subscriptions` — Stripe subscription status backing the whole-app
+  paywall; select-own RLS only, written exclusively by `stripe-webhook.js`
+  via the service-role key (see "Paywall Setup" below)
 
 ### 2. Netlify Functions Setup
 
@@ -44,12 +47,59 @@ Plated is a macro & supplement tracker built with:
    ```
    SUPABASE_URL=https://your-project.supabase.co
    SUPABASE_ANON_KEY=eyJhbGc...
+   SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
    ANTHROPIC_API_KEY=sk-ant-...
+   STRIPE_SECRET_KEY=sk_live_...
+   STRIPE_WEBHOOK_SECRET=whsec_...
+   STRIPE_PRICE_ID=price_...
    ```
+   `SUPABASE_SERVICE_ROLE_KEY` is the Project Settings → API "service_role"
+   key — it bypasses RLS, so it's only ever read server-side, by
+   `delete-account.js` and `stripe-webhook.js`. **Never** put it in
+   `index.html` or any other client-facing code. See "Paywall Setup" below
+   for the three `STRIPE_*` values.
 4. Set Build Command to: `echo "Netlify Functions ready"`
 5. Set Functions Directory to: `netlify/functions`
 
 The functions deploy automatically on git push.
+
+### Paywall Setup (Stripe)
+
+Plated is a whole-app paywall: $4.99/month, 3-day free trial, card required
+up front. No page renders for a signed-in user without an active
+trial/subscription.
+
+1. In the [Stripe Dashboard](https://dashboard.stripe.com), create a
+   recurring Price of $4.99/month (Product catalog → Add product). Copy its
+   ID — it starts with `price_`.
+2. Add a webhook endpoint (Developers → Webhooks → Add endpoint) pointed at:
+   ```
+   https://your-site.netlify.app/.netlify/functions/stripe-webhook
+   ```
+   Subscribe it to exactly these events:
+   - `customer.subscription.created`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+
+   Copy the "Signing secret" Stripe shows you — that's `STRIPE_WEBHOOK_SECRET`.
+3. Copy your Stripe secret key (Developers → API keys) — that's
+   `STRIPE_SECRET_KEY`. Use a `sk_test_...` key against Stripe's test mode
+   while developing; switch to `sk_live_...` (and a live-mode webhook +
+   price) at launch.
+4. Set all three `STRIPE_*` env vars plus `SUPABASE_SERVICE_ROLE_KEY` in
+   Netlify (see above), then run `supabase-schema-phase2-paywall.sql` in the
+   Supabase SQL Editor if you're adding this to an existing project (fresh
+   installs already get the `subscriptions` table from `reset-schema.sql`).
+
+**Testing the webhook locally**, before wiring up a real Netlify deploy, use
+the [Stripe CLI](https://stripe.com/docs/stripe-cli):
+```bash
+stripe listen --forward-to localhost:8888/.netlify/functions/stripe-webhook
+stripe trigger customer.subscription.created
+```
+`stripe listen` prints a `whsec_...` value for local testing — use that as
+`STRIPE_WEBHOOK_SECRET` in your local `.env`, not the Dashboard's production
+signing secret.
 
 ### 3. Update Frontend Configuration
 
@@ -109,6 +159,28 @@ Estimate macros from a food photo.
 **Response:** Same as `estimate-macros` + `cached` flag
 
 **Cache:** Uses hash of image + note; same photo returns instantly
+
+### POST `/api/create-checkout-session`
+
+Starts a Stripe Checkout session for the $4.99/mo plan with a 3-day trial.
+
+**Request:** `{}` (empty body — uses the caller's own Supabase session)
+
+**Response:**
+```json
+{ "url": "https://checkout.stripe.com/c/pay/cs_test_..." }
+```
+
+Redirect the browser to `url`. Returns 400 if the caller already has an
+active or trialing subscription.
+
+### POST `/api/stripe-webhook`
+
+Called by Stripe, not the app — configure this URL as a webhook endpoint in
+the Stripe Dashboard (see "Paywall Setup" above). Verifies the
+`Stripe-Signature` header and upserts the `subscriptions` table from
+`customer.subscription.created`/`.updated`/`.deleted` events using the
+service-role key.
 
 ## Food Database
 
