@@ -174,6 +174,11 @@ locally with the Stripe CLI.
 
 ## Other features (see DEPLOYMENT.md for full detail on each)
 
+- **Manage Subscription** — Profile tab button opens Stripe's Customer
+  Portal (billing history, card updates, cancellation — none of it built
+  here). Canceling keeps access through the already-paid period; see
+  "Customer Portal Setup" in `DEPLOYMENT.md` for the one thing you need to
+  configure in the Stripe Dashboard for this to work in live mode.
 - **Age gate** — signup asks "Are you 18 or older?"; answering under-18
   reveals a parental-awareness explanation and a required consent checkbox
   before the form can submit. Not a hard technical block — a logged,
@@ -221,6 +226,11 @@ locally with the Stripe CLI.
 - [ ] Stripe: live-mode price + webhook endpoint configured (not just test
       mode), and a real `customer.subscription.created` event confirmed to
       land in the `subscriptions` table before taking real payments.
+- [ ] Stripe Customer Portal configuration saved at least once in live mode
+      (Settings → Billing → Customer portal) — the "Manage Subscription"
+      button fails without this; test mode doesn't need it, it auto-provisions.
+      While there, confirm "Cancellations" is set to "Cancel at end of
+      billing period," not "immediately."
 - [ ] If using email reminders: Resend account created, sending domain
       verified, `RESEND_API_KEY`/`RESEND_FROM_EMAIL` set.
 - [ ] `SUPPORT_EMAIL` in `index.html` changed from the placeholder to a

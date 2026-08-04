@@ -7,6 +7,30 @@ const crypto = require('crypto');
 
 const DAILY_AI_LIMIT = 13;
 
+// Derives the app's own base URL (scheme + host + subpath, no trailing
+// slash) for building post-Stripe redirect URLs. `event.headers.origin`
+// alone is only scheme+host — fine when the app is served from a site's
+// root, but wrong when it's served from a subpath (e.g. this repo's
+// "/plated/" deployment), since it drops the subpath entirely. The
+// Referer header carries the full page URL the fetch() came from, so
+// prefer parsing that; fall back to bare origin if Referer is missing.
+function getAppBaseUrl(event) {
+  const referer = event.headers.referer || event.headers.referrer;
+  if (referer) {
+    try {
+      const url = new URL(referer);
+      url.pathname = url.pathname.replace(/[^/]*$/, ''); // drop the filename, keep the directory
+      url.search = '';
+      url.hash = '';
+      return url.toString().replace(/\/$/, '');
+    } catch {
+      // fall through to origin
+    }
+  }
+  const origin = event.headers.origin;
+  return origin ? origin.replace(/\/$/, '') : null;
+}
+
 // Reports an unexpected server-side error to Sentry, using a hand-rolled
 // envelope POST rather than the @sentry/node SDK — this project has no
 // npm dependencies / build step, and error reporting must never be the
@@ -332,6 +356,7 @@ module.exports = {
   DAILY_AI_LIMIT,
   captureError,
   callStripe,
+  getAppBaseUrl,
   jsonResponse,
   verifyUser,
   checkAndIncrementRateLimit,

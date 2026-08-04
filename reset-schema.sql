@@ -248,6 +248,16 @@ create policy "ai_usage: update own" on ai_usage
 -- user. Only the Stripe webhook (using the service-role key, which bypasses
 -- RLS) ever writes to this table — there's deliberately no insert/update
 -- policy for the client, only select-own.
+--
+-- Canceling via the Customer Portal does NOT flip `status` away from
+-- 'active' right away — Stripe keeps status='active' with
+-- cancel_at_period_end=true until the paid period actually ends, then
+-- fires customer.subscription.deleted (status becomes 'canceled'). That
+-- means the existing status-only paywall check (index.html's hasAccess())
+-- already grants access through the paid period correctly, with no special
+-- casing needed. `cancel_at_period_end` is stored anyway so the app can
+-- *show* "canceling, access until <date>" instead of just "active" —
+-- mirroring Stripe's own data model rather than inventing a third status.
 create table subscriptions (
   user_id uuid primary key references auth.users(id) on delete cascade,
   status text not null default 'free'
@@ -255,6 +265,7 @@ create table subscriptions (
   stripe_customer_id text,
   stripe_subscription_id text,
   current_period_end timestamptz,
+  cancel_at_period_end boolean not null default false,
   updated_at timestamptz not null default now()
 );
 

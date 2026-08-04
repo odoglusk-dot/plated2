@@ -38,8 +38,10 @@ Plated is a macro & supplement tracker built with:
 - `ai_usage` — daily API call counter (13 calls/day limit per user), plus
   real token usage and estimated cost per user per day
 - `subscriptions` — Stripe subscription status backing the whole-app
-  paywall; select-own RLS only, written exclusively by `stripe-webhook.js`
-  via the service-role key (see "Paywall Setup" below)
+  paywall, including `cancel_at_period_end` for the Customer Portal
+  cancellation flow; select-own RLS only, written exclusively by
+  `stripe-webhook.js` via the service-role key (see "Paywall Setup" and
+  "Customer Portal Setup" below)
 - `referrals` — referral attribution + reward status; select-own-as-referrer
   RLS only, written exclusively by `redeem-referral.js` and
   `stripe-webhook.js` (see "Referral Program" below)
@@ -47,9 +49,9 @@ Plated is a macro & supplement tracker built with:
 If you're adding any of this to an **existing** live database rather than
 starting fresh, don't run `reset-schema.sql` (it drops everything) — run
 the incremental migration files instead: `supabase-schema-phase2-paywall.sql`
-for the paywall, then `supabase-schema-phase3-improvements.sql` for
-everything in this section (age gate, referrals, goal_mode, email reminder
-opt-out).
+for the paywall, `supabase-schema-phase3-improvements.sql` for age gate /
+referrals / goal_mode / email reminder opt-out, then
+`supabase-schema-phase4-portal.sql` for `cancel_at_period_end`.
 
 ### 2. Netlify Functions Setup
 
@@ -138,6 +140,54 @@ values ('<their-auth-user-id>', 'active')
 on conflict (user_id) do update set status = 'active';
 ```
 Find `<their-auth-user-id>` under Authentication → Users.
+
+### Customer Portal Setup (cancellation, billing, card updates)
+
+The Profile tab's "Manage Subscription" button (`create-portal-session.js`)
+sends users to Stripe's hosted Customer Portal, where they can view billing
+history, update their card, and cancel — none of that UI is built here.
+
+**You need to configure the portal in the Stripe Dashboard before this
+works, and this is the one piece of setup this codebase genuinely cannot
+do for you:**
+
+1. Go to **Settings → Billing → Customer portal**
+   (`https://dashboard.stripe.com/settings/billing/portal`, and the
+   equivalent under Test mode).
+2. **Test mode auto-provisions a default configuration** — the portal
+   works immediately there. **Live mode does not.** You must open that
+   settings page and click **Save** at least once (even with defaults)
+   before `billing_portal/sessions` will succeed in live mode; until then,
+   the API call fails and users hitting "Manage Subscription" will see an
+   error.
+3. **The cancellation behavior itself is a setting on that same page, not
+   something this code controls.** Under "Cancellations," Stripe defaults
+   to **"Cancel at end of billing period"** — matching "keep access through
+   what's already been paid for," exactly what was asked for here. There's
+   also an "immediately" option; if that's ever toggled on instead, users
+   lose access the moment they cancel (Stripe fires `.deleted` right away
+   instead of setting `cancel_at_period_end`), and this app's paywall would
+   correctly (and immediately) reflect that too — it's just not the
+   behavior you asked for, so leave it on the default.
+4. Everything else on that settings page (which products/prices customers
+   can switch to, whether to require a cancellation reason, business
+   branding) is optional polish — none of it is required for the portal
+   to function with this single-price setup.
+
+No new env vars — this reuses the same `STRIPE_SECRET_KEY` already
+configured for checkout.
+
+**Access during the "canceling but still paid for" window:** Stripe does
+not flip a subscription's `status` to `canceled` the moment someone cancels
+via the portal — it sets `cancel_at_period_end = true` and leaves
+`status = 'active'` until the paid period actually ends, only then firing
+`customer.subscription.deleted`. Since the paywall gate
+(`index.html`'s `hasAccess()`) checks `status`, not `cancel_at_period_end`,
+it already grants access through the paid period correctly with no special
+casing. `subscriptions.cancel_at_period_end` is stored anyway so the
+Profile tab can show "Canceling — access until `<date>`" instead of a
+plain "Active", which would otherwise hide that a cancellation was even
+received.
 
 ### Referral Program
 
@@ -278,6 +328,24 @@ Starts a Stripe Checkout session for the $4.99/mo plan with a 3-day trial.
 Redirect the browser to `url`. Returns 400 if the caller already has an
 active or trialing subscription.
 
+### POST `/api/create-portal-session`
+
+Opens Stripe's hosted Customer Portal for the caller's own billing account
+— viewing invoices, updating a card, and canceling all happen there, none
+of it built in this app. Requires a saved Customer Portal configuration in
+the Stripe Dashboard (see "Customer Portal Setup" above) — will fail in
+live mode until you've saved one at least once.
+
+**Request:** `{}` (empty body — uses the caller's own Supabase session)
+
+**Response:**
+```json
+{ "url": "https://billing.stripe.com/p/session/..." }
+```
+
+Redirect the browser to `url`. Returns 400 if the caller has no Stripe
+customer on file yet (i.e. never started a subscription).
+
 ### POST `/api/stripe-webhook`
 
 Called by Stripe, not the app — configure this URL as a webhook endpoint in
@@ -367,6 +435,10 @@ code, 400 for a self-referral attempt.
     when cutting (1.1 g/lb, protects muscle in a deficit), lower when
     gaining (0.85 g/lb, surplus calories already help preserve muscle),
     fat% and carbs shift accordingly
+- **Subscription** — plain-language status (trial, active, canceling with
+  the date access ends, payment failed, etc.) and a "Manage Subscription"
+  button opening Stripe's Customer Portal for billing history, card
+  updates, and cancellation
 - **Refer a Friend** — your unique code + shareable link, referral count
 - **Email Reminders** — opt-out toggle for the daily "haven't logged yet" nudge
 - **Support** — mailto link to `SUPPORT_EMAIL`

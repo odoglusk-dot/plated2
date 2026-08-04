@@ -1195,11 +1195,39 @@ supabase.auth.onAuthStateChange((event, session) => {
 async function fetchSubscription() {
   const { data } = await supabase
     .from('subscriptions')
-    .select('status,current_period_end')
+    .select('status,current_period_end,cancel_at_period_end')
     .eq('user_id', state.user.id)
     .maybeSingle();
   state.subscription = data || null;
   return state.subscription;
+}
+
+// Canceling via the Stripe Customer Portal doesn't move `status` off
+// 'active' right away — Stripe keeps it 'active' (with
+// cancel_at_period_end=true) until the paid period actually ends, then
+// fires customer.subscription.deleted. So this status-only check already
+// grants access through the paid period correctly; no extra casing needed
+// for "canceled but still within paid period" — Stripe just never reports
+// it as canceled until it actually is.
+// Plain-language status for the Profile tab's Subscription card. Mirrors
+// Stripe's own status + cancel_at_period_end fields rather than a
+// synthetic "canceling" status value (see the schema comment on
+// `subscriptions.cancel_at_period_end`).
+function subscriptionStatusLabel(sub) {
+  const periodEndStr = sub?.current_period_end ? new Date(sub.current_period_end).toLocaleDateString() : null;
+  if (!sub || sub.status === 'free') return 'No active subscription.';
+  if (sub.status === 'trialing') {
+    return periodEndStr ? `Free trial — converts to a paid subscription on ${periodEndStr}.` : 'Free trial active.';
+  }
+  if (sub.status === 'active' && sub.cancel_at_period_end) {
+    return periodEndStr ? `Canceling — you'll keep access through ${periodEndStr}.` : 'Canceling at the end of the current billing period.';
+  }
+  if (sub.status === 'active') {
+    return periodEndStr ? `Active — renews on ${periodEndStr}.` : 'Active.';
+  }
+  if (sub.status === 'past_due') return 'Payment failed — update your card to keep your subscription active.';
+  if (sub.status === 'canceled') return 'Canceled — resubscribe anytime.';
+  return 'No active subscription.';
 }
 
 function hasAccess(sub) {
@@ -2408,6 +2436,12 @@ function renderProfile() {
     </div>
 
     <div class="card">
+      <h3>Subscription</h3>
+      <p class="muted">${subscriptionStatusLabel(state.subscription)}</p>
+      <button class="btn" id="manage_subscription_btn">Manage Subscription</button>
+    </div>
+
+    <div class="card">
       <h3>Refer a Friend</h3>
       <p class="muted">Share your code — once someone signs up with it and their trial converts to paid, you get a month free.</p>
       ${p.referral_code ? `
@@ -2547,6 +2581,22 @@ function renderProfile() {
       await Promise.all([loadProfile(), loadBodyStats(), loadGoals()]);
       renderAll();
     });
+  });
+
+  $('#manage_subscription_btn').addEventListener('click', async () => {
+    const btn = $('#manage_subscription_btn');
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner spinner-sm"></span>Opening billing portal…';
+    try {
+      const { url } = await callFunction('create-portal-session', {});
+      window.location.href = url;
+    } catch (err) {
+      reportError(err);
+      toast('Could not open billing portal: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
   });
 
   const generateBtn = $('#generate_referral_code_btn');

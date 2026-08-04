@@ -169,19 +169,29 @@ status                  text (default: 'free', check in free/trialing/active/can
 stripe_customer_id      text
 stripe_subscription_id  text
 current_period_end      timestamptz
+cancel_at_period_end    boolean (default: false)
 updated_at              timestamptz (default: now())
 ```
 **Backend writes:** `netlify/functions/stripe-webhook.js` only, using
 `SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS).
-**Frontend reads:** `status, current_period_end` — RLS grants select-own
-and nothing else; there is deliberately no insert/update policy for the
-`authenticated` role.
+**Frontend reads:** `status, current_period_end, cancel_at_period_end` —
+RLS grants select-own and nothing else; there is deliberately no
+insert/update policy for the `authenticated` role.
 
 One row per user, keyed by `user_id`. `index.html`'s `enterApp()` reads this
 before showing `#app` on every sign-in/reload — anything other than
 `status IN ('trialing', 'active')` shows `#paywallScreen` instead. Status
 transitions are driven entirely by Stripe's `customer.subscription.*`
 webhook events; the app itself never writes to this table.
+
+`cancel_at_period_end` mirrors Stripe's own field rather than inventing a
+third status value: canceling via the Customer Portal sets it `true` while
+`status` stays `'active'` until the paid period actually ends (only then
+does Stripe fire `.deleted` and `status` becomes `'canceled'`). So the
+`status`-only access check above already grants access through the paid
+period correctly — this column exists purely so the Profile tab can
+*display* "canceling, access until `<date>`" via `subscriptionStatusLabel()`
+instead of showing a plain "active" that hides a received cancellation.
 
 ---
 
@@ -302,3 +312,7 @@ Same story for everything after the paywall — age gate, referrals,
 `goal_mode`, email reminder opt-out: run **`supabase-schema-phase3-improvements.sql`**
 against an existing live database (adds columns + the `referrals` table
 only, nothing dropped); fresh installs get it all from `reset-schema.sql`.
+
+And again for the Customer Portal's `cancel_at_period_end` column: run
+**`supabase-schema-phase4-portal.sql`** against an existing live database;
+fresh installs get it from `reset-schema.sql`.

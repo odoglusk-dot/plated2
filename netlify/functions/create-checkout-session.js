@@ -9,7 +9,7 @@
 // the `subscriptions` table, driven by Stripe's subscription lifecycle
 // events, so this function can't drift out of sync with what Stripe thinks
 // the subscription state actually is.
-const { jsonResponse, verifyUser, captureError, callStripe } = require('./_shared');
+const { jsonResponse, verifyUser, captureError, callStripe, getAppBaseUrl } = require('./_shared');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -23,11 +23,12 @@ exports.handler = async (event) => {
   const auth = await verifyUser(event);
   if (!auth) return jsonResponse(401, { error: 'Sign in required.' });
 
-  // Origin is set by the browser on same-origin fetch() calls and can't be
-  // spoofed by page JS, so it's safe to build the post-checkout redirect
-  // URLs from it without hardcoding a deployment domain.
-  const origin = (event.headers.origin || event.headers.referer || '').replace(/\/$/, '');
-  if (!origin) return jsonResponse(400, { error: 'Missing request origin.' });
+  // Derived from the browser's own Origin/Referer headers, which page JS
+  // can't spoof, so it's safe to build the post-checkout redirect URLs from
+  // this without hardcoding a deployment domain (or assuming the app is
+  // served from a site's root — see getAppBaseUrl()).
+  const baseUrl = getAppBaseUrl(event);
+  if (!baseUrl) return jsonResponse(400, { error: 'Missing request origin.' });
 
   // Reuse the existing Stripe customer (if any) instead of creating a
   // duplicate every time someone revisits the paywall, and block starting a
@@ -66,8 +67,8 @@ exports.handler = async (event) => {
         payment_method_collection: 'always',
         'subscription_data[trial_period_days]': '3',
         'subscription_data[metadata][supabase_user_id]': auth.user.id,
-        success_url: `${origin}/?checkout=success`,
-        cancel_url: `${origin}/?checkout=cancel`,
+        success_url: `${baseUrl}/?checkout=success`,
+        cancel_url: `${baseUrl}/?checkout=cancel`,
       },
     });
 

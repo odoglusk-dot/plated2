@@ -156,6 +156,14 @@ exports.handler = async (event) => {
     return jsonResponse(200, { received: true, skipped: 'no supabase_user_id metadata' });
   }
 
+  // Canceling via the Customer Portal doesn't move status off 'active'
+  // right away — Stripe sets cancel_at_period_end=true and keeps
+  // status='active' until the paid period actually ends, only then firing
+  // .deleted (status='canceled'). So the existing status-only access check
+  // in index.html's hasAccess() already grants access through the paid
+  // period correctly, with no special-casing needed here. This column is
+  // stored purely so the app can *display* "canceling, access until
+  // <date>" instead of a plain "active".
   const status = stripeEvent.type === 'customer.subscription.deleted' ? 'canceled' : subscription.status;
   const currentPeriodEnd = subscription.current_period_end
     ? new Date(subscription.current_period_end * 1000).toISOString()
@@ -175,6 +183,7 @@ exports.handler = async (event) => {
       stripe_customer_id: subscription.customer,
       stripe_subscription_id: subscription.id,
       current_period_end: currentPeriodEnd,
+      cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
       updated_at: new Date().toISOString(),
     }),
   });
