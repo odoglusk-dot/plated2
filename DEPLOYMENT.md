@@ -22,11 +22,13 @@ Plated is a macro & supplement tracker built with:
 2. Copy your `Project URL` and `anon key` (find these in Project Settings → API)
 3. Run the schema creation script in SQL Editor:
    - Open `reset-schema.sql` in your Supabase SQL Editor
-   - Execute the entire script to create all 10 tables with RLS policies
+   - Execute the entire script to create all 11 tables with RLS policies
 
 **Tables created:**
-- `profiles` — user metadata
-- `goals` — daily macro targets (calories, protein_g, carbs_g, fat_g)
+- `profiles` — user metadata, age-gate answer, referral code, email
+  reminder preference
+- `goals` — daily macro targets (calories, protein_g, carbs_g, fat_g,
+  goal_mode)
 - `body_stats` — height, weight, age, gender for Mifflin-St Jeor calculator
 - `food_logs` — daily food entries with macros
 - `food_cache` — shared cache of estimated foods (text + photo)
@@ -38,6 +40,16 @@ Plated is a macro & supplement tracker built with:
 - `subscriptions` — Stripe subscription status backing the whole-app
   paywall; select-own RLS only, written exclusively by `stripe-webhook.js`
   via the service-role key (see "Paywall Setup" below)
+- `referrals` — referral attribution + reward status; select-own-as-referrer
+  RLS only, written exclusively by `redeem-referral.js` and
+  `stripe-webhook.js` (see "Referral Program" below)
+
+If you're adding any of this to an **existing** live database rather than
+starting fresh, don't run `reset-schema.sql` (it drops everything) — run
+the incremental migration files instead: `supabase-schema-phase2-paywall.sql`
+for the paywall, then `supabase-schema-phase3-improvements.sql` for
+everything in this section (age gate, referrals, goal_mode, email reminder
+opt-out).
 
 ### 2. Netlify Functions Setup
 
@@ -52,16 +64,27 @@ Plated is a macro & supplement tracker built with:
    STRIPE_SECRET_KEY=sk_live_...
    STRIPE_WEBHOOK_SECRET=whsec_...
    STRIPE_PRICE_ID=price_...
+   SENTRY_DSN=https://examplePublicKey@o0.ingest.us.sentry.io/0
+   RESEND_API_KEY=re_...
+   RESEND_FROM_EMAIL=Plated <reminders@your-domain.com>
    ```
    `SUPABASE_SERVICE_ROLE_KEY` is the Project Settings → API "service_role"
    key — it bypasses RLS, so it's only ever read server-side, by
-   `delete-account.js` and `stripe-webhook.js`. **Never** put it in
-   `index.html` or any other client-facing code. See "Paywall Setup" below
-   for the three `STRIPE_*` values.
+   `delete-account.js`, `stripe-webhook.js`, `redeem-referral.js`, and
+   `send-reminder-emails.js`. **Never** put it in `index.html` or any other
+   client-facing code. See "Paywall Setup" below for the three `STRIPE_*`
+   values, "Error Monitoring" for `SENTRY_DSN`, and "Email Reminders" for
+   the `RESEND_*` values.
 4. Set Build Command to: `echo "Netlify Functions ready"`
 5. Set Functions Directory to: `netlify/functions`
 
 The functions deploy automatically on git push.
+
+### Support email
+
+Edit the `SUPPORT_EMAIL` constant near the top of `index.html`'s script
+(next to `SUPABASE_URL`) — it's what the Profile tab's "Contact Support"
+button mails to. Defaults to a placeholder that won't reach anyone.
 
 ### Paywall Setup (Stripe)
 
@@ -100,6 +123,87 @@ stripe trigger customer.subscription.created
 `stripe listen` prints a `whsec_...` value for local testing — use that as
 `STRIPE_WEBHOOK_SECRET` in your local `.env`, not the Dashboard's production
 signing secret.
+
+### Granting free access manually (testing / comps)
+
+For your own testing (or comping an account), set that user's subscription
+to active directly in the Supabase dashboard — Table Editor → `subscriptions`
+→ find or insert their row → set `status` to `active`. This is a direct
+database edit only you can do; there is deliberately no button, endpoint, or
+client-writable RLS policy anywhere in the app that lets a regular user set
+their own status. If you'd rather use SQL Editor:
+```sql
+insert into subscriptions (user_id, status)
+values ('<their-auth-user-id>', 'active')
+on conflict (user_id) do update set status = 'active';
+```
+Find `<their-auth-user-id>` under Authentication → Users.
+
+### Referral Program
+
+Each user gets a unique code (`profiles.referral_code`, generated client-side
+at signup) they can share as `https://your-site/?ref=THEIRCODE`. Signing up
+with a code attributes the referral (`redeem-referral.js`, tracked in the
+`referrals` table) — but **only the referrer is rewarded, and only once the
+referred user's trial actually converts to a paid invoice**, not at signup.
+`stripe-webhook.js` detects that conversion (a trialing→active transition on
+`customer.subscription.updated`) and applies a shared, idempotently-created
+Stripe coupon (`referral-1-month-free`, 100% off, one billing cycle) to the
+referrer's existing subscription. If the referrer has no live subscription
+of their own to discount, the referral row is left `pending` rather than
+silently dropped, so it's still visible for a manual look.
+
+No extra setup needed beyond the `STRIPE_SECRET_KEY` you already configured
+above — the coupon is created automatically on first use. Query current
+referral activity any time:
+```sql
+select referrer_user_id, referred_user_id, status, created_at, rewarded_at
+from referrals
+order by created_at desc;
+```
+
+### Error Monitoring (Sentry)
+
+1. Create a free account at [sentry.io](https://sentry.io) and a new
+   JavaScript (browser) project — one project covers both the frontend and
+   the Netlify functions.
+2. Copy its DSN (Project Settings → Client Keys), and:
+   - Paste it into the `SENTRY_DSN` constant near the top of `index.html`
+     (it's a public identifier, safe to ship client-side — same as the
+     Supabase anon key already there).
+   - Set the same value as the `SENTRY_DSN` environment variable in Netlify,
+     for the functions side (`_shared.js`'s `captureError()`).
+3. That's it — no SDK/build step on the functions side (a hand-rolled
+   envelope POST, to keep this project dependency-free); the frontend loads
+   Sentry's official browser SDK from their CDN. Leaving `SENTRY_DSN` blank
+   in either place just no-ops it.
+
+Only failures judged operationally worth knowing about are reported (AI
+calls, checkout, account deletion, webhook processing) — routine input
+validation (wrong password, "type DELETE to confirm") isn't, to keep the
+signal-to-noise ratio sane.
+
+### Email Reminders (Resend)
+
+Optional daily nudge for users who haven't logged any food yet today,
+opt-out via a Profile tab toggle (on by default). Backed by a Netlify
+**scheduled function** (`send-reminder-emails.js`, cron in `netlify.toml`),
+not something the frontend calls directly.
+
+1. Create a free [Resend](https://resend.com) account and verify a sending
+   domain (Resend won't send from an unverified domain).
+2. Set env vars: `RESEND_API_KEY` (Resend dashboard → API Keys) and
+   `RESEND_FROM_EMAIL` (e.g. `Plated <reminders@your-domain.com>`, must be
+   on the verified domain).
+3. Nothing else to configure — `netlify.toml` already schedules the
+   function daily at 01:00 UTC. Leaving the Resend env vars unset makes the
+   function a no-op (checked explicitly, not a silent failure).
+
+Two known simplifications, both deliberate given "something simple, not
+elaborate": it runs at one fixed UTC time rather than per-user local
+evening (no per-user timezone is stored anywhere), and the free Resend tier
+caps out at 100 emails/day / 3,000/month — fine at small scale, worth
+knowing about before it isn't.
 
 ### 3. Update Frontend Configuration
 
@@ -180,7 +284,18 @@ Called by Stripe, not the app — configure this URL as a webhook endpoint in
 the Stripe Dashboard (see "Paywall Setup" above). Verifies the
 `Stripe-Signature` header and upserts the `subscriptions` table from
 `customer.subscription.created`/`.updated`/`.deleted` events using the
-service-role key.
+service-role key. Also fires the referral reward (see "Referral Program")
+when one of those events represents a trial converting to paid.
+
+### POST `/api/redeem-referral`
+
+Attributes a referral code to the caller (the just-signed-up user).
+
+**Request:** `{ "code": "ABC123" }`
+
+**Response:** `{ "redeemed": true }`, or `{ "redeemed": false, "reason": "already redeemed" }`
+if this account already has a referral on file. Returns 404 for an unknown
+code, 400 for a self-referral attempt.
 
 ## Food Database
 
@@ -211,6 +326,9 @@ service-role key.
 
 ### Dashboard
 - Ring-based progress toward daily goals (calories, protein, carbs, fat)
+- Soft calorie-range shading: the calorie ring mutes to a neutral gray when
+  today's total falls outside a healthy zone for the selected goal type
+  (see `calorieRangeForGoal()`) — not red, not an alert, not blocking
 - Streak calculation (consecutive days hitting protein target)
 - Quick add buttons for common meal times
 
@@ -245,6 +363,13 @@ service-role key.
   - Input: Height (ft/in), Weight (lb), Age, Gender
   - Output: Maintenance TDEE + surplus/deficit targets
   - Also set explicit goal weight for deficit/surplus calculation
+  - Macro split shifts by goal (`MACRO_SPLIT_BY_GOAL`): higher protein/lb
+    when cutting (1.1 g/lb, protects muscle in a deficit), lower when
+    gaining (0.85 g/lb, surplus calories already help preserve muscle),
+    fat% and carbs shift accordingly
+- **Refer a Friend** — your unique code + shareable link, referral count
+- **Email Reminders** — opt-out toggle for the daily "haven't logged yet" nudge
+- **Support** — mailto link to `SUPPORT_EMAIL`
 - **Account Settings** — Change password, delete account
 
 ## Calorie & Macro Calculation
@@ -351,6 +476,56 @@ prompt-caching discounts if those are ever turned on for these calls, and
 Sonnet 5's introductory pricing (through 2026-08-31) is baked into
 `getPricingTable()` with an automatic switch to standard pricing after that
 date. Treat this as a close approximation, not an invoice-exact figure.
+
+### Basic analytics: signups, trials, conversions (admin-only)
+
+No third-party analytics tool — `subscriptions` already has what's needed
+for the numbers that actually matter early on. Run these in the Supabase
+SQL Editor whenever you want a check-in.
+
+**Note the limitation up front:** `subscriptions` holds current state per
+user, not a history of events, so these are point-in-time snapshots (e.g.
+"how many people are trialing right now"), not a true historical funnel
+(e.g. "how many people started a trial in June"). If you outgrow that,
+the next step would be an append-only events log — not built here, since
+it's more than "lightweight" calls for.
+
+Total signups and current funnel stage:
+```sql
+SELECT
+  (SELECT count(*) FROM profiles) AS total_signups,
+  count(*) FILTER (WHERE status = 'trialing') AS currently_trialing,
+  count(*) FILTER (WHERE status = 'active') AS currently_paying,
+  count(*) FILTER (WHERE status = 'canceled') AS canceled,
+  count(*) FILTER (WHERE status = 'past_due') AS past_due
+FROM subscriptions;
+```
+
+A true conversion rate needs care: `status` only holds the *current* state,
+not history, so a `canceled` row could mean either "canceled during the
+trial" or "paid for months, then churned" — those look identical here.
+Don't compute a single "conversion %" from this table as-is, it'll quietly
+conflate the two. What you *can* get reliably is "how many people are
+paying or have ever had a failed payment right now" against total signups:
+```sql
+SELECT
+  (SELECT count(*) FROM profiles) AS total_signups,
+  count(*) FILTER (WHERE status IN ('active', 'past_due')) AS currently_active_or_past_due
+FROM subscriptions;
+```
+If you want a real historical conversion funnel later, that needs an
+append-only events log (e.g. record every `stripe-webhook.js` status
+transition instead of overwriting) — a reasonable next step, not built here
+since it's more than "lightweight" calls for.
+
+Signups per day (from `profiles.created_at`):
+```sql
+SELECT date_trunc('day', created_at) AS day, count(*) AS signups
+FROM profiles
+GROUP BY day
+ORDER BY day DESC
+LIMIT 30;
+```
 
 ### Check Food Cache Hits
 ```sql

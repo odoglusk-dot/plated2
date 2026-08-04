@@ -9,27 +9,7 @@
 // the `subscriptions` table, driven by Stripe's subscription lifecycle
 // events, so this function can't drift out of sync with what Stripe thinks
 // the subscription state actually is.
-const { jsonResponse, verifyUser } = require('./_shared');
-
-async function callStripe(path, params) {
-  const body = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null) body.append(key, value);
-  }
-  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error?.message || `Stripe API error (${res.status})`);
-  }
-  return data;
-}
+const { jsonResponse, verifyUser, captureError, callStripe } = require('./_shared');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -77,20 +57,23 @@ exports.handler = async (event) => {
 
   try {
     const session = await callStripe('checkout/sessions', {
-      mode: 'subscription',
-      ...(existingCustomerId ? { customer: existingCustomerId } : { customer_email: auth.user.email }),
-      client_reference_id: auth.user.id,
-      'line_items[0][price]': process.env.STRIPE_PRICE_ID,
-      'line_items[0][quantity]': '1',
-      payment_method_collection: 'always',
-      'subscription_data[trial_period_days]': '3',
-      'subscription_data[metadata][supabase_user_id]': auth.user.id,
-      success_url: `${origin}/?checkout=success`,
-      cancel_url: `${origin}/?checkout=cancel`,
+      params: {
+        mode: 'subscription',
+        ...(existingCustomerId ? { customer: existingCustomerId } : { customer_email: auth.user.email }),
+        client_reference_id: auth.user.id,
+        'line_items[0][price]': process.env.STRIPE_PRICE_ID,
+        'line_items[0][quantity]': '1',
+        payment_method_collection: 'always',
+        'subscription_data[trial_period_days]': '3',
+        'subscription_data[metadata][supabase_user_id]': auth.user.id,
+        success_url: `${origin}/?checkout=success`,
+        cancel_url: `${origin}/?checkout=cancel`,
+      },
     });
 
     return jsonResponse(200, { url: session.url });
   } catch (err) {
+    await captureError(err, { function: 'create-checkout-session', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not start checkout.', detail: String(err.message || err) });
   }
 };

@@ -3,7 +3,84 @@
 // global `fetch` available in the Node 18+ Netlify Functions runtime, so
 // there's no bundling/dependency-install step to break.
 
+const crypto = require('crypto');
+
 const DAILY_AI_LIMIT = 13;
+
+// Reports an unexpected server-side error to Sentry, using a hand-rolled
+// envelope POST rather than the @sentry/node SDK — this project has no
+// npm dependencies / build step, and error reporting must never be the
+// thing that breaks a deploy. No-ops silently if SENTRY_DSN isn't set, and
+// never throws (a broken error-reporter must never mask the original error).
+async function captureError(err, extra = {}) {
+  const dsn = process.env.SENTRY_DSN;
+  if (!dsn) return;
+  try {
+    const dsnUrl = new URL(dsn);
+    const publicKey = dsnUrl.username;
+    const projectId = dsnUrl.pathname.replace(/^\//, '');
+    const ingestUrl = `https://${dsnUrl.host}/api/${projectId}/envelope/?sentry_key=${publicKey}&sentry_version=7`;
+    const eventId = crypto.randomBytes(16).toString('hex');
+    const nowIso = new Date().toISOString();
+
+    const event = {
+      event_id: eventId,
+      timestamp: nowIso,
+      platform: 'node',
+      level: 'error',
+      environment: process.env.CONTEXT || 'production',
+      exception: {
+        values: [{
+          type: (err && err.name) || 'Error',
+          value: String((err && err.message) || err),
+          stacktrace: err && err.stack
+            ? { frames: err.stack.split('\n').slice(1).map((line) => ({ filename: line.trim() })).reverse() }
+            : undefined,
+        }],
+      },
+      extra,
+    };
+
+    const envelope = [
+      JSON.stringify({ event_id: eventId, sent_at: nowIso }),
+      JSON.stringify({ type: 'event' }),
+      JSON.stringify(event),
+    ].join('\n');
+
+    await fetch(ingestUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-sentry-envelope' },
+      body: envelope,
+    });
+  } catch {
+    // Reporting the error must never itself throw.
+  }
+}
+
+// Minimal Stripe REST client — no `stripe` npm SDK, matching this project's
+// zero-dependency style. `params` (form-encoded, Stripe's classic format;
+// supports its bracket notation for nested fields) is omitted for GET.
+async function callStripe(path, { method = 'POST', params } = {}) {
+  const headers = { Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}` };
+  let body;
+  if (params) {
+    const form = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) form.append(key, value);
+    }
+    body = form.toString();
+    headers['content-type'] = 'application/x-www-form-urlencoded';
+  }
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, { method, headers, body });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error?.message || `Stripe API error (${res.status})`);
+    err.stripeStatus = res.status;
+    err.stripeError = data.error;
+    throw err;
+  }
+  return data;
+}
 
 function jsonResponse(statusCode, body) {
   return {
@@ -253,6 +330,8 @@ async function cacheFood(description, { food_name, calories, protein_g, carbs_g,
 
 module.exports = {
   DAILY_AI_LIMIT,
+  captureError,
+  callStripe,
   jsonResponse,
   verifyUser,
   checkAndIncrementRateLimit,

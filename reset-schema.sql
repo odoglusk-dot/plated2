@@ -5,6 +5,7 @@
 -- ============================================================
 
 -- Drop all tables in correct dependency order (reverse of creation)
+drop table if exists referrals cascade;
 drop table if exists subscriptions cascade;
 drop table if exists ai_usage cascade;
 drop table if exists supplement_logs cascade;
@@ -32,6 +33,14 @@ create table profiles (
   activity_level text check (
     activity_level in ('sedentary', 'light', 'moderate', 'active', 'very_active')
   ),
+  -- Age gate (shown at signup, not a hard block — see index.html signup form).
+  age_over_18 boolean,
+  age_gate_shown_at timestamptz,
+  parental_consent_at timestamptz,
+  -- Referrals: this user's own shareable code, generated client-side at signup.
+  referral_code text unique,
+  -- Daily "haven't logged yet" reminder email opt-out (see send-reminder-emails.js).
+  email_reminders_opt_out boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -53,6 +62,9 @@ create table goals (
   protein_g int not null default 150,
   carbs_g int not null default 250,
   fat_g int not null default 70,
+  -- Which calculator scenario these goals came from — drives the soft
+  -- calorie-range shading on the dashboard ring (see calorieRangeForGoal()).
+  goal_mode text not null default 'maintain' check (goal_mode in ('lose', 'maintain', 'gain')),
   updated_at timestamptz not null default now()
 );
 
@@ -250,6 +262,27 @@ alter table subscriptions enable row level security;
 
 create policy "subscriptions: select own" on subscriptions
   for select using (auth.uid() = user_id);
+
+-- ── referrals ───────────────────────────────────────────────────────────
+-- One row per successful referral redemption. Written only by
+-- redeem-referral.js (at signup) and stripe-webhook.js (when marking a
+-- reward paid out) — both use the service-role key. There's deliberately
+-- no insert/update policy for the client, same reasoning as subscriptions:
+-- this drives a real money discount, so only server code should ever touch it.
+create table referrals (
+  id uuid primary key default gen_random_uuid(),
+  referrer_user_id uuid not null references auth.users(id) on delete cascade,
+  referred_user_id uuid not null unique references auth.users(id) on delete cascade,
+  referral_code text not null,
+  status text not null default 'pending' check (status in ('pending', 'rewarded')),
+  created_at timestamptz not null default now(),
+  rewarded_at timestamptz
+);
+
+alter table referrals enable row level security;
+
+create policy "referrals: select own as referrer" on referrals
+  for select using (auth.uid() = referrer_user_id);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE

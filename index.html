@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Plated — Macro &amp; Supplement Tracker</title>
+<meta name="description" content="Track macros, supplements, and weight with an app built for training days. AI-powered food logging, goal calculator, and progress tracking — 3-day free trial.">
+
+<!-- Open Graph / social preview -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Plated — Macro &amp; Supplement Tracker">
+<meta property="og:description" content="Track macros, supplements, and weight with an app built for training days. AI-powered food logging, goal calculator, and progress tracking.">
+<meta property="og:image" content="og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Plated — Macro &amp; Supplement Tracker">
+<meta name="twitter:description" content="Track macros, supplements, and weight with an app built for training days.">
+<meta name="twitter:image" content="og-image.png">
 
 <!-- Add to Home Screen (Android + iOS) — manifest, icons, theme color -->
 <link rel="manifest" href="manifest.json">
@@ -17,6 +28,22 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+<!-- Error monitoring (Sentry free tier), errors-only (no tracing/replay) to
+     keep this lightweight and avoid capturing extra session data for a
+     health app. SENTRY_DSN is a public identifier, safe client-side, same
+     as the Supabase anon key below — fill in your own from sentry.io after
+     creating a project; left blank, this is just a no-op. Version-pinned
+     to a known-good release rather than an unpinned "latest" URL; check
+     https://docs.sentry.io/platforms/javascript/install/cdn/ if you want
+     to bump it later. -->
+<script src="https://browser.sentry-cdn.com/7.120.3/bundle.min.js" crossorigin="anonymous"></script>
+<script>
+  var SENTRY_DSN = ''; // e.g. 'https://examplePublicKey@o0.ingest.us.sentry.io/0'
+  if (SENTRY_DSN && window.Sentry) {
+    Sentry.init({ dsn: SENTRY_DSN, tracesSampleRate: 0, replaysSessionSampleRate: 0, replaysOnErrorSampleRate: 0 });
+  }
+</script>
 <style>
   :root {
     --bg: #FAFAF9;
@@ -53,6 +80,17 @@
   .hidden { display: none !important; }
 
   .hazard-divider { height: 4px; background: var(--accent); border-radius: 2px; }
+
+  /* ── Loading spinners ─────────────────────────────────────────── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 36px; height: 36px; border: 4px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.7s linear infinite; }
+  .spinner-sm { width: 15px; height: 15px; border-width: 2px; display: inline-block; vertical-align: -3px; margin-right: 0.4rem; }
+  #appLoadingOverlay { position: fixed; inset: 0; background: var(--bg); z-index: 50;
+    display: flex; align-items: center; justify-content: center; }
+  .skeleton-row { height: 1em; border-radius: 6px; background: var(--surface-2); margin-bottom: 0.5rem;
+    animation: skeleton-pulse 1.2s ease-in-out infinite; }
+  @keyframes skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
   /* ── Buttons / inputs ─────────────────────────────────────────── */
   .btn { font-weight: 600; border-radius: 8px; padding: 0.65rem 1.1rem; border: 1px solid var(--border);
@@ -100,6 +138,7 @@
   #authNote { color: var(--success); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
   .consent-line { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.75rem; display: flex; gap: 0.4rem; align-items: flex-start; }
   .consent-line input { width: auto; margin-top: 0.2rem; }
+  #ageGateField .btn.active-choice { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
 
   .password-wrap { position: relative; }
   .password-wrap .input { padding-right: 2.6rem; }
@@ -227,6 +266,27 @@
       <div class="field" id="forgotPasswordField" style="text-align:right;margin-bottom:0;">
         <a href="#" id="forgotPasswordLink" style="font-size:0.8rem;">Forgot password?</a>
       </div>
+      <div class="field" id="referralCodeField" style="display:none;">
+        <label for="referralCode">Referral code (optional)</label>
+        <input class="input mono" id="referralCode" type="text" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="e.g. ABC123">
+      </div>
+      <div class="field" id="ageGateField" style="display:none;">
+        <label>Are you 18 or older?</label>
+        <div class="row" style="gap:0.5rem;">
+          <button type="button" class="btn" id="age18YesBtn">Yes, I'm 18+</button>
+          <button type="button" class="btn" id="age18NoBtn">No, I'm under 18</button>
+        </div>
+        <div id="parentalConsentNote" class="hidden" style="margin-top:0.6rem;">
+          <p class="muted" style="margin-top:0;">Since you're under 18, a parent or guardian should be aware of
+            and approve your use of Plated — including the $4.99/month subscription — before you continue.</p>
+          <div class="consent-line" style="margin-top:0;">
+            <input type="checkbox" id="parentalConsentCheck">
+            <label style="margin:0;color:var(--text-dim);font-weight:400;" for="parentalConsentCheck">
+              A parent or guardian is aware of and approves my use of this app, including the paid subscription.
+            </label>
+          </div>
+        </div>
+      </div>
       <div id="consentField" class="consent-line" style="display:none;">
         <input type="checkbox" id="consentCheck">
         <label style="margin:0;color:var(--text-dim);font-weight:400;" for="consentCheck">
@@ -279,8 +339,9 @@
     <div class="auth-tagline">Macro &amp; supplement tracking, built for training days.</div>
     <div class="hazard-divider" style="margin-bottom:1.5rem;"></div>
 
-    <div id="paywallProcessing" class="hidden">
-      <p class="muted" style="text-align:center;">Finalizing your subscription…</p>
+    <div id="paywallProcessing" class="hidden" style="text-align:center;">
+      <div class="spinner" style="margin:0 auto 0.75rem;"></div>
+      <p class="muted">Finalizing your subscription…</p>
     </div>
 
     <div id="paywallContent">
@@ -295,6 +356,9 @@
 </div>
 
 <div id="app" class="hidden">
+  <div id="appLoadingOverlay" class="hidden">
+    <div class="spinner"></div>
+  </div>
   <div class="topbar">
     <div class="logo">PLATED</div>
     <div class="topbar-right">
@@ -343,6 +407,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Update this to your real contact address before launch.
+const SUPPORT_EMAIL = 'support@example.com';
+
 // ── Small DOM helpers ────────────────────────────────────────────────
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -360,6 +427,28 @@ function toast(msg, ms = 3200) {
   setTimeout(() => t.remove(), ms);
 }
 
+// Most failures in this app are already caught and shown as a toast, so
+// Sentry's automatic uncaught-exception capture never sees them — call this
+// alongside a toast wherever the failure is operationally worth knowing
+// about (payments, account deletion, AI calls), not for routine input
+// validation (e.g. "type DELETE to confirm").
+function reportError(err) {
+  if (window.Sentry) Sentry.captureException(err);
+}
+
+function copyToClipboard(text, successMessage) {
+  navigator.clipboard.writeText(text)
+    .then(() => toast(successMessage))
+    .catch(() => toast('Could not copy — select and copy manually.'));
+}
+
+// Covers the window between #app becoming visible and bootstrapApp()'s
+// parallel data loads finishing, so users see a spinner instead of a blank
+// app shell with empty tab panels while everything loads.
+function showAppLoading(show) {
+  $('#appLoadingOverlay').classList.toggle('hidden', !show);
+}
+
 function localDateStr(d = new Date()) {
   const yr = d.getFullYear(), mo = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
   return `${yr}-${mo}-${day}`;
@@ -370,7 +459,7 @@ const state = {
   session: null,
   user: null,
   profile: null,
-  goals: { calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70 },
+  goals: { calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, goal_mode: 'maintain' },
   bodyStats: null,
   todayLogs: [],
   historyLogs: [], // last 90 days, used by dashboard streaks + history tab + CSV export
@@ -380,6 +469,7 @@ const state = {
   activeTab: 'dashboard',
   aiRemaining: null,
   subscription: null,
+  referrals: [],
 };
 
 // ── Static reference data ───────────────────────────────────────────
@@ -877,16 +967,32 @@ wirePasswordToggle($('#password'), $('#togglePasswordBtn'));
 $('#toggleSignIn').addEventListener('click', () => setAuthMode('signin'));
 $('#toggleSignUp').addEventListener('click', () => setAuthMode('signup'));
 
+let ageOver18Answer = null;
+
+function setAgeGateAnswer(isOver18) {
+  ageOver18Answer = isOver18;
+  $('#age18YesBtn').classList.toggle('active-choice', isOver18 === true);
+  $('#age18NoBtn').classList.toggle('active-choice', isOver18 === false);
+  $('#parentalConsentNote').classList.toggle('hidden', isOver18 !== false);
+  if (isOver18 !== false) $('#parentalConsentCheck').checked = false;
+}
+
+$('#age18YesBtn').addEventListener('click', () => setAgeGateAnswer(true));
+$('#age18NoBtn').addEventListener('click', () => setAgeGateAnswer(false));
+
 function setAuthMode(mode) {
   authMode = mode;
   $('#toggleSignIn').classList.toggle('active', mode === 'signin');
   $('#toggleSignUp').classList.toggle('active', mode === 'signup');
   $('#displayNameField').style.display = mode === 'signup' ? 'block' : 'none';
+  $('#referralCodeField').style.display = mode === 'signup' ? 'block' : 'none';
+  $('#ageGateField').style.display = mode === 'signup' ? 'block' : 'none';
   $('#consentField').style.display = mode === 'signup' ? 'flex' : 'none';
   $('#forgotPasswordField').style.display = mode === 'signup' ? 'none' : 'block';
   $('#authSubmitBtn').textContent = mode === 'signup' ? 'Create Account' : 'Sign In';
   $('#authError').textContent = '';
   $('#authNote').textContent = '';
+  setAgeGateAnswer(null);
 }
 
 // ── Forgot / reset password ─────────────────────────────────────────
@@ -987,12 +1093,26 @@ $('#authForm').addEventListener('submit', async (e) => {
 
   try {
     if (authMode === 'signup') {
+      if (ageOver18Answer === null) {
+        throw new Error('Please answer the age question to continue.');
+      }
+      if (ageOver18Answer === false && !$('#parentalConsentCheck').checked) {
+        throw new Error('Please confirm a parent/guardian is aware and approves before continuing.');
+      }
       if (!$('#consentCheck').checked) {
         throw new Error('Please agree to the Terms and Privacy Policy to continue.');
       }
       const displayName = $('#displayName').value.trim() || 'Athlete';
+      const referralCode = $('#referralCode').value.trim().toUpperCase();
+      if (referralCode) localStorage.setItem('pendingReferralCode', referralCode);
+      const ageGateShownAt = new Date().toISOString();
       const { data, error } = await supabase.auth.signUp({
-        email, password, options: { data: { display_name: displayName } },
+        email, password, options: { data: {
+          display_name: displayName,
+          age_over_18: ageOver18Answer,
+          age_gate_shown_at: ageGateShownAt,
+          parental_consent_at: ageOver18Answer === false ? ageGateShownAt : null,
+        } },
       });
       if (error) throw error;
       // Only write profile/goals rows here if sign-up produced an active
@@ -1031,12 +1151,16 @@ $('#paywallSubscribeBtn').addEventListener('click', async () => {
   $('#paywallError').textContent = '';
   const btn = $('#paywallSubscribeBtn');
   btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.innerHTML = '<span class="spinner spinner-sm"></span>Starting checkout…';
   try {
     const { url } = await callFunction('create-checkout-session', {});
     window.location.href = url;
   } catch (err) {
+    reportError(err);
     $('#paywallError').textContent = err.message || 'Could not start checkout.';
     btn.disabled = false;
+    btn.textContent = originalLabel;
   }
 });
 
@@ -1113,37 +1237,51 @@ async function enterApp(session) {
   state.user = session.user;
   $('#authScreen').classList.add('hidden');
 
-  const params = new URLSearchParams(window.location.search);
-  const checkoutResult = params.get('checkout');
-  if (checkoutResult) {
-    // Drop the query param regardless of outcome so a refresh doesn't replay it.
-    history.replaceState(null, '', window.location.pathname);
-  }
-
-  if (checkoutResult === 'success') {
-    // Stripe redirects back here immediately, but the webhook that actually
-    // grants access (customer.subscription.created) can take a moment to
-    // land — poll briefly instead of bouncing a paying user back to the
-    // paywall while it's in flight.
-    $('#app').classList.add('hidden');
-    $('#paywallScreen').classList.remove('hidden');
-    renderPaywallProcessing();
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const sub = await fetchSubscription();
-      if (hasAccess(sub)) break;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const checkoutResult = params.get('checkout');
+    if (checkoutResult) {
+      // Drop the query param regardless of outcome so a refresh doesn't replay it.
+      history.replaceState(null, '', window.location.pathname);
     }
-  }
 
-  const sub = await fetchSubscription();
-  if (hasAccess(sub)) {
-    $('#paywallScreen').classList.add('hidden');
-    $('#app').classList.remove('hidden');
-    await bootstrapApp();
-  } else {
+    if (checkoutResult === 'success') {
+      // Stripe redirects back here immediately, but the webhook that actually
+      // grants access (customer.subscription.created) can take a moment to
+      // land — poll briefly instead of bouncing a paying user back to the
+      // paywall while it's in flight.
+      $('#app').classList.add('hidden');
+      $('#paywallScreen').classList.remove('hidden');
+      renderPaywallProcessing();
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const sub = await fetchSubscription();
+        if (hasAccess(sub)) break;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+
+    const sub = await fetchSubscription();
+    if (hasAccess(sub)) {
+      $('#paywallScreen').classList.add('hidden');
+      $('#app').classList.remove('hidden');
+      showAppLoading(true);
+      await bootstrapApp();
+      showAppLoading(false);
+    } else {
+      $('#app').classList.add('hidden');
+      renderPaywallScreen(sub);
+      $('#paywallScreen').classList.remove('hidden');
+    }
+  } catch (err) {
+    // Never leave the user staring at a blank screen — fall back to
+    // somewhere interactive (auth screen) they can retry from, and make
+    // sure this actually gets reported since it's exactly the kind of
+    // failure a real user would otherwise silently bounce off of.
+    reportError(err);
     $('#app').classList.add('hidden');
-    renderPaywallScreen(sub);
-    $('#paywallScreen').classList.remove('hidden');
+    $('#paywallScreen').classList.add('hidden');
+    $('#authScreen').classList.remove('hidden');
+    toast('Something went wrong loading your account. Please try signing in again.');
   }
 }
 
@@ -1152,19 +1290,70 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadReferrals()]);
   renderAll();
 }
 
 // Idempotent: creates a profile + default goals row the first time a user
 // actually has an authenticated session (covers both the "no email
 // confirmation needed" signup path and the "confirm, then sign in" path).
+// No ambiguous characters (0/O, 1/I/L) since people read these codes aloud
+// or type them in by hand when sharing a referral link.
+const REFERRAL_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generateReferralCode() {
+  let code = '';
+  for (let i = 0; i < 6; i++) code += REFERRAL_CODE_CHARS[Math.floor(Math.random() * REFERRAL_CODE_CHARS.length)];
+  return code;
+}
+
+// Self-heal for accounts created before referral_code existed on profiles —
+// everyone new gets one at signup (see ensureProfileAndGoals), this just
+// backfills it on demand for older accounts that visit the Profile tab.
+async function ensureReferralCode() {
+  if (state.profile?.referral_code) return state.profile.referral_code;
+  for (let attempt = 0; ; attempt++) {
+    const code = generateReferralCode();
+    const { error } = await supabase.from('profiles').update({ referral_code: code }).eq('id', state.user.id);
+    if (!error) return code;
+    if (error.code !== '23505' || attempt >= 4) throw error;
+  }
+}
+
 async function ensureProfileAndGoals(user, displayNameHint) {
   const { data: existing } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
   if (existing) return;
   const display_name = displayNameHint || user.user_metadata?.display_name || 'Athlete';
-  await supabase.from('profiles').insert({ id: user.id, display_name });
+  const meta = user.user_metadata || {};
+
+  // Retry on the (astronomically unlikely) referral_code collision; any
+  // other error is real and should surface immediately.
+  for (let attempt = 0; ; attempt++) {
+    const { error } = await supabase.from('profiles').insert({
+      id: user.id,
+      display_name,
+      age_over_18: meta.age_over_18 ?? null,
+      age_gate_shown_at: meta.age_gate_shown_at || null,
+      parental_consent_at: meta.parental_consent_at || null,
+      referral_code: generateReferralCode(),
+    });
+    if (!error) break;
+    if (error.code !== '23505' || attempt >= 4) throw error;
+  }
   await supabase.from('goals').insert({ user_id: user.id });
+
+  // Redeem a referral code entered at signup, if any — stashed in
+  // localStorage since it needs to survive the email-confirmation gap
+  // (no session exists yet to call an authenticated function with).
+  // Best-effort: never block account creation over this.
+  const pendingCode = localStorage.getItem('pendingReferralCode');
+  if (pendingCode) {
+    localStorage.removeItem('pendingReferralCode');
+    try {
+      await callFunction('redeem-referral', { code: pendingCode });
+    } catch (err) {
+      reportError(err);
+    }
+  }
 }
 
 async function loadProfile() {
@@ -1208,6 +1397,11 @@ async function loadSupplementLogs() {
   const { data } = await supabase.from('supplement_logs').select('*').eq('user_id', state.user.id)
     .gte('logged_at', since.toISOString()).order('logged_at', { ascending: false });
   state.supplementLogs = data || [];
+}
+
+async function loadReferrals() {
+  const { data } = await supabase.from('referrals').select('status').eq('referrer_user_id', state.user.id);
+  state.referrals = data || [];
 }
 
 function renderAll() {
@@ -1355,16 +1549,25 @@ function renderDashboard() {
   const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
   const g = state.goals;
 
+  // Soft calorie range shading — muted ring color when today's total falls
+  // outside the healthy zone for the selected goal type. Not an alert, not
+  // red, not blocking — see calorieRangeForGoal().
+  const bmr = computeBMR(state.profile, state.bodyStats);
+  const calorieRange = calorieRangeForGoal(g.calories, g.goal_mode || 'maintain', bmr);
+  const calorieInRange = totals.calories >= calorieRange.low && totals.calories <= calorieRange.high;
+  const calorieColor = calorieInRange ? 'var(--macro-calories)' : 'var(--text-dim)';
+
   const panel = $('#panel-dashboard');
   panel.innerHTML = `
     <div class="card">
       <h3>Today's Plate</h3>
       <div class="scoreboard">
-        ${plateHtml('CALORIES', totals.calories, g.calories, 'var(--macro-calories)')}
+        ${plateHtml('CALORIES', totals.calories, g.calories, calorieColor)}
         ${plateHtml('PROTEIN', totals.protein_g, g.protein_g, 'var(--macro-protein)')}
         ${plateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--macro-carbs)')}
         ${plateHtml('FAT', totals.fat_g, g.fat_g, 'var(--macro-fat)')}
       </div>
+      <p class="muted" style="margin-top:0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
       <div class="row" style="margin-top:0.5rem;">
         <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
         <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
@@ -1663,7 +1866,7 @@ function renderLogSubPanel() {
       // Exact match against the common foods database costs nothing — skip the AI call entirely.
       const exact = COMMON_FOODS.find((f) => f.name.toLowerCase() === description.toLowerCase());
       if (exact) { useCommonMatch(exact); return; }
-      const btn = $('#aiEstimateBtn'); btn.disabled = true; btn.textContent = 'Estimating…';
+      const btn = $('#aiEstimateBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span>Estimating…';
       $('#aiError').textContent = '';
       try {
         const result = await callFunction('estimate-macros', { description });
@@ -1671,6 +1874,7 @@ function renderLogSubPanel() {
         $('#aiResultSlot').innerHTML = resultCardHtml(result);
         wireResultCard('ai_text');
       } catch (err) {
+        reportError(err);
         $('#aiError').textContent = err.message;
       } finally {
         btn.disabled = false; btn.textContent = 'Estimate Macros';
@@ -1689,7 +1893,7 @@ function renderLogSubPanel() {
     $('#photoEstimateBtn').addEventListener('click', async () => {
       const file = $('#photoInput').files[0];
       if (!file) { $('#photoError').textContent = 'Choose a photo first.'; return; }
-      const btn = $('#photoEstimateBtn'); btn.disabled = true; btn.textContent = 'Estimating…';
+      const btn = $('#photoEstimateBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span>Estimating…';
       $('#photoError').textContent = '';
       try {
         const { base64, mediaType } = await fileToBase64(file);
@@ -1698,6 +1902,7 @@ function renderLogSubPanel() {
         $('#photoResultSlot').innerHTML = resultCardHtml(result);
         wireResultCard('ai_photo');
       } catch (err) {
+        reportError(err);
         $('#photoError').textContent = err.message;
       } finally {
         btn.disabled = false; btn.textContent = 'Estimate Macros';
@@ -2075,7 +2280,7 @@ async function handleAsk() {
   askMessages.push({ role: 'user', text: question });
   renderAsk();
   input.value = '';
-  const btn = $('#askBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Thinking…'; }
+  const btn = $('#askBtn'); if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span>Thinking…'; }
 
   try {
     const dataSummary = await buildDataSummary();
@@ -2084,6 +2289,12 @@ async function handleAsk() {
     askMessages.push({ role: 'assistant', text: result.answer });
     renderAsk();
   } catch (err) {
+    reportError(err);
+    // renderAsk() isn't called on this path, so the button (rebuilt as
+    // disabled/"Thinking…" above) would otherwise stay stuck that way
+    // until the user leaves and returns to this tab — reset it directly.
+    const askBtn = $('#askBtn');
+    if (askBtn) { askBtn.disabled = false; askBtn.textContent = 'Ask'; }
     $('#askError').textContent = err.message;
   }
 }
@@ -2092,6 +2303,45 @@ async function handleAsk() {
 // PROFILE TAB
 // ══════════════════════════════════════════════════════════════════
 const ACTIVITY_MULTIPLIERS = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 };
+
+// Macro split shifts by goal: higher protein/lb when cutting (protects
+// muscle in a deficit), slightly lower when in a surplus (extra calories
+// already help preserve muscle), lower fat% when gaining leaves more room
+// for carbs. Carbs are always "whatever calories remain" — they end up
+// scaling up more for gain and down more for loss purely from the
+// combination of these two shifts plus the total-calorie difference.
+const MACRO_SPLIT_BY_GOAL = {
+  lose: { proteinPerLb: 1.1, fatPercent: 0.25 },
+  maintain: { proteinPerLb: 1.0, fatPercent: 0.25 },
+  gain: { proteinPerLb: 0.85, fatPercent: 0.20 },
+};
+
+// Recomputes BMR from whatever profile/body-stats data is on hand (used to
+// re-derive the "lose" calorie range's safety floor outside the calculator
+// itself, e.g. on the dashboard). Returns null if the inputs aren't there
+// yet — a user who's never run the calculator won't have age/sex/height.
+function computeBMR(profile, bodyStats) {
+  const age = profile?.age;
+  const sex = profile?.sex;
+  const heightCm = profile?.height_cm;
+  const weightKg = bodyStats?.weight_kg;
+  if (!age || !sex || !heightCm || !weightKg) return null;
+  return sex === 'male'
+    ? 10 * weightKg + 6.25 * heightCm - 5 * age + 5
+    : 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
+}
+
+// Soft calorie range per goal — a healthy zone around the target, not a
+// strict rule. "lose" reuses the same BMR-based safety floor as the
+// calculator itself; "gain" has no real lower bound (under-eating a bulk
+// target isn't a safety concern the way under-eating a cut is);
+// "maintain" is a plain +/-10% band.
+function calorieRangeForGoal(calorieGoal, goalMode, bmr) {
+  const safetyFloor = Math.max(bmr || 0, 1500);
+  if (goalMode === 'lose') return { low: safetyFloor, high: calorieGoal * 1.125 };
+  if (goalMode === 'gain') return { low: 0, high: calorieGoal * 1.125 };
+  return { low: calorieGoal * 0.9, high: calorieGoal * 1.1 };
+}
 
 function renderProfile() {
   const panel = $('#panel-profile');
@@ -2111,6 +2361,15 @@ function renderProfile() {
         <div class="field"><label>Protein (g)</label><input class="input mono" id="goal_pro" type="number" value="${round(state.goals.protein_g)}"></div>
         <div class="field"><label>Carbs (g)</label><input class="input mono" id="goal_carb" type="number" value="${round(state.goals.carbs_g)}"></div>
         <div class="field"><label>Fat (g)</label><input class="input mono" id="goal_fat" type="number" value="${round(state.goals.fat_g)}"></div>
+      </div>
+      <div class="field">
+        <label>Goal type</label>
+        <select id="goal_mode">
+          <option value="lose" ${state.goals.goal_mode === 'lose' ? 'selected' : ''}>Lose weight</option>
+          <option value="maintain" ${!state.goals.goal_mode || state.goals.goal_mode === 'maintain' ? 'selected' : ''}>Maintain weight</option>
+          <option value="gain" ${state.goals.goal_mode === 'gain' ? 'selected' : ''}>Gain weight</option>
+        </select>
+        <p class="muted" style="margin-top:0.3rem;">Sets the healthy calorie range shown on the Dashboard ring — doesn't change the numbers above.</p>
       </div>
       <button class="btn btn-primary" id="goal_save">Save Goals</button>
     </div>
@@ -2149,6 +2408,46 @@ function renderProfile() {
     </div>
 
     <div class="card">
+      <h3>Refer a Friend</h3>
+      <p class="muted">Share your code — once someone signs up with it and their trial converts to paid, you get a month free.</p>
+      ${p.referral_code ? `
+        <div class="field">
+          <label>Your referral code</label>
+          <div class="row" style="gap:0.5rem;">
+            <input class="input mono" id="referral_code_display" value="${esc(p.referral_code)}" readonly>
+            <button class="btn" id="copy_referral_code" style="flex:none;">Copy</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Shareable link</label>
+          <div class="row" style="gap:0.5rem;">
+            <input class="input mono" id="referral_link_display" value="${esc(window.location.origin + window.location.pathname)}?ref=${esc(p.referral_code)}" readonly>
+            <button class="btn" id="copy_referral_link" style="flex:none;">Copy</button>
+          </div>
+        </div>
+        <p class="muted">${state.referrals.length} referred · ${state.referrals.filter((r) => r.status === 'rewarded').length} rewarded</p>
+      ` : `
+        <button class="btn" id="generate_referral_code_btn">Generate My Referral Code</button>
+      `}
+    </div>
+
+    <div class="card">
+      <h3>Email Reminders</h3>
+      <div class="consent-line" style="margin-top:0;">
+        <input type="checkbox" id="email_reminders_check" ${p.email_reminders_opt_out ? '' : 'checked'}>
+        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="email_reminders_check">
+          Email me a reminder in the evening if I haven't logged any food that day.
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Support</h3>
+      <p class="muted">Something broken, or just have a question?</p>
+      <a class="btn" href="mailto:${SUPPORT_EMAIL}?subject=Plated%20support">Contact Support</a>
+    </div>
+
+    <div class="card">
       <h3>Account</h3>
       <p class="muted">Signed in as ${esc(state.user.email)}</p>
       <button class="btn btn-danger" id="delete_account_btn">Delete My Account</button>
@@ -2175,6 +2474,7 @@ function renderProfile() {
       protein_g: Number($('#goal_pro').value) || 0,
       carbs_g: Number($('#goal_carb').value) || 0,
       fat_g: Number($('#goal_fat').value) || 0,
+      goal_mode: $('#goal_mode').value,
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('goals').upsert(goals);
@@ -2212,14 +2512,20 @@ function renderProfile() {
     const safetyFloor = Math.max(bmr, 1500);
     const targetCalories = Math.round(Math.max(adjusted, safetyFloor) / 10) * 10;
 
-    const proteinG = Math.round(weightLb * 1.0);
-    const fatG = Math.round((targetCalories * 0.25) / 9);
-    const remaining = Math.max(targetCalories - proteinG * 4 - fatG * 9, 0);
-    const carbsG = Math.round(remaining / 4);
-
     const goalMode = Math.abs(weightDiff) < 2 ? 'maintain' : weightDiff > 0 ? 'gain' : 'lose';
     const goalModeLabel = goalMode === 'maintain' ? 'Maintain weight' : goalMode === 'gain' ? 'Gain weight' : 'Lose weight';
     const weightDiffAbs = Math.abs(weightDiff).toFixed(1);
+
+    const split = MACRO_SPLIT_BY_GOAL[goalMode];
+    const proteinG = Math.round(weightLb * split.proteinPerLb);
+    const fatG = Math.round((targetCalories * split.fatPercent) / 9);
+    const remaining = Math.max(targetCalories - proteinG * 4 - fatG * 9, 0);
+    const carbsG = Math.round(remaining / 4);
+
+    const range = calorieRangeForGoal(targetCalories, goalMode, bmr);
+    const rangeLabel = range.low > 0
+      ? `${Math.round(range.low)}–${Math.round(range.high)} kcal`
+      : `up to ~${Math.round(range.high)} kcal`;
 
     $('#calc_result').innerHTML = `
       <div class="row">
@@ -2229,17 +2535,46 @@ function renderProfile() {
         <span class="badge">F ${fatG}g</span>
       </div>
       <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal · Goal: ${goalModeLabel} (${Math.abs(weightDiff) >= 2 ? weightDiff > 0 ? '+' : '−' : ''}${weightDiffAbs} lb)${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
+      <p class="muted">Healthy range: ${rangeLabel}. Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
       <button class="btn btn-primary" id="calc_apply" style="margin-top:0.5rem;">Apply to My Goals</button>
     `;
 
     $('#calc_apply').addEventListener('click', async () => {
       await supabase.from('profiles').upsert({ id: state.user.id, age, sex, height_cm: round(heightCm, 1), activity_level: activity });
       await supabase.from('body_stats').upsert({ user_id: state.user.id, weight_kg: round(weightKg, 2), updated_at: new Date().toISOString() });
-      await supabase.from('goals').upsert({ user_id: state.user.id, calories: targetCalories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG, updated_at: new Date().toISOString() });
+      await supabase.from('goals').upsert({ user_id: state.user.id, calories: targetCalories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG, goal_mode: goalMode, updated_at: new Date().toISOString() });
       toast('Goals updated from calculator');
       await Promise.all([loadProfile(), loadBodyStats(), loadGoals()]);
       renderAll();
     });
+  });
+
+  const generateBtn = $('#generate_referral_code_btn');
+  if (generateBtn) {
+    generateBtn.addEventListener('click', async () => {
+      generateBtn.disabled = true;
+      try {
+        await ensureReferralCode();
+        await loadProfile();
+        renderProfile();
+      } catch (err) {
+        reportError(err);
+        toast('Could not generate a referral code: ' + err.message);
+        generateBtn.disabled = false;
+      }
+    });
+  }
+
+  const copyCodeBtn = $('#copy_referral_code');
+  if (copyCodeBtn) copyCodeBtn.addEventListener('click', () => copyToClipboard($('#referral_code_display').value, 'Referral code copied.'));
+  const copyLinkBtn = $('#copy_referral_link');
+  if (copyLinkBtn) copyLinkBtn.addEventListener('click', () => copyToClipboard($('#referral_link_display').value, 'Referral link copied.'));
+
+  $('#email_reminders_check').addEventListener('change', async (e) => {
+    const { error } = await supabase.from('profiles').upsert({ id: state.user.id, email_reminders_opt_out: !e.target.checked });
+    if (error) { toast('Could not save preference: ' + error.message); return; }
+    toast(e.target.checked ? 'Reminder emails on.' : 'Reminder emails off.');
+    await loadProfile();
   });
 
   $('#delete_account_btn').addEventListener('click', () => $('#delete_confirm').classList.remove('hidden'));
@@ -2250,6 +2585,7 @@ function renderProfile() {
       await supabase.auth.signOut();
       toast('Account deleted.');
     } catch (err) {
+      reportError(err);
       toast('Could not delete account: ' + err.message);
     }
   });
@@ -2261,6 +2597,18 @@ supabase.auth.getSession().then(({ data }) => {
     enterApp(data.session);
   }
 });
+
+// A referral link (?ref=CODE) pre-fills the signup form's code field and
+// switches straight to Sign Up — the code itself is still only ever
+// consumed at actual signup time (see the #authForm submit handler).
+(() => {
+  const refCode = new URLSearchParams(window.location.search).get('ref');
+  if (refCode) {
+    $('#referralCode').value = refCode.trim().toUpperCase();
+    setAuthMode('signup');
+    history.replaceState(null, '', window.location.pathname);
+  }
+})();
 </script>
 </body>
 </html>

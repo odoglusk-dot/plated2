@@ -10,7 +10,79 @@
 // place in the app allowed to write to that table (see reset-schema.sql):
 // RLS gives every user select-own but no insert/update policy at all.
 const crypto = require('crypto');
-const { jsonResponse } = require('./_shared');
+const { jsonResponse, captureError, callStripe } = require('./_shared');
+
+// Shared, idempotently-created 100%-off-once coupon used for every referral
+// reward — one Stripe object reused by everyone rather than minting a new
+// coupon per referral.
+const REFERRAL_COUPON_ID = 'referral-1-month-free';
+
+async function ensureReferralCoupon() {
+  try {
+    await callStripe(`coupons/${REFERRAL_COUPON_ID}`, { method: 'GET' });
+    return;
+  } catch (err) {
+    if (err.stripeStatus !== 404) throw err;
+  }
+  await callStripe('coupons', {
+    params: { id: REFERRAL_COUPON_ID, percent_off: '100', duration: 'once', name: 'Referral reward — 1 month free' },
+  });
+}
+
+// Only the referrer is rewarded (never the referred user), and only once
+// the referred user's trial actually converts to a real paid invoice —
+// detected here as a trialing->active transition via Stripe's
+// previous_attributes, which piggybacks on the customer.subscription.updated
+// event this webhook already handles (no new Stripe event subscription
+// needed). This ties the payout to actual revenue: a referred account that
+// never converts costs nothing.
+async function rewardReferrerIfConverted(stripeEvent, subscription, referredUserId) {
+  if (stripeEvent.type !== 'customer.subscription.updated') return;
+  if (stripeEvent.data?.previous_attributes?.status !== 'trialing' || subscription.status !== 'active') return;
+
+  const base = process.env.SUPABASE_URL;
+  const serviceHeaders = {
+    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    'content-type': 'application/json',
+  };
+
+  try {
+    const referralRes = await fetch(
+      `${base}/rest/v1/referrals?referred_user_id=eq.${referredUserId}&status=eq.pending&select=id,referrer_user_id`,
+      { headers: serviceHeaders }
+    );
+    if (!referralRes.ok) return;
+    const referral = (await referralRes.json())[0];
+    if (!referral) return; // this user wasn't referred, or was already rewarded
+
+    const referrerSubRes = await fetch(
+      `${base}/rest/v1/subscriptions?user_id=eq.${referral.referrer_user_id}&select=stripe_subscription_id`,
+      { headers: serviceHeaders }
+    );
+    if (!referrerSubRes.ok) return;
+    const referrerSub = (await referrerSubRes.json())[0];
+    // Referrer has no live Stripe subscription to discount (e.g. never
+    // subscribed themselves, or already canceled) — nothing to apply.
+    // Leaves the referral row 'pending' so it stays visible for a manual
+    // look rather than silently disappearing.
+    if (!referrerSub?.stripe_subscription_id) return;
+
+    await ensureReferralCoupon();
+    await callStripe(`subscriptions/${referrerSub.stripe_subscription_id}`, {
+      params: { coupon: REFERRAL_COUPON_ID },
+    });
+
+    await fetch(`${base}/rest/v1/referrals?id=eq.${referral.id}`, {
+      method: 'PATCH',
+      headers: serviceHeaders,
+      body: JSON.stringify({ status: 'rewarded', rewarded_at: new Date().toISOString() }),
+    });
+  } catch (err) {
+    // Bonus logic — must never affect the primary subscription upsert's response.
+    await captureError(err, { function: 'stripe-webhook:referral-reward', referredUserId });
+  }
+}
 
 // 5 minutes, matching Stripe's own recommended replay-attack tolerance.
 const SIGNATURE_TOLERANCE_SECONDS = 300;
@@ -109,9 +181,12 @@ exports.handler = async (event) => {
 
   if (!upsertRes.ok) {
     const detail = await upsertRes.text();
+    await captureError(new Error('Could not upsert subscription: ' + detail), { function: 'stripe-webhook', userId, eventType: stripeEvent.type });
     // Non-2xx tells Stripe to retry this delivery later.
     return jsonResponse(500, { error: 'Could not record subscription update.', detail });
   }
+
+  await rewardReferrerIfConverted(stripeEvent, subscription, userId);
 
   return jsonResponse(200, { received: true });
 };

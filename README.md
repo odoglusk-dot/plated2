@@ -172,6 +172,34 @@ renders for a signed-in user without an active trial or subscription.
 See `DEPLOYMENT.md` for more detail, including how to test the webhook
 locally with the Stripe CLI.
 
+## Other features (see DEPLOYMENT.md for full detail on each)
+
+- **Age gate** — signup asks "Are you 18 or older?"; answering under-18
+  reveals a parental-awareness explanation and a required consent checkbox
+  before the form can submit. Not a hard technical block — a logged,
+  good-faith checkpoint (`profiles.age_over_18` / `age_gate_shown_at` /
+  `parental_consent_at`).
+- **Referral program** — every user gets a shareable code
+  (`?ref=CODE` pre-fills it at signup); once a referred signup's trial
+  converts to paid, the *referrer* (not the referred user) gets a month
+  free via an automatically-applied Stripe coupon. See "Referral Program"
+  in `DEPLOYMENT.md`.
+- **Error monitoring** — Sentry, wired into both `index.html` and the
+  Netlify functions (hand-rolled envelope POST server-side, no SDK — see
+  "Error Monitoring" in `DEPLOYMENT.md`). Needs your own `SENTRY_DSN`.
+- **Email reminders** — optional daily nudge (Resend) for anyone who hasn't
+  logged food yet that day; on by default, one click to opt out in Profile.
+  Needs `RESEND_API_KEY` — see "Email Reminders" in `DEPLOYMENT.md`.
+- **Support** — Profile tab has a mailto "Contact Support" link
+  (`SUPPORT_EMAIL` constant near the top of `index.html`).
+- **Basic analytics** — signups/trials/conversions, no third-party tool,
+  just SQL against tables already here — see "Basic analytics" in
+  `DEPLOYMENT.md`.
+- **Testing access** — grant yourself (or anyone) free access by setting
+  `subscriptions.status = 'active'` directly in the Supabase dashboard;
+  there's no in-app way for a regular user to do this themselves (no
+  client-writable RLS policy on that table at all).
+
 ## Pre-launch checklist
 
 - [x] Terms of Service + Privacy Policy drafts (`TERMS_OF_SERVICE.md`,
@@ -183,14 +211,20 @@ locally with the Stripe CLI.
       `netlify/functions/delete-account.js` using the service-role key.
 - [x] Rate limiting scoped per `user_id`, not per browser.
 - [ ] Set a spend alert in the Anthropic console.
-- [ ] Wire up error monitoring (e.g. Sentry free tier) for both the
-      frontend and the Netlify functions.
+- [x] Error monitoring (Sentry) wired into both the frontend and the
+      Netlify functions — **you still need to create the Sentry project and
+      set `SENTRY_DSN`** in `index.html` and Netlify's environment.
 - [ ] Test on an actual phone browser before calling this launch-ready.
 - [x] Sign-up screen links the Terms and Privacy Policy with a consent
       checkbox required before account creation.
+- [x] Age gate at signup (soft checkpoint, logged — see "Other features" above).
 - [ ] Stripe: live-mode price + webhook endpoint configured (not just test
       mode), and a real `customer.subscription.created` event confirmed to
       land in the `subscriptions` table before taking real payments.
+- [ ] If using email reminders: Resend account created, sending domain
+      verified, `RESEND_API_KEY`/`RESEND_FROM_EMAIL` set.
+- [ ] `SUPPORT_EMAIL` in `index.html` changed from the placeholder to a
+      real address you actually read.
 
 ## Known content notes (intentional, don't "clean up")
 

@@ -9,15 +9,27 @@
 
 ### `profiles` — User identity & physical stats
 ```sql
-id                uuid primary key
-display_name      text
-age               int
-sex               text ('male' | 'female')
-height_cm         numeric
-activity_level    text ('sedentary' | 'light' | 'moderate' | 'active' | 'very_active')
-created_at        timestamptz
+id                    uuid primary key
+display_name          text
+age                   int
+sex                   text ('male' | 'female')
+height_cm             numeric
+activity_level        text ('sedentary' | 'light' | 'moderate' | 'active' | 'very_active')
+age_over_18           boolean
+age_gate_shown_at     timestamptz
+parental_consent_at   timestamptz
+referral_code         text unique
+email_reminders_opt_out boolean (default: false)
+created_at            timestamptz
 ```
-**Frontend reads/writes:** `id, display_name, age, sex, height_cm, activity_level`
+**Frontend reads/writes:** `id, display_name, age, sex, height_cm, activity_level, age_over_18, age_gate_shown_at, parental_consent_at, referral_code, email_reminders_opt_out`
+
+`age_over_18`/`age_gate_shown_at`/`parental_consent_at` are set once at
+signup (see the `#authForm` submit handler and `ensureProfileAndGoals()` in
+`index.html`) — a soft, logged checkpoint, not an enforced technical block.
+`referral_code` is generated client-side at signup (`generateReferralCode()`)
+with a retry-on-collision loop; older accounts get one lazily via
+`ensureReferralCode()` the first time they open the Profile tab.
 
 ---
 
@@ -28,10 +40,17 @@ calories    int (default: 2200)
 protein_g   int (default: 150)       ← WITH _g suffix
 carbs_g     int (default: 250)       ← WITH _g suffix
 fat_g       int (default: 70)        ← WITH _g suffix
+goal_mode   text (default: 'maintain') ('lose' | 'maintain' | 'gain')
 updated_at  timestamptz
 ```
-**Frontend reads/writes:** `user_id, calories, protein_g, carbs_g, fat_g, updated_at`  
+**Frontend reads/writes:** `user_id, calories, protein_g, carbs_g, fat_g, goal_mode, updated_at`  
 ⚠️ **CRITICAL:** All macros use `_g` suffix. If your DB has `protein`, `carbs`, `fat` (without `_g`), goals won't display properly.
+
+`goal_mode` drives two things in `index.html`: the calculator's macro split
+(`MACRO_SPLIT_BY_GOAL` — protein g/lb and fat% both shift by goal) and the
+dashboard's soft calorie-range shading (`calorieRangeForGoal()`) — a muted
+ring color when today's total falls outside a healthy zone for that goal,
+never a hard alert.
 
 ---
 
@@ -166,6 +185,33 @@ webhook events; the app itself never writes to this table.
 
 ---
 
+### `referrals` — Referral attribution + reward status
+```sql
+id                  uuid primary key default gen_random_uuid()
+referrer_user_id    uuid
+referred_user_id    uuid unique
+referral_code       text
+status              text (default: 'pending', check in pending/rewarded)
+created_at          timestamptz
+rewarded_at         timestamptz
+```
+**Backend writes:** `netlify/functions/redeem-referral.js` (creates the row
+at signup) and `netlify/functions/stripe-webhook.js` (marks it `rewarded`),
+both using `SUPABASE_SERVICE_ROLE_KEY`.
+**Frontend reads:** `status` — RLS grants select-own-as-referrer only
+(`auth.uid() = referrer_user_id`); there is no insert/update policy for the
+client at all.
+
+One row per *referred* user, ever (`referred_user_id` is unique — one
+attribution per account, forever). `status` flips from `pending` to
+`rewarded` only when `stripe-webhook.js` sees the referred user's
+subscription transition from `trialing` to `active` (a real paid
+conversion) — see "Referral Program" in `DEPLOYMENT.md`. Only the referrer
+is ever rewarded; the referred user gets nothing extra beyond the normal
+3-day trial.
+
+---
+
 ## Naming Rules — CONSISTENT across ALL tables
 
 | Type | Naming | Example | Notes |
@@ -251,3 +297,8 @@ Either way, if you already have a live database from before the paywall was
 added, also run **`supabase-schema-phase2-paywall.sql`** — it only adds the
 `subscriptions` table and is safe to run without resetting anything. Fresh
 installs via `reset-schema.sql` get it automatically.
+
+Same story for everything after the paywall — age gate, referrals,
+`goal_mode`, email reminder opt-out: run **`supabase-schema-phase3-improvements.sql`**
+against an existing live database (adds columns + the `referrals` table
+only, nothing dropped); fresh installs get it all from `reset-schema.sql`.

@@ -15,6 +15,11 @@ create table profiles (
   activity_level text check (
     activity_level in ('sedentary', 'light', 'moderate', 'active', 'very_active')
   ),
+  age_over_18 boolean,
+  age_gate_shown_at timestamptz,
+  parental_consent_at timestamptz,
+  referral_code text unique,
+  email_reminders_opt_out boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -35,6 +40,7 @@ create table goals (
   protein_g int not null default 150,
   carbs_g int not null default 250,
   fat_g int not null default 70,
+  goal_mode text not null default 'maintain' check (goal_mode in ('lose', 'maintain', 'gain')),
   updated_at timestamptz not null default now()
 );
 

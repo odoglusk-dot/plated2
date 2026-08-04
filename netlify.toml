@@ -5,6 +5,13 @@
 [functions]
   node_bundler = "esbuild"
 
+# Runs once/day at a fixed UTC time (there's no per-user timezone stored,
+# so this is an approximation of "evening" — see the comment in
+# send-reminder-emails.js). 01:00 UTC lands in the evening for US timezones;
+# adjust to fit your actual user base.
+[functions."send-reminder-emails"]
+  schedule = "0 1 * * *"
+
 [[headers]]
   for = "/plated/*"
   [headers.values]

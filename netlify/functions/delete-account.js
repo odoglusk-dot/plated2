@@ -6,7 +6,7 @@
 // Every table's foreign key is `on delete cascade`, so this one call removes
 // the user's profile/goals/food_logs/favorites/weight_log/supplement_logs
 // along with the auth record itself.
-const { jsonResponse, verifyUser } = require('./_shared');
+const { jsonResponse, verifyUser, captureError } = require('./_shared');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -33,6 +33,7 @@ exports.handler = async (event) => {
 
   if (!res.ok) {
     const detail = await res.text();
+    await captureError(new Error('Could not delete account: ' + detail), { function: 'delete-account', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not delete account.', detail });
   }
 
