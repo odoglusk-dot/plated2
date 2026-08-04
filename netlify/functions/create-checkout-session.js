@@ -65,8 +65,16 @@ exports.handler = async (event) => {
         'line_items[0][price]': process.env.STRIPE_PRICE_ID,
         'line_items[0][quantity]': '1',
         payment_method_collection: 'always',
+        // stripe-webhook.js reads metadata off the SUBSCRIPTION object (via
+        // customer.subscription.* events), so this is the one that actually
+        // matters for writing to `subscriptions`.
         'subscription_data[trial_period_days]': '3',
         'subscription_data[metadata][supabase_user_id]': auth.user.id,
+        // Also set on the Checkout Session itself — checkout.session.completed
+        // isn't currently handled by stripe-webhook.js, but if that ever
+        // changes, or you inspect this event directly while debugging, the
+        // metadata will actually be there instead of empty.
+        'metadata[supabase_user_id]': auth.user.id,
         success_url: `${baseUrl}/?checkout=success`,
         cancel_url: `${baseUrl}/?checkout=cancel`,
       },
