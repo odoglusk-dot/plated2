@@ -238,6 +238,13 @@ below) if you'd rather not split them.
    ones with an explicit `try/catch` around `captureError()` — so a bug in
    a code path nobody thought to wrap still gets reported instead of silently
    producing a raw 500.
+6. To confirm the functions side is actually reporting, hit
+   `sentry-test.js` directly — visit `<your-domain>/.netlify/functions/sentry-test`
+   in a browser or `curl` it. No auth, no DB writes, no external API calls;
+   it just throws a caught error and reports it, and tells you plainly if
+   `SENTRY_DSN` isn't set instead of a silent no-op. Safe to leave in place
+   or delete once you've confirmed the test event lands in your functions
+   Sentry project.
 
 Only failures judged operationally worth knowing about are explicitly
 reported via `captureError()`/`reportError()` (AI calls, checkout, account
