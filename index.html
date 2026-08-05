@@ -1301,6 +1301,10 @@ supabase.auth.onAuthStateChange((event, session) => {
   }
   if (session) {
     enterApp(session);
+  } else if (event === 'INITIAL_SESSION') {
+    // Fires once on page load for every anonymous visitor, session-less by
+    // definition — leave the landing page showing (its default state)
+    // instead of jumping straight to the auth screen.
   } else {
     $('#app').classList.add('hidden');
     $('#paywallScreen').classList.add('hidden');
