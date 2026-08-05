@@ -147,6 +147,38 @@
     display: flex; align-items: center; justify-content: center; border-radius: 6px; }
   .password-toggle:hover { color: var(--text); }
 
+  /* ── Landing page (public, pre-signup) ───────────────────────────── */
+  .landing-nav { display: flex; align-items: center; justify-content: space-between; padding: 1.1rem 1.5rem; max-width: 1100px; margin: 0 auto; }
+  .landing-hero { text-align: center; padding: 2.5rem 1.5rem 3rem; max-width: 720px; margin: 0 auto; }
+  .landing-hero .display { font-size: 3.4rem; color: var(--accent); line-height: 1; margin-bottom: 0.75rem; }
+  .landing-hero .pitch { font-size: 1.15rem; color: var(--text); margin-bottom: 0.5rem; line-height: 1.5; }
+  .landing-hero .subpitch { color: var(--text-dim); font-size: 0.95rem; margin-bottom: 1.75rem; }
+  .landing-cta-row { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.75rem; }
+  .landing-cta-row .btn { padding: 0.8rem 1.6rem; font-size: 1rem; }
+  .landing-price-note { color: var(--text-dim); font-size: 0.82rem; }
+
+  .landing-section { max-width: 1100px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+  .landing-section h2 { text-align: center; font-size: 2rem; margin-bottom: 2rem; }
+
+  .screenshot-row { display: flex; gap: 1.25rem; justify-content: center; flex-wrap: wrap; }
+  .screenshot-card { flex: 1 1 260px; max-width: 300px; text-align: center; }
+  .screenshot-card img { width: 100%; border-radius: 14px; border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0,0,0,0.12); }
+  .screenshot-card .caption { margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-dim); }
+
+  .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1.25rem; }
+  .feature-card { text-align: left; }
+  .feature-card .icon { font-size: 1.8rem; margin-bottom: 0.5rem; }
+  .feature-card h3 { font-size: 1.1rem; margin: 0 0 0.4rem; }
+  .feature-card p { color: var(--text-dim); font-size: 0.88rem; margin: 0; line-height: 1.5; }
+
+  .landing-pricing-card { max-width: 420px; margin: 0 auto; text-align: center; }
+  .landing-footer-cta { text-align: center; padding: 1rem 1.5rem 3rem; }
+
+  @media (max-width: 480px) {
+    .landing-hero .display { font-size: 2.6rem; }
+    .landing-hero .pitch { font-size: 1.02rem; }
+  }
+
   /* ── App shell ────────────────────────────────────────────────── */
   .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.25rem;
     border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 20; }
@@ -236,7 +268,95 @@
 </head>
 <body>
 
-<div id="authScreen">
+<div id="landingScreen">
+  <nav class="landing-nav">
+    <div class="logo">PLATED</div>
+    <button class="btn" id="landingLogInBtn">Log In</button>
+  </nav>
+
+  <div class="landing-hero">
+    <div class="display">PLATED</div>
+    <p class="pitch">Macro and supplement tracking built for training days — describe or snap a photo of what you ate, and AI fills in the macros.</p>
+    <p class="subpitch">A goal calculator that checks your pace is actually safe, daily progress rings, supplement tracking, and a data assistant that answers questions about your own history.</p>
+    <div class="landing-cta-row">
+      <button class="btn btn-primary" id="landingStartTrialBtn">Start 3-Day Free Trial</button>
+      <button class="btn" id="landingLogInBtn2">Log In</button>
+    </div>
+    <p class="landing-price-note">$4.99/month after your trial. Cancel anytime.</p>
+  </div>
+
+  <div class="landing-section">
+    <div class="screenshot-row">
+      <div class="screenshot-card">
+        <img src="screenshot-dashboard.png" alt="Plated dashboard showing daily calorie, protein, carb, and fat progress rings" loading="lazy">
+        <p class="caption">Today's progress, at a glance</p>
+      </div>
+      <div class="screenshot-card">
+        <img src="screenshot-log.png" alt="Plated AI food logging screen estimating macros from a text description" loading="lazy">
+        <p class="caption">Describe a meal — AI estimates the macros</p>
+      </div>
+      <div class="screenshot-card">
+        <img src="screenshot-calculator.png" alt="Plated goal calculator with a target weight, target date, and calculated calorie and macro targets" loading="lazy">
+        <p class="caption">A calculator that checks your pace is safe</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="landing-section">
+    <h2>What's inside</h2>
+    <div class="feature-grid">
+      <div class="card feature-card">
+        <div class="icon">🍽️</div>
+        <h3>AI Food Logging</h3>
+        <p>Type a description or snap a photo — AI estimates calories, protein, carbs, and fat in seconds.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">🎯</div>
+        <h3>Smart Goal Calculator</h3>
+        <p>Set a target weight and date — get a personalized calorie and macro plan, checked against a safe rate of change.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">📊</div>
+        <h3>Daily Progress Rings</h3>
+        <p>Calories, protein, carbs, and fat at a glance, with a healthy-range indicator instead of a rigid number.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">💊</div>
+        <h3>Supplement Tracking</h3>
+        <p>Log your stack and reference dosage and timing notes for common vitamins, minerals, and supplements.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">📈</div>
+        <h3>Weight Trend Chart</h3>
+        <p>Log your weight and see the trend over time, not just day-to-day noise.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">💬</div>
+        <h3>Ask Your Data</h3>
+        <p>Ask plain-language questions about your own logged history — grounded only in what you've actually logged.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="landing-section">
+    <div class="card landing-pricing-card">
+      <h3 style="margin-top:0;">Simple pricing</h3>
+      <div class="paywall-price">$4.99<span class="unit"> / month</span></div>
+      <p class="muted">3-day free trial, cancel anytime from inside the app.</p>
+    </div>
+  </div>
+
+  <div class="landing-footer-cta">
+    <button class="btn btn-primary" id="landingStartTrialBtn2">Start 3-Day Free Trial</button>
+  </div>
+
+  <footer class="legal">
+    Plated is not a medical device and does not provide medical advice.
+    <a href="TERMS_OF_SERVICE.md">Terms</a> · <a href="PRIVACY_POLICY.md">Privacy</a>
+  </footer>
+</div>
+
+<div id="authScreen" class="hidden">
   <div class="auth-box">
     <div class="auth-logo">PLATED</div>
     <div class="auth-tagline">Macro &amp; supplement tracking, built for training days.</div>
@@ -1172,6 +1292,7 @@ supabase.auth.onAuthStateChange((event, session) => {
     // link — don't drop the user straight into the app, make them set a new
     // password first.
     isPasswordRecovery = true;
+    $('#landingScreen').classList.add('hidden');
     $('#authScreen').classList.remove('hidden');
     $('#app').classList.add('hidden');
     $('#paywallScreen').classList.add('hidden');
@@ -1183,6 +1304,7 @@ supabase.auth.onAuthStateChange((event, session) => {
   } else {
     $('#app').classList.add('hidden');
     $('#paywallScreen').classList.add('hidden');
+    $('#landingScreen').classList.add('hidden');
     $('#authScreen').classList.remove('hidden');
   }
 });
@@ -1263,6 +1385,7 @@ function renderPaywallScreen(sub) {
 async function enterApp(session) {
   state.session = session;
   state.user = session.user;
+  $('#landingScreen').classList.add('hidden');
   $('#authScreen').classList.add('hidden');
 
   try {
@@ -2344,6 +2467,14 @@ const MACRO_SPLIT_BY_GOAL = {
   gain: { proteinPerLb: 0.85, fatPercent: 0.20 },
 };
 
+// Simple bounded safety check for the calculator's target-weight/target-date
+// timeline, not open-ended advice: ~0.5-1% of bodyweight per week is the
+// general evidence-based range for adults; capped tighter for under-18s
+// since they're still growing.
+function maxSafeWeeklyRatePercent(age) {
+  return age < 18 ? 0.5 : 1.0;
+}
+
 // Recomputes BMR from whatever profile/body-stats data is on hand (used to
 // re-derive the "lose" calorie range's safety floor outside the calculator
 // itself, e.g. on the dashboard). Returns null if the inputs aren't there
@@ -2390,21 +2521,14 @@ function renderProfile() {
         <div class="field"><label>Carbs (g)</label><input class="input mono" id="goal_carb" type="number" value="${round(state.goals.carbs_g)}"></div>
         <div class="field"><label>Fat (g)</label><input class="input mono" id="goal_fat" type="number" value="${round(state.goals.fat_g)}"></div>
       </div>
-      <div class="field">
-        <label>Goal type</label>
-        <select id="goal_mode">
-          <option value="lose" ${state.goals.goal_mode === 'lose' ? 'selected' : ''}>Lose weight</option>
-          <option value="maintain" ${!state.goals.goal_mode || state.goals.goal_mode === 'maintain' ? 'selected' : ''}>Maintain weight</option>
-          <option value="gain" ${state.goals.goal_mode === 'gain' ? 'selected' : ''}>Gain weight</option>
-        </select>
-        <p class="muted" style="margin-top:0.3rem;">Sets the healthy calorie range shown on the Dashboard ring — doesn't change the numbers above.</p>
-      </div>
       <button class="btn btn-primary" id="goal_save">Save Goals</button>
     </div>
 
     <div class="card">
       <h3>Goal Calculator</h3>
-      <p class="muted">Mifflin-St Jeor based estimate. Calorie target is never recommended below your resting metabolic rate or 1500 kcal, whichever is higher.</p>
+      <p class="muted">Mifflin-St Jeor based estimate. Pick a target weight and date — the pace that implies is checked
+        against a safe range, and calorie target is never recommended below your resting metabolic rate or 1500 kcal,
+        whichever is higher.</p>
       <div class="row">
         <div class="field"><label>Age</label><input class="input mono" id="calc_age" type="number" value="${p.age || ''}"></div>
         <div class="field"><label>Sex</label>
@@ -2429,7 +2553,11 @@ function renderProfile() {
             <option value="very_active" ${p.activity_level === 'very_active' ? 'selected' : ''}>Very Active (2x/day training)</option>
           </select>
         </div>
-        <div class="field"><label>Goal Weight (lb)</label><input class="input mono" id="calc_goal_weight" type="number" placeholder="e.g. 185"></div>
+        <div class="field"><label>Target Weight (lb)</label><input class="input mono" id="calc_goal_weight" type="number" placeholder="e.g. 185"></div>
+      </div>
+      <div class="field">
+        <label>Target Date</label>
+        <input class="input mono" id="calc_target_date" type="date" min="${new Date(Date.now() + 86400000).toISOString().slice(0, 10)}">
       </div>
       <button class="btn" id="calc_run">Calculate</button>
       <div id="calc_result" style="margin-top:1rem;"></div>
@@ -2508,7 +2636,9 @@ function renderProfile() {
       protein_g: Number($('#goal_pro').value) || 0,
       carbs_g: Number($('#goal_carb').value) || 0,
       fat_g: Number($('#goal_fat').value) || 0,
-      goal_mode: $('#goal_mode').value,
+      // goal_mode intentionally omitted — merge-duplicates leaves it
+      // untouched, so manually editing goals here doesn't clobber whatever
+      // the calculator last derived for the Dashboard's calorie-range shading.
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('goals').upsert(goals);
@@ -2525,11 +2655,22 @@ function renderProfile() {
     const heightIn = Number($('#calc_height_in').value) || 0;
     const totalHeightIn = heightFt * 12 + heightIn;
     const weightLb = Number($('#calc_weight').value);
-    const goalWeightLb = Number($('#calc_goal_weight').value);
+    const targetWeightLb = Number($('#calc_goal_weight').value);
+    const targetDateStr = $('#calc_target_date').value;
     const activity = $('#calc_activity').value;
 
-    if (!age || totalHeightIn <= 0 || !weightLb || !goalWeightLb) {
-      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Fill in age, height, weight, and goal weight first.</p>`;
+    if (!age || totalHeightIn <= 0 || !weightLb || !targetWeightLb || !targetDateStr) {
+      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Fill in age, height, weight, target weight, and target date first.</p>`;
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const targetDate = new Date(`${targetDateStr}T00:00:00`);
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const weeksUntil = (targetDate - today) / msPerWeek;
+    if (weeksUntil <= 0) {
+      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Target date must be in the future.</p>`;
       return;
     }
 
@@ -2539,16 +2680,47 @@ function renderProfile() {
       ? 10 * weightKg + 6.25 * heightCm - 5 * age + 5
       : 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
     const tdee = bmr * ACTIVITY_MULTIPLIERS[activity];
-    const weightDiff = goalWeightLb - weightLb;
-    const adjusted = Math.abs(weightDiff) < 2 ? tdee : weightDiff > 0 ? tdee + 300 : tdee - 500;
+
+    // Implied pace from the timeline, not a dropdown — this is the whole
+    // point of the redesign: derive the rate from what the user actually
+    // asked for (this weight, by this date) instead of a flat assumption.
+    const weightDiffLb = targetWeightLb - weightLb;
+    const weeklyRateLb = weightDiffLb / weeksUntil;
+    const weeklyRatePercent = (weeklyRateLb / weightLb) * 100;
+    const maxSafePercent = maxSafeWeeklyRatePercent(age);
+
+    if (Math.abs(weeklyRatePercent) > maxSafePercent) {
+      // Simple bounded check, same spirit as the calorie safety floor: don't
+      // compute targets for an unsafe pace, just explain why and point at a
+      // realistic date for the same target weight.
+      const minWeeksNeeded = Math.abs(weightDiffLb) / ((maxSafePercent / 100) * weightLb);
+      const earliestDate = new Date(today.getTime() + Math.ceil(minWeeksNeeded) * msPerWeek);
+      const direction = weightDiffLb < 0 ? 'Losing' : 'Gaining';
+      $('#calc_result').innerHTML = `
+        <p class="muted" style="color:var(--danger);">
+          ${direction} ${Math.abs(weightDiffLb).toFixed(1)} lb by ${targetDate.toLocaleDateString()} works out to about
+          ${Math.abs(weeklyRatePercent).toFixed(2)}% of your bodyweight per week — faster than the recommended
+          ${maxSafePercent}%/week${age < 18 ? ' limit for under 18' : ''}.
+        </p>
+        <p class="muted">At a safe pace, the earliest realistic date for ${targetWeightLb} lb is around
+          <strong>${earliestDate.toLocaleDateString()}</strong> (about ${Math.ceil(minWeeksNeeded)} weeks out).
+          Try picking a later target date.</p>
+      `;
+      return;
+    }
+
+    // 1 lb of body weight is ~3500 kcal, so a weekly rate implies this daily
+    // calorie adjustment — replaces the old flat +300/-500 guess with
+    // whatever the user's own timeline actually requires.
+    const dailyAdjustment = weeklyRateLb * 500;
+    const adjusted = tdee + dailyAdjustment;
 
     // Safety floor: never recommend below resting metabolic rate or 1500, whichever is higher.
     const safetyFloor = Math.max(bmr, 1500);
     const targetCalories = Math.round(Math.max(adjusted, safetyFloor) / 10) * 10;
 
-    const goalMode = Math.abs(weightDiff) < 2 ? 'maintain' : weightDiff > 0 ? 'gain' : 'lose';
+    const goalMode = weeklyRateLb < -0.05 ? 'lose' : weeklyRateLb > 0.05 ? 'gain' : 'maintain';
     const goalModeLabel = goalMode === 'maintain' ? 'Maintain weight' : goalMode === 'gain' ? 'Gain weight' : 'Lose weight';
-    const weightDiffAbs = Math.abs(weightDiff).toFixed(1);
 
     const split = MACRO_SPLIT_BY_GOAL[goalMode];
     const proteinG = Math.round(weightLb * split.proteinPerLb);
@@ -2568,7 +2740,7 @@ function renderProfile() {
         <span class="badge">C ${carbsG}g</span>
         <span class="badge">F ${fatG}g</span>
       </div>
-      <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal · Goal: ${goalModeLabel} (${Math.abs(weightDiff) >= 2 ? weightDiff > 0 ? '+' : '−' : ''}${weightDiffAbs} lb)${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
+      <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal · Goal: ${goalModeLabel} (${Math.abs(weeklyRateLb).toFixed(2)} lb/week, ${Math.abs(weeklyRatePercent).toFixed(2)}% bodyweight/week)${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
       <p class="muted">Healthy range: ${rangeLabel}. Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
       <button class="btn btn-primary" id="calc_apply" style="margin-top:0.5rem;">Apply to My Goals</button>
     `;
@@ -2654,11 +2826,25 @@ supabase.auth.getSession().then(({ data }) => {
 (() => {
   const refCode = new URLSearchParams(window.location.search).get('ref');
   if (refCode) {
+    $('#landingScreen').classList.add('hidden');
+    $('#authScreen').classList.remove('hidden');
     $('#referralCode').value = refCode.trim().toUpperCase();
     setAuthMode('signup');
     history.replaceState(null, '', window.location.pathname);
   }
 })();
+
+// Landing page CTAs hand off to the existing auth screen/modes rather than
+// duplicating the sign-in/sign-up form.
+function goToAuthFromLanding(mode) {
+  $('#landingScreen').classList.add('hidden');
+  $('#authScreen').classList.remove('hidden');
+  setAuthMode(mode);
+}
+$('#landingLogInBtn').addEventListener('click', () => goToAuthFromLanding('signin'));
+$('#landingLogInBtn2').addEventListener('click', () => goToAuthFromLanding('signin'));
+$('#landingStartTrialBtn').addEventListener('click', () => goToAuthFromLanding('signup'));
+$('#landingStartTrialBtn2').addEventListener('click', () => goToAuthFromLanding('signup'));
 </script>
 </body>
 </html>
