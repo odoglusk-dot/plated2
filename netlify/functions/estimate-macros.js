@@ -2,7 +2,7 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
 // Checks food_cache first; if hit, returns immediately without using API budget.
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, checkFoodCache, cacheFood, captureError, DAILY_AI_LIMIT } = require('./_shared');
+const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Plated, a macro-tracking app.
 Given a short description of a food or meal, estimate its nutritional content.
@@ -12,7 +12,7 @@ If the description omits quantity, assume one standard serving and fold that ass
 (e.g. "Grilled chicken breast (1, ~6oz)"). All numeric fields are grams or kcal with no units attached.
 Use standard USDA-style nutrition data as your basis for the estimate.`;
 
-exports.handler = async (event) => {
+exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
   }
@@ -80,4 +80,4 @@ exports.handler = async (event) => {
     await captureError(err, { function: 'estimate-macros', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not estimate macros right now.', detail: String(err.message || err) });
   }
-};
+}, 'estimate-macros');

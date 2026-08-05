@@ -9,9 +9,9 @@
 // the `subscriptions` table, driven by Stripe's subscription lifecycle
 // events, so this function can't drift out of sync with what Stripe thinks
 // the subscription state actually is.
-const { jsonResponse, verifyUser, captureError, callStripe, getAppBaseUrl } = require('./_shared');
+const { jsonResponse, verifyUser, captureError, withErrorReporting, callStripe, getAppBaseUrl } = require('./_shared');
 
-exports.handler = async (event) => {
+exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
   }
@@ -85,4 +85,4 @@ exports.handler = async (event) => {
     await captureError(err, { function: 'create-checkout-session', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not start checkout.', detail: String(err.message || err) });
   }
-};
+}, 'create-checkout-session');

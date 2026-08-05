@@ -6,9 +6,9 @@
 // Every table's foreign key is `on delete cascade`, so this one call removes
 // the user's profile/goals/food_logs/favorites/weight_log/supplement_logs
 // along with the auth record itself.
-const { jsonResponse, verifyUser, captureError } = require('./_shared');
+const { jsonResponse, verifyUser, captureError, withErrorReporting } = require('./_shared');
 
-exports.handler = async (event) => {
+exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
   }
@@ -38,4 +38,4 @@ exports.handler = async (event) => {
   }
 
   return jsonResponse(200, { deleted: true });
-};
+}, 'delete-account');

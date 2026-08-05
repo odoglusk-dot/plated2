@@ -2,7 +2,7 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
 // Checks food_cache first using a hash of image + note; if hit, returns immediately without using API budget.
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, DAILY_AI_LIMIT } = require('./_shared');
+const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Plated, a macro-tracking app.
 You will be shown a photo of a food or meal. Estimate its nutritional content from what's visible —
@@ -15,7 +15,7 @@ All numeric fields are grams or kcal with no units attached.`;
 
 const ALLOWED_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
-exports.handler = async (event) => {
+exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
   }
@@ -119,4 +119,4 @@ exports.handler = async (event) => {
     await captureError(err, { function: 'estimate-macros-photo', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not estimate macros from that photo.', detail: String(err.message || err) });
   }
-};
+}, 'estimate-macros-photo');

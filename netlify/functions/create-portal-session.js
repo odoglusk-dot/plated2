@@ -10,9 +10,9 @@
 // DEPLOYMENT.md, including the "cancel immediately vs. at period end"
 // toggle, which lives entirely in that dashboard setting, not in this
 // function or in any API parameter it sends.
-const { jsonResponse, verifyUser, captureError, callStripe, getAppBaseUrl } = require('./_shared');
+const { jsonResponse, verifyUser, captureError, withErrorReporting, callStripe, getAppBaseUrl } = require('./_shared');
 
-exports.handler = async (event) => {
+exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
   }
@@ -56,4 +56,4 @@ exports.handler = async (event) => {
     await captureError(err, { function: 'create-portal-session', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not open billing portal.', detail: String(err.message || err) });
   }
-};
+}, 'create-portal-session');

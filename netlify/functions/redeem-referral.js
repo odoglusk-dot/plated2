@@ -7,9 +7,9 @@
 // reward (one month free for the referrer) doesn't happen here — it fires
 // later, from stripe-webhook.js, only once the referred user's trial
 // actually converts to a paid subscription.
-const { jsonResponse, verifyUser, captureError } = require('./_shared');
+const { jsonResponse, verifyUser, captureError, withErrorReporting } = require('./_shared');
 
-exports.handler = async (event) => {
+exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
   }
@@ -73,4 +73,4 @@ exports.handler = async (event) => {
     await captureError(err, { function: 'redeem-referral', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not process referral code.', detail: String(err.message || err) });
   }
-};
+}, 'redeem-referral');

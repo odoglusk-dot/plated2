@@ -214,24 +214,38 @@ order by created_at desc;
 
 ### Error Monitoring (Sentry)
 
-1. Create a free account at [sentry.io](https://sentry.io) and a new
-   JavaScript (browser) project — one project covers both the frontend and
-   the Netlify functions.
-2. Copy its DSN (Project Settings → Client Keys), and:
-   - Paste it into the `SENTRY_DSN` constant near the top of `index.html`
-     (it's a public identifier, safe to ship client-side — same as the
-     Supabase anon key already there).
-   - Set the same value as the `SENTRY_DSN` environment variable in Netlify,
-     for the functions side (`_shared.js`'s `captureError()`).
-3. That's it — no SDK/build step on the functions side (a hand-rolled
-   envelope POST, to keep this project dependency-free); the frontend loads
-   Sentry's official browser SDK from their CDN. Leaving `SENTRY_DSN` blank
-   in either place just no-ops it.
+Two separate Sentry projects are used — one for the frontend, one for the
+Netlify functions — so client and server errors don't land in the same
+stream. A single project also works fine (just reuse its DSN in both spots
+below) if you'd rather not split them.
 
-Only failures judged operationally worth knowing about are reported (AI
-calls, checkout, account deletion, webhook processing) — routine input
-validation (wrong password, "type DELETE to confirm") isn't, to keep the
-signal-to-noise ratio sane.
+1. Create a free account at [sentry.io](https://sentry.io) and one **browser
+   JavaScript** project (frontend) plus one **Node** project (functions).
+2. Frontend: copy the browser project's DSN (Project Settings → Client Keys)
+   and paste it into the `SENTRY_DSN` constant near the top of `index.html`
+   (it's a public identifier, safe to ship client-side — same as the
+   Supabase anon key already there).
+3. Functions: copy the Node project's DSN and set it as the `SENTRY_DSN`
+   environment variable in Netlify (Site settings → Environment variables) —
+   consumed by `_shared.js`'s `captureError()`. Never put this one in
+   `index.html` or any other client-facing code.
+4. That's it — no SDK/build step on the functions side (a hand-rolled
+   envelope POST, to keep this project dependency-free); the frontend loads
+   Sentry's official browser SDK from their CDN. Leaving either `SENTRY_DSN`
+   blank just no-ops that side.
+5. Every function handler is wrapped in `withErrorReporting()` (`_shared.js`),
+   which is a backstop that reports ANY uncaught exception — not just the
+   ones with an explicit `try/catch` around `captureError()` — so a bug in
+   a code path nobody thought to wrap still gets reported instead of silently
+   producing a raw 500.
+
+Only failures judged operationally worth knowing about are explicitly
+reported via `captureError()`/`reportError()` (AI calls, checkout, account
+deletion, webhook processing) — routine input validation (wrong password,
+"type DELETE to confirm") isn't, to keep the signal-to-noise ratio sane.
+Anything else that throws unexpectedly is still caught by the safety nets
+above: `withErrorReporting()` on the functions side, and Sentry's automatic
+`window.onerror`/`unhandledrejection` capture on the frontend side.
 
 ### Email Reminders (Resend)
 

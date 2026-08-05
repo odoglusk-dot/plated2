@@ -8,7 +8,7 @@
 // rather than per-user local "evening", since there's no per-user timezone
 // stored anywhere in the app. Good enough for "something simple," not
 // pretending to be more precise than it is.
-const { captureError } = require('./_shared');
+const { captureError, withErrorReporting } = require('./_shared');
 
 async function listAllUsers() {
   const users = [];
@@ -34,7 +34,7 @@ async function listAllUsers() {
   return users;
 }
 
-exports.handler = async () => {
+exports.handler = withErrorReporting(async () => {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.RESEND_API_KEY) {
     // Not configured yet — a no-op, not an error worth alerting on.
     return { statusCode: 200, body: 'Reminder emails not configured; skipping.' };
@@ -90,4 +90,4 @@ exports.handler = async () => {
     await captureError(err, { function: 'send-reminder-emails' });
     return { statusCode: 500, body: 'Error sending reminder emails.' };
   }
-};
+}, 'send-reminder-emails');

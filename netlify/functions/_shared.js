@@ -106,6 +106,22 @@ async function callStripe(path, { method = 'POST', params } = {}) {
   return data;
 }
 
+// Wraps a handler so ANY uncaught exception — including ones from code paths
+// that don't have their own try/catch, which is a bug, not a design choice —
+// still gets reported to Sentry before the client gets a response. Handlers
+// keep their own try/catch blocks for cases that want a specific status code
+// or a friendlier error message; this is the backstop for everything else.
+function withErrorReporting(fn, functionName) {
+  return async (event, context) => {
+    try {
+      return await fn(event, context);
+    } catch (err) {
+      await captureError(err, { function: functionName });
+      return jsonResponse(500, { error: 'Something went wrong. Please try again.' });
+    }
+  };
+}
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
@@ -355,6 +371,7 @@ async function cacheFood(description, { food_name, calories, protein_g, carbs_g,
 module.exports = {
   DAILY_AI_LIMIT,
   captureError,
+  withErrorReporting,
   callStripe,
   getAppBaseUrl,
   jsonResponse,

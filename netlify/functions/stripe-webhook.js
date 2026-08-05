@@ -10,7 +10,7 @@
 // place in the app allowed to write to that table (see reset-schema.sql):
 // RLS gives every user select-own but no insert/update policy at all.
 const crypto = require('crypto');
-const { jsonResponse, captureError, callStripe } = require('./_shared');
+const { jsonResponse, captureError, withErrorReporting, callStripe } = require('./_shared');
 
 // Shared, idempotently-created 100%-off-once coupon used for every referral
 // reward — one Stripe object reused by everyone rather than minting a new
@@ -117,7 +117,7 @@ const SUBSCRIPTION_EVENTS = new Set([
   'customer.subscription.deleted',
 ]);
 
-exports.handler = async (event) => {
+exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
   }
@@ -198,4 +198,4 @@ exports.handler = async (event) => {
   await rewardReferrerIfConverted(stripeEvent, subscription, userId);
 
   return jsonResponse(200, { received: true });
-};
+}, 'stripe-webhook');

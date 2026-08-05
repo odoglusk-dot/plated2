@@ -10,7 +10,7 @@
 // query patterns for food_logs/goals/weight_log/supplement_logs in place for
 // the Dashboard/History tabs — reusing them here avoids a second, parallel
 // data-access path server-side.
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, captureError } = require('./_shared');
+const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, captureError, withErrorReporting } = require('./_shared');
 
 const SYSTEM_PROMPT = (dataSummary) => `You are Plated's data assistant. Answer the user's question about
 their own logged nutrition/supplement/weight history using ONLY the summary below — never invent numbers
@@ -21,7 +21,7 @@ If the summary doesn't contain enough information to answer, say so plainly inst
 DATA SUMMARY:
 ${dataSummary}`;
 
-exports.handler = async (event) => {
+exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
   }
@@ -57,4 +57,4 @@ exports.handler = async (event) => {
     await captureError(err, { function: 'ask-data', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not get an answer right now.', detail: String(err.message || err) });
   }
-};
+}, 'ask-data');
