@@ -72,7 +72,7 @@ canceled.
 ### 7.3 Minors and unauthorized subscriptions
 
 If a parent or guardian discovers that a minor subscribed without their
-knowledge or consent, contact support@example.com to request cancellation
+knowledge or consent, contact odoglusk+platedsupport@gmail.com to request cancellation
 and a refund for the current billing period. We handle these directly and
 promptly — please reach out to us **before** disputing the charge with your
 bank or card issuer. A chargeback costs us a fee on top of the disputed
@@ -100,5 +100,4 @@ noted with an updated "Last updated" date above.
 
 ## 10. Contact
 
-Questions about these Terms can be directed to the app operator's contact
-address (add one here before publishing).
+Questions about these Terms can be directed to odoglusk+platedsupport@gmail.com.

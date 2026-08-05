@@ -76,4 +76,4 @@ will be noted with an updated "Last updated" date above.
 ## 8. Contact
 
 Questions about this policy or a data-deletion request can be directed to
-the app operator's contact address (add one here before publishing).
+odoglusk+platedsupport@gmail.com.
