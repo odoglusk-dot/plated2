@@ -53,11 +53,38 @@ infringes someone else's rights. Don't attempt to access another user's
 account or data — every account's data is private by design (see Privacy
 Policy), and attempting to bypass that is a violation of these Terms.
 
-## 7. Subscriptions (if/when introduced)
+## 7. Subscriptions & payment
 
-If Plated introduces a paid tier, its terms (pricing, billing cycle,
-cancellation) will be presented at the point of purchase and will
-supplement, not replace, this document.
+### 7.1 Plan and billing
+
+Plated is a paid subscription ($4.99/month, with a 3-day free trial for new
+subscribers). Billing is handled by Stripe. You can cancel anytime from
+"Manage Subscription" in the Profile tab; canceling stops future charges,
+and you keep access through the end of the period you've already paid for.
+
+### 7.2 Authorization to charge
+
+By starting a subscription, you — or, if you are under 18, your parent or
+guardian — are authorizing Plated to charge the payment method on file on a
+recurring basis for the subscription amount, until the subscription is
+canceled.
+
+### 7.3 Minors and unauthorized subscriptions
+
+If a parent or guardian discovers that a minor subscribed without their
+knowledge or consent, contact support@example.com to request cancellation
+and a refund for the current billing period. We handle these directly and
+promptly — please reach out to us **before** disputing the charge with your
+bank or card issuer. A chargeback costs us a fee on top of the disputed
+amount, on top of a refund we'd have issued anyway if simply asked, so
+contacting us directly gets you the same outcome faster at no extra cost to
+anyone.
+
+### 7.4 Repeated disputes
+
+Repeated unauthorized-signup disputes tied to the same account or payment
+method may result in requiring confirmation from a parent or guardian
+before that account is permitted to resubscribe.
 
 ## 8. Disclaimers and limitation of liability
 

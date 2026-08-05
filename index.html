@@ -470,6 +470,7 @@
       <div class="paywall-price">$4.99<span class="unit"> / month</span></div>
       <button type="button" class="btn btn-primary btn-block" id="paywallSubscribeBtn">Start 3-Day Free Trial</button>
       <div id="paywallError" style="color:var(--danger);font-size:0.85rem;margin-top:0.5rem;min-height:1em;text-align:center;"></div>
+      <p class="muted" style="font-size:0.8rem;text-align:center;margin-top:0.75rem;">Questions about a charge? <a id="paywallBillingHelpLink" href="#">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
       <button type="button" class="btn btn-ghost btn-block" id="paywallSignOutBtn" style="margin-top:0.5rem;">Sign Out</button>
     </div>
   </div>
@@ -529,6 +530,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Update this to your real contact address before launch.
 const SUPPORT_EMAIL = 'support@example.com';
+
+// paywallScreen is static markup (not re-rendered per-frame like the tabs),
+// so its mailto link is bound once here from SUPPORT_EMAIL rather than
+// duplicating the address as a second hardcoded literal that could drift
+// out of sync with the constant above.
+document.getElementById('paywallBillingHelpLink').href = `mailto:${SUPPORT_EMAIL}?subject=Plated%20billing%20question`;
 
 // ── Small DOM helpers ────────────────────────────────────────────────
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -2571,6 +2578,7 @@ function renderProfile() {
       <h3>Subscription</h3>
       <p class="muted">${subscriptionStatusLabel(state.subscription)}</p>
       <button class="btn" id="manage_subscription_btn">Manage Subscription</button>
+      <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Plated%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
     </div>
 
     <div class="card">
