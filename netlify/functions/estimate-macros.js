@@ -1,16 +1,17 @@
 // POST { description: string }
 // Auth: Authorization: Bearer <supabase access token>
-// Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
+// Returns { food_name, calories, protein_g, carbs_g, fat_g, sugar_g, confidence }
 // Checks food_cache first; if hit, returns immediately without using API budget.
 const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Plated, a macro-tracking app.
 Given a short description of a food or meal, estimate its nutritional content.
 Respond with ONLY a JSON object, no markdown fences, no prose, in exactly this shape:
-{"food_name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "confidence": "high" | "medium" | "low"}
+{"food_name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "sugar_g": number, "confidence": "high" | "medium" | "low"}
 If the description omits quantity, assume one standard serving and fold that assumption into food_name
 (e.g. "Grilled chicken breast (1, ~6oz)"). All numeric fields are grams or kcal with no units attached.
-Use standard USDA-style nutrition data as your basis for the estimate.`;
+sugar_g is total sugars (not just added sugar) contained within carbs_g, not on top of it. Use standard
+USDA-style nutrition data as your basis for the estimate.`;
 
 exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -55,6 +56,7 @@ exports.handler = withErrorReporting(async (event) => {
       protein_g: cached.protein_g,
       carbs_g: cached.carbs_g,
       fat_g: cached.fat_g,
+      sugar_g: cached.sugar_g,
       confidence: 'high',
       cached: true,
       remaining,

@@ -73,12 +73,13 @@ calories    numeric
 protein_g   numeric         ← WITH _g suffix
 carbs_g     numeric         ← WITH _g suffix
 fat_g       numeric         ← WITH _g suffix
+sugar_g     numeric (nullable — unknown, not 0, when absent)
 source      text ('manual' | 'ai_text' | 'ai_photo' | 'favorite' | 'common')
 logged_at   timestamptz (indexed)
 created_at  timestamptz
 ```
 **Frontend reads:** `logged_at, (all other columns via select(*))`, ordered by `logged_at desc`  
-**Frontend writes:** `user_id, food_name, calories, protein_g, carbs_g, fat_g, source`
+**Frontend writes:** `user_id, food_name, calories, protein_g, carbs_g, fat_g, sugar_g, source`
 
 ---
 
@@ -90,9 +91,10 @@ calories          numeric
 protein_g         numeric       ← WITH _g suffix
 carbs_g           numeric       ← WITH _g suffix
 fat_g             numeric       ← WITH _g suffix
+sugar_g           numeric (nullable — unknown, not 0, when absent)
 created_at        timestamptz
 ```
-**Frontend reads/writes:** `food_name, calories, protein_g, carbs_g, fat_g`
+**Frontend reads/writes:** `food_name, calories, protein_g, carbs_g, fat_g, sugar_g`
 
 ---
 
@@ -105,10 +107,11 @@ calories    numeric
 protein_g   numeric       ← WITH _g suffix
 carbs_g     numeric       ← WITH _g suffix
 fat_g       numeric       ← WITH _g suffix
+sugar_g     numeric (nullable — unknown, not 0, when absent)
 created_at  timestamptz
 ```
-**Frontend reads:** `id, food_name, calories, protein_g, carbs_g, fat_g`  
-**Frontend writes:** `user_id, food_name, calories, protein_g, carbs_g, fat_g`
+**Frontend reads:** `id, food_name, calories, protein_g, carbs_g, fat_g, sugar_g`  
+**Frontend writes:** `user_id, food_name, calories, protein_g, carbs_g, fat_g, sugar_g`
 
 ---
 

@@ -60,6 +60,7 @@
     --macro-calories: #3B7FBF;
     --macro-carbs: #D97706;
     --macro-fat: #4E9A5A;
+    --macro-sugar: #A9789A;
     --font-display: 'Bebas Neue', sans-serif;
     --font-body: 'Inter', sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
@@ -217,6 +218,8 @@
   .mini-plate .ring-wrap { width: 54px; height: 54px; }
   .mini-plate .ring-value { font-size: 0.72rem; }
   .mini-plate .plate-label { font-size: 0.58rem; }
+  .plate-secondary { justify-self: start; align-self: end; opacity: 0.85; }
+  .plate-note { font-size: 0.6rem; color: var(--text-dim); }
 
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
@@ -1597,8 +1600,13 @@ function sumMacros(logs) {
     acc.protein_g += Number(l.protein_g) || 0;
     acc.carbs_g += Number(l.carbs_g) || 0;
     acc.fat_g += Number(l.fat_g) || 0;
+    // sugar_g is nullable (unknown for logs from before this was tracked,
+    // or from the Common Foods database, which doesn't carry it) — treated
+    // as 0 here same as the other macros, but that's "not counted," not an
+    // assertion that the food actually has zero sugar.
+    acc.sugar_g += Number(l.sugar_g) || 0;
     return acc;
-  }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+  }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, sugar_g: 0 });
 }
 
 function groupByDay(logs) {
@@ -1702,6 +1710,30 @@ function miniPlateHtml(label, value, goal, color) {
   </div>`;
 }
 
+// Sugar isn't a primary macro with its own user-set goal like the other
+// four, so there's nothing in state.goals to compare against — it's shown
+// as a smaller, secondary ring against a fixed general daily-intake
+// guideline instead of a personalized target. Logs without a known sugar
+// value (pre-migration entries, or foods from the Common Foods database,
+// which doesn't carry sugar data) just don't contribute to the total —
+// they don't count as "0g of sugar."
+const SUGAR_DAILY_GUIDELINE_G = 50;
+
+function sugarPlateHtml(value) {
+  const goal = SUGAR_DAILY_GUIDELINE_G;
+  const pct = value / goal;
+  return `<div class="mini-plate plate-secondary">
+    <div class="ring-wrap">
+      ${ringSvg(pct, 'var(--macro-sugar)')}
+      <div class="ring-inner">
+        <div class="ring-value">${round(value)}</div>
+      </div>
+    </div>
+    <div class="plate-label">SUGAR</div>
+    <div class="plate-note">guideline ${goal}g</div>
+  </div>`;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════════════
@@ -1727,8 +1759,9 @@ function renderDashboard() {
         ${plateHtml('PROTEIN', totals.protein_g, g.protein_g, 'var(--macro-protein)')}
         ${plateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--macro-carbs)')}
         ${plateHtml('FAT', totals.fat_g, g.fat_g, 'var(--macro-fat)')}
+        ${sugarPlateHtml(totals.sugar_g)}
       </div>
-      <p class="muted" style="margin-top:0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
+      <p class="muted" style="margin-top:0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule. Sugar is shown against a general daily guideline, not a personalized goal.</p>
       <div class="row" style="margin-top:0.5rem;">
         <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
         <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
@@ -1772,9 +1805,9 @@ async function deleteLog(id) {
   renderAll();
 }
 
-async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source }) {
+async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, sugar_g, source }) {
   const { error } = await supabase.from('food_logs').insert({
-    user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source,
+    user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, sugar_g: sugar_g ?? null, source,
   });
   if (error) return toast('Could not log food: ' + error.message);
   toast(`Logged: ${food_name}`);
@@ -1909,6 +1942,7 @@ function resultCardHtml(result) {
         <div class="field"><label>Protein (g)</label><input class="input mono" id="res_pro" type="number" value="${round(result.protein_g)}"></div>
         <div class="field"><label>Carbs (g)</label><input class="input mono" id="res_carb" type="number" value="${round(result.carbs_g)}"></div>
         <div class="field"><label>Fat (g)</label><input class="input mono" id="res_fat" type="number" value="${round(result.fat_g)}"></div>
+        <div class="field"><label>Sugar (g) <span class="muted">(optional)</span></label><input class="input mono" id="res_sugar" type="number" value="${result.sugar_g != null ? round(result.sugar_g) : ''}" placeholder="unknown"></div>
       </div>
       <div class="row">
         <button class="btn btn-primary" id="logResultBtn">Log It</button>
@@ -1924,6 +1958,7 @@ function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text'
     protein_g: Number($('#res_pro').value) || 0,
     carbs_g: Number($('#res_carb').value) || 0,
     fat_g: Number($('#res_fat').value) || 0,
+    sugar_g: $('#res_sugar').value.trim() === '' ? null : Number($('#res_sugar').value) || 0,
   });
   $('#logResultBtn')?.addEventListener('click', () => logFood({ ...readValues(), source }));
   $('#favResultBtn')?.addEventListener('click', () => saveFavorite(readValues()));
@@ -2093,6 +2128,7 @@ function renderLogSubPanel() {
           <div class="field"><label>Protein (g)</label><input class="input mono" id="man_pro" type="number"></div>
           <div class="field"><label>Carbs (g)</label><input class="input mono" id="man_carb" type="number"></div>
           <div class="field"><label>Fat (g)</label><input class="input mono" id="man_fat" type="number"></div>
+          <div class="field"><label>Sugar (g) <span class="muted">(optional)</span></label><input class="input mono" id="man_sugar" type="number" placeholder="unknown"></div>
         </div>
         <div class="row">
           <button class="btn btn-primary" id="manLogBtn">Log It</button>
@@ -2105,6 +2141,7 @@ function renderLogSubPanel() {
       protein_g: Number($('#man_pro').value) || 0,
       carbs_g: Number($('#man_carb').value) || 0,
       fat_g: Number($('#man_fat').value) || 0,
+      sugar_g: $('#man_sugar').value.trim() === '' ? null : Number($('#man_sugar').value) || 0,
     });
     $('#manLogBtn').addEventListener('click', () => logFood({ ...readManual(), source: 'manual' }));
     $('#manFavBtn').addEventListener('click', () => saveFavorite(readManual()));
@@ -2124,7 +2161,7 @@ function renderLogSubPanel() {
       </div>`;
     $$('[data-fav-log]', el).forEach((btn) => btn.addEventListener('click', () => {
       const f = state.favorites.find((x) => x.id === btn.dataset.favLog);
-      logFood({ food_name: f.food_name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g, source: 'favorite' });
+      logFood({ food_name: f.food_name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g, sugar_g: f.sugar_g, source: 'favorite' });
     }));
     $$('[data-fav-del]', el).forEach((btn) => btn.addEventListener('click', async () => {
       await supabase.from('favorites').delete().eq('id', btn.dataset.favDel);
@@ -2566,8 +2603,9 @@ function renderProfile() {
         <div class="field"><label>Target Weight (lb)</label><input class="input mono" id="calc_goal_weight" type="number" placeholder="e.g. 185"></div>
       </div>
       <div class="field">
-        <label>Target Date</label>
+        <label>Target Date <span class="muted">(optional)</span></label>
         <input class="input mono" id="calc_target_date" type="date" min="${new Date(Date.now() + 86400000).toISOString().slice(0, 10)}">
+        <p class="muted" style="margin-top:0.3rem;">Leave blank for a maintenance-calorie estimate with no specific pace.</p>
       </div>
       <button class="btn" id="calc_run">Calculate</button>
       <div id="calc_result" style="margin-top:1rem;"></div>
@@ -2670,19 +2708,58 @@ function renderProfile() {
     const targetDateStr = $('#calc_target_date').value;
     const activity = $('#calc_activity').value;
 
-    if (!age || totalHeightIn <= 0 || !weightLb || !targetWeightLb || !targetDateStr) {
-      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Fill in age, height, weight, target weight, and target date first.</p>`;
+    if (!age || totalHeightIn <= 0 || !weightLb || !targetWeightLb) {
+      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Fill in age, height, weight, and target weight first.</p>`;
       return;
     }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const targetDate = new Date(`${targetDateStr}T00:00:00`);
     const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-    const weeksUntil = (targetDate - today) / msPerWeek;
-    if (weeksUntil <= 0) {
-      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Target date must be in the future.</p>`;
-      return;
+
+    // Target date is optional — without it there's no timeline to derive a
+    // pace from, so weeklyRateLb/weeklyRatePercent just stay at 0 and the
+    // calculation below falls through to a maintenance-calorie estimate
+    // instead of blocking on a missing field.
+    let targetDate = null;
+    let weeklyRateLb = 0;
+    let weeklyRatePercent = 0;
+
+    if (targetDateStr) {
+      targetDate = new Date(`${targetDateStr}T00:00:00`);
+      const weeksUntil = (targetDate - today) / msPerWeek;
+      if (weeksUntil <= 0) {
+        $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Target date must be in the future.</p>`;
+        return;
+      }
+
+      // Implied pace from the timeline, not a dropdown — this is the whole
+      // point of the redesign: derive the rate from what the user actually
+      // asked for (this weight, by this date) instead of a flat assumption.
+      const weightDiffLb = targetWeightLb - weightLb;
+      weeklyRateLb = weightDiffLb / weeksUntil;
+      weeklyRatePercent = (weeklyRateLb / weightLb) * 100;
+      const maxSafePercent = maxSafeWeeklyRatePercent(age);
+
+      if (Math.abs(weeklyRatePercent) > maxSafePercent) {
+        // Simple bounded check, same spirit as the calorie safety floor: don't
+        // compute targets for an unsafe pace, just explain why and point at a
+        // realistic date for the same target weight.
+        const minWeeksNeeded = Math.abs(weightDiffLb) / ((maxSafePercent / 100) * weightLb);
+        const earliestDate = new Date(today.getTime() + Math.ceil(minWeeksNeeded) * msPerWeek);
+        const direction = weightDiffLb < 0 ? 'Losing' : 'Gaining';
+        $('#calc_result').innerHTML = `
+          <p class="muted" style="color:var(--danger);">
+            ${direction} ${Math.abs(weightDiffLb).toFixed(1)} lb by ${targetDate.toLocaleDateString()} works out to about
+            ${Math.abs(weeklyRatePercent).toFixed(2)}% of your bodyweight per week — faster than the recommended
+            ${maxSafePercent}%/week${age < 18 ? ' limit for under 18' : ''}.
+          </p>
+          <p class="muted">At a safe pace, the earliest realistic date for ${targetWeightLb} lb is around
+            <strong>${earliestDate.toLocaleDateString()}</strong> (about ${Math.ceil(minWeeksNeeded)} weeks out).
+            Try picking a later target date.</p>
+        `;
+        return;
+      }
     }
 
     const heightCm = totalHeightIn * 2.54;
@@ -2692,37 +2769,10 @@ function renderProfile() {
       : 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
     const tdee = bmr * ACTIVITY_MULTIPLIERS[activity];
 
-    // Implied pace from the timeline, not a dropdown — this is the whole
-    // point of the redesign: derive the rate from what the user actually
-    // asked for (this weight, by this date) instead of a flat assumption.
-    const weightDiffLb = targetWeightLb - weightLb;
-    const weeklyRateLb = weightDiffLb / weeksUntil;
-    const weeklyRatePercent = (weeklyRateLb / weightLb) * 100;
-    const maxSafePercent = maxSafeWeeklyRatePercent(age);
-
-    if (Math.abs(weeklyRatePercent) > maxSafePercent) {
-      // Simple bounded check, same spirit as the calorie safety floor: don't
-      // compute targets for an unsafe pace, just explain why and point at a
-      // realistic date for the same target weight.
-      const minWeeksNeeded = Math.abs(weightDiffLb) / ((maxSafePercent / 100) * weightLb);
-      const earliestDate = new Date(today.getTime() + Math.ceil(minWeeksNeeded) * msPerWeek);
-      const direction = weightDiffLb < 0 ? 'Losing' : 'Gaining';
-      $('#calc_result').innerHTML = `
-        <p class="muted" style="color:var(--danger);">
-          ${direction} ${Math.abs(weightDiffLb).toFixed(1)} lb by ${targetDate.toLocaleDateString()} works out to about
-          ${Math.abs(weeklyRatePercent).toFixed(2)}% of your bodyweight per week — faster than the recommended
-          ${maxSafePercent}%/week${age < 18 ? ' limit for under 18' : ''}.
-        </p>
-        <p class="muted">At a safe pace, the earliest realistic date for ${targetWeightLb} lb is around
-          <strong>${earliestDate.toLocaleDateString()}</strong> (about ${Math.ceil(minWeeksNeeded)} weeks out).
-          Try picking a later target date.</p>
-      `;
-      return;
-    }
-
     // 1 lb of body weight is ~3500 kcal, so a weekly rate implies this daily
     // calorie adjustment — replaces the old flat +300/-500 guess with
-    // whatever the user's own timeline actually requires.
+    // whatever the user's own timeline actually requires. Stays 0 (i.e. no
+    // adjustment) when there's no target date to derive a pace from.
     const dailyAdjustment = weeklyRateLb * 500;
     const adjusted = tdee + dailyAdjustment;
 
@@ -2751,7 +2801,7 @@ function renderProfile() {
         <span class="badge">C ${carbsG}g</span>
         <span class="badge">F ${fatG}g</span>
       </div>
-      <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal · Goal: ${goalModeLabel} (${Math.abs(weeklyRateLb).toFixed(2)} lb/week, ${Math.abs(weeklyRatePercent).toFixed(2)}% bodyweight/week)${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
+      <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal · ${targetDateStr ? `Goal: ${goalModeLabel} (${Math.abs(weeklyRateLb).toFixed(2)} lb/week, ${Math.abs(weeklyRatePercent).toFixed(2)}% bodyweight/week)` : 'No target date set — maintenance-calorie estimate.'}${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
       <p class="muted">Healthy range: ${rangeLabel}. Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
       <button class="btn btn-primary" id="calc_apply" style="margin-top:0.5rem;">Apply to My Goals</button>
     `;

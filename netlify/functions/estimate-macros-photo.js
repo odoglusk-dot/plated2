@@ -1,6 +1,6 @@
 // POST { imageBase64: string, mediaType: "image/jpeg" | "image/png" | "image/webp", note?: string }
 // Auth: Authorization: Bearer <supabase access token>
-// Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
+// Returns { food_name, calories, protein_g, carbs_g, fat_g, sugar_g, confidence }
 // Checks food_cache first using a hash of image + note; if hit, returns immediately without using API budget.
 const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
 
@@ -9,9 +9,10 @@ You will be shown a photo of a food or meal. Estimate its nutritional content fr
 portion sizes, visible ingredients, and typical preparation. If an optional text note accompanies the
 photo, use it to refine the estimate (e.g. it may state an ingredient or portion the photo doesn't show).
 Respond with ONLY a JSON object, no markdown fences, no prose, in exactly this shape:
-{"food_name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "confidence": "high" | "medium" | "low"}
+{"food_name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "sugar_g": number, "confidence": "high" | "medium" | "low"}
 Set "confidence" to "low" if the photo makes portion size or ingredients genuinely hard to judge.
-All numeric fields are grams or kcal with no units attached.`;
+sugar_g is total sugars (not just added sugar) contained within carbs_g, not on top of it. All numeric
+fields are grams or kcal with no units attached.`;
 
 const ALLOWED_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
@@ -65,6 +66,7 @@ exports.handler = withErrorReporting(async (event) => {
       protein_g: cached.protein_g,
       carbs_g: cached.carbs_g,
       fat_g: cached.fat_g,
+      sugar_g: cached.sugar_g,
       confidence: cached.confidence || 'high',
       cached: true,
       remaining,
@@ -109,6 +111,7 @@ exports.handler = withErrorReporting(async (event) => {
           protein_g: parsed.protein_g,
           carbs_g: parsed.carbs_g,
           fat_g: parsed.fat_g,
+          sugar_g: parsed.sugar_g ?? null,
         }),
       });
     } catch {

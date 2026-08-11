@@ -344,7 +344,7 @@ async function checkFoodCache(description, isPreGeneratedKey = false) {
 }
 
 // Stores a food estimate in the shared food_cache table.
-async function cacheFood(description, { food_name, calories, protein_g, carbs_g, fat_g }) {
+async function cacheFood(description, { food_name, calories, protein_g, carbs_g, fat_g, sugar_g }) {
   const cacheKey = getCacheKey(description);
   try {
     await fetch(`${process.env.SUPABASE_URL}/rest/v1/food_cache`, {
@@ -361,6 +361,7 @@ async function cacheFood(description, { food_name, calories, protein_g, carbs_g,
         protein_g,
         carbs_g,
         fat_g,
+        sugar_g: sugar_g ?? null,
       }),
     });
   } catch {
