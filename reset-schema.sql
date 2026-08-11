@@ -98,9 +98,6 @@ create policy "body_stats: update own" on body_stats
 
 -- ── food_logs ───────────────────────────────────────────────────────────
 -- ALL macro columns use _g suffix (protein_g, carbs_g, fat_g)
--- sugar_g is nullable (no default) — unlike the other macros it's not
--- always known (e.g. the Common Foods database doesn't carry it), and null
--- means "unknown" rather than "zero."
 create table food_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -109,7 +106,6 @@ create table food_logs (
   protein_g numeric not null,
   carbs_g numeric not null,
   fat_g numeric not null,
-  sugar_g numeric,
   source text not null default 'manual' check (
     source in ('manual', 'ai_text', 'ai_photo', 'favorite', 'common')
   ),
@@ -142,7 +138,6 @@ create table food_cache (
   protein_g numeric not null,
   carbs_g numeric not null,
   fat_g numeric not null,
-  sugar_g numeric,
   created_at timestamptz not null default now()
 );
 
@@ -168,7 +163,6 @@ create table favorites (
   protein_g numeric not null,
   carbs_g numeric not null,
   fat_g numeric not null,
-  sugar_g numeric,
   created_at timestamptz not null default now()
 );
 

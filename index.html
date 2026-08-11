@@ -60,7 +60,6 @@
     --macro-calories: #3B7FBF;
     --macro-carbs: #D97706;
     --macro-fat: #4E9A5A;
-    --macro-sugar: #A9789A;
     --font-display: 'Bebas Neue', sans-serif;
     --font-body: 'Inter', sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
@@ -218,8 +217,6 @@
   .mini-plate .ring-wrap { width: 54px; height: 54px; }
   .mini-plate .ring-value { font-size: 0.72rem; }
   .mini-plate .plate-label { font-size: 0.58rem; }
-  .plate-secondary { justify-self: start; align-self: end; opacity: 0.85; }
-  .plate-note { font-size: 0.6rem; color: var(--text-dim); }
 
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
@@ -1600,13 +1597,8 @@ function sumMacros(logs) {
     acc.protein_g += Number(l.protein_g) || 0;
     acc.carbs_g += Number(l.carbs_g) || 0;
     acc.fat_g += Number(l.fat_g) || 0;
-    // sugar_g is nullable (unknown for logs from before this was tracked,
-    // or from the Common Foods database, which doesn't carry it) — treated
-    // as 0 here same as the other macros, but that's "not counted," not an
-    // assertion that the food actually has zero sugar.
-    acc.sugar_g += Number(l.sugar_g) || 0;
     return acc;
-  }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, sugar_g: 0 });
+  }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
 }
 
 function groupByDay(logs) {
@@ -1710,30 +1702,6 @@ function miniPlateHtml(label, value, goal, color) {
   </div>`;
 }
 
-// Sugar isn't a primary macro with its own user-set goal like the other
-// four, so there's nothing in state.goals to compare against — it's shown
-// as a smaller, secondary ring against a fixed general daily-intake
-// guideline instead of a personalized target. Logs without a known sugar
-// value (pre-migration entries, or foods from the Common Foods database,
-// which doesn't carry sugar data) just don't contribute to the total —
-// they don't count as "0g of sugar."
-const SUGAR_DAILY_GUIDELINE_G = 50;
-
-function sugarPlateHtml(value) {
-  const goal = SUGAR_DAILY_GUIDELINE_G;
-  const pct = value / goal;
-  return `<div class="mini-plate plate-secondary">
-    <div class="ring-wrap">
-      ${ringSvg(pct, 'var(--macro-sugar)')}
-      <div class="ring-inner">
-        <div class="ring-value">${round(value)}</div>
-      </div>
-    </div>
-    <div class="plate-label">SUGAR</div>
-    <div class="plate-note">guideline ${goal}g</div>
-  </div>`;
-}
-
 // ══════════════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════════════
@@ -1759,9 +1727,8 @@ function renderDashboard() {
         ${plateHtml('PROTEIN', totals.protein_g, g.protein_g, 'var(--macro-protein)')}
         ${plateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--macro-carbs)')}
         ${plateHtml('FAT', totals.fat_g, g.fat_g, 'var(--macro-fat)')}
-        ${sugarPlateHtml(totals.sugar_g)}
       </div>
-      <p class="muted" style="margin-top:0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule. Sugar is shown against a general daily guideline, not a personalized goal.</p>
+      <p class="muted" style="margin-top:0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
       <div class="row" style="margin-top:0.5rem;">
         <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
         <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
@@ -1805,9 +1772,9 @@ async function deleteLog(id) {
   renderAll();
 }
 
-async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, sugar_g, source }) {
+async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source }) {
   const { error } = await supabase.from('food_logs').insert({
-    user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, sugar_g: sugar_g ?? null, source,
+    user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source,
   });
   if (error) return toast('Could not log food: ' + error.message);
   toast(`Logged: ${food_name}`);
@@ -1942,7 +1909,6 @@ function resultCardHtml(result) {
         <div class="field"><label>Protein (g)</label><input class="input mono" id="res_pro" type="number" value="${round(result.protein_g)}"></div>
         <div class="field"><label>Carbs (g)</label><input class="input mono" id="res_carb" type="number" value="${round(result.carbs_g)}"></div>
         <div class="field"><label>Fat (g)</label><input class="input mono" id="res_fat" type="number" value="${round(result.fat_g)}"></div>
-        <div class="field"><label>Sugar (g) <span class="muted">(optional)</span></label><input class="input mono" id="res_sugar" type="number" value="${result.sugar_g != null ? round(result.sugar_g) : ''}" placeholder="unknown"></div>
       </div>
       <div class="row">
         <button class="btn btn-primary" id="logResultBtn">Log It</button>
@@ -1958,7 +1924,6 @@ function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text'
     protein_g: Number($('#res_pro').value) || 0,
     carbs_g: Number($('#res_carb').value) || 0,
     fat_g: Number($('#res_fat').value) || 0,
-    sugar_g: $('#res_sugar').value.trim() === '' ? null : Number($('#res_sugar').value) || 0,
   });
   $('#logResultBtn')?.addEventListener('click', () => logFood({ ...readValues(), source }));
   $('#favResultBtn')?.addEventListener('click', () => saveFavorite(readValues()));
@@ -2128,7 +2093,6 @@ function renderLogSubPanel() {
           <div class="field"><label>Protein (g)</label><input class="input mono" id="man_pro" type="number"></div>
           <div class="field"><label>Carbs (g)</label><input class="input mono" id="man_carb" type="number"></div>
           <div class="field"><label>Fat (g)</label><input class="input mono" id="man_fat" type="number"></div>
-          <div class="field"><label>Sugar (g) <span class="muted">(optional)</span></label><input class="input mono" id="man_sugar" type="number" placeholder="unknown"></div>
         </div>
         <div class="row">
           <button class="btn btn-primary" id="manLogBtn">Log It</button>
@@ -2141,7 +2105,6 @@ function renderLogSubPanel() {
       protein_g: Number($('#man_pro').value) || 0,
       carbs_g: Number($('#man_carb').value) || 0,
       fat_g: Number($('#man_fat').value) || 0,
-      sugar_g: $('#man_sugar').value.trim() === '' ? null : Number($('#man_sugar').value) || 0,
     });
     $('#manLogBtn').addEventListener('click', () => logFood({ ...readManual(), source: 'manual' }));
     $('#manFavBtn').addEventListener('click', () => saveFavorite(readManual()));
@@ -2161,7 +2124,7 @@ function renderLogSubPanel() {
       </div>`;
     $$('[data-fav-log]', el).forEach((btn) => btn.addEventListener('click', () => {
       const f = state.favorites.find((x) => x.id === btn.dataset.favLog);
-      logFood({ food_name: f.food_name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g, sugar_g: f.sugar_g, source: 'favorite' });
+      logFood({ food_name: f.food_name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g, source: 'favorite' });
     }));
     $$('[data-fav-del]', el).forEach((btn) => btn.addEventListener('click', async () => {
       await supabase.from('favorites').delete().eq('id', btn.dataset.favDel);
