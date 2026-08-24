@@ -9,6 +9,7 @@ drop table if exists referrals cascade;
 drop table if exists subscriptions cascade;
 drop table if exists ai_usage cascade;
 drop table if exists supplement_logs cascade;
+drop table if exists water_logs cascade;
 drop table if exists weight_log cascade;
 drop table if exists favorites cascade;
 drop table if exists food_cache cascade;
@@ -62,6 +63,9 @@ create table goals (
   protein_g int not null default 150,
   carbs_g int not null default 250,
   fat_g int not null default 70,
+  -- Daily hydration target. Not derived by the goal calculator (nothing
+  -- computes a personalized water target) — a flat, editable default.
+  water_oz numeric not null default 64,
   -- Which calculator scenario these goals came from — drives the soft
   -- calorie-range shading on the dashboard ring (see calorieRangeForGoal()).
   goal_mode text not null default 'maintain' check (goal_mode in ('lose', 'maintain', 'gain')),
@@ -218,6 +222,30 @@ create policy "supplement_logs: select own" on supplement_logs
 create policy "supplement_logs: insert own" on supplement_logs
   for insert with check (auth.uid() = user_id);
 create policy "supplement_logs: delete own" on supplement_logs
+  for delete using (auth.uid() = user_id);
+
+-- ── water_logs ──────────────────────────────────────────────────────────
+-- Append-only, one row per quick-add tap (e.g. "+8oz") rather than one
+-- running daily total, so the dashboard can sum "today" the same way it
+-- already does for food_logs — logged_at + a client-side date filter,
+-- no separate daily-rollup logic to keep in sync.
+create table water_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  amount_oz numeric not null,
+  logged_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create index water_logs_user_logged_idx on water_logs (user_id, logged_at desc);
+
+alter table water_logs enable row level security;
+
+create policy "water_logs: select own" on water_logs
+  for select using (auth.uid() = user_id);
+create policy "water_logs: insert own" on water_logs
+  for insert with check (auth.uid() = user_id);
+create policy "water_logs: delete own" on water_logs
   for delete using (auth.uid() = user_id);
 
 -- ── ai_usage ────────────────────────────────────────────────────────────

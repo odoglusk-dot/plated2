@@ -40,10 +40,11 @@ calories    int (default: 2200)
 protein_g   int (default: 150)       ← WITH _g suffix
 carbs_g     int (default: 250)       ← WITH _g suffix
 fat_g       int (default: 70)        ← WITH _g suffix
+water_oz    numeric (default: 64) — flat editable default, not calculator-derived
 goal_mode   text (default: 'maintain') ('lose' | 'maintain' | 'gain')
 updated_at  timestamptz
 ```
-**Frontend reads/writes:** `user_id, calories, protein_g, carbs_g, fat_g, goal_mode, updated_at`  
+**Frontend reads/writes:** `user_id, calories, protein_g, carbs_g, fat_g, water_oz, goal_mode, updated_at`  
 ⚠️ **CRITICAL:** All macros use `_g` suffix. If your DB has `protein`, `carbs`, `fat` (without `_g`), goals won't display properly.
 
 `goal_mode` drives two things in `index.html`: the calculator's macro split
@@ -137,6 +138,24 @@ created_at       timestamptz
 ```
 **Frontend reads:** `supplement_name, dose, logged_at` (via select(*), order by `logged_at desc`)  
 **Frontend writes:** `user_id, supplement_name, dose`
+
+---
+
+### `water_logs` — Hydration quick-add entries
+```sql
+id          uuid primary key
+user_id     uuid
+amount_oz   numeric
+logged_at   timestamptz (indexed)
+created_at  timestamptz
+```
+**Frontend reads:** `amount_oz, logged_at` (via select(*), order by `logged_at desc`)  
+**Frontend writes:** `user_id, amount_oz`
+
+One row per quick-add tap (e.g. "+8oz"), not a running daily total — "today's"
+and "this week's" totals are summed client-side from `logged_at`, the same
+pattern `food_logs` already uses. No update policy: entries are logged or
+deleted, never edited in place.
 
 ---
 

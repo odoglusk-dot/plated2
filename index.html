@@ -60,6 +60,7 @@
     --macro-calories: #3B7FBF;
     --macro-carbs: #D97706;
     --macro-fat: #4E9A5A;
+    --macro-water: #4AA3C4;
     --font-display: 'Bebas Neue', sans-serif;
     --font-body: 'Inter', sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
@@ -217,6 +218,8 @@
   .mini-plate .ring-wrap { width: 54px; height: 54px; }
   .mini-plate .ring-value { font-size: 0.72rem; }
   .mini-plate .plate-label { font-size: 0.58rem; }
+  .plate-secondary { justify-self: start; align-self: end; opacity: 0.85; }
+  .plate-note { font-size: 0.6rem; color: var(--text-dim); }
 
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
@@ -585,13 +588,14 @@ const state = {
   session: null,
   user: null,
   profile: null,
-  goals: { calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, goal_mode: 'maintain' },
+  goals: { calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, water_oz: 64, goal_mode: 'maintain' },
   bodyStats: null,
   todayLogs: [],
   historyLogs: [], // last 90 days, used by dashboard streaks + history tab + CSV export
   favorites: [],
   weightLog: [],
   supplementLogs: [],
+  waterLog: [], // last 14 days — plenty of buffer for "today" + the 7-day weekly summary
   activeTab: 'dashboard',
   aiRemaining: null,
   subscription: null,
@@ -1451,7 +1455,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadReferrals()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadReferrals()]);
   renderAll();
 }
 
@@ -1560,6 +1564,14 @@ async function loadSupplementLogs() {
   state.supplementLogs = data || [];
 }
 
+async function loadWaterLog() {
+  const since = new Date();
+  since.setDate(since.getDate() - 14);
+  const { data } = await supabase.from('water_logs').select('*').eq('user_id', state.user.id)
+    .gte('logged_at', since.toISOString()).order('logged_at', { ascending: false });
+  state.waterLog = data || [];
+}
+
 async function loadReferrals() {
   const { data } = await supabase.from('referrals').select('status').eq('referrer_user_id', state.user.id);
   state.referrals = data || [];
@@ -1653,6 +1665,53 @@ function computeStreaks(logs, proteinGoal) {
   return { current, best };
 }
 
+// Rolling 7-day window (today back through 6 days ago), not calendar
+// Mon-Sun — simpler given nothing else in the app aligns to calendar weeks,
+// and avoids partial-week edge cases near a week boundary.
+function last7Days() {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(localDateStr(d));
+  }
+  return days;
+}
+
+// Pure aggregation over already-loaded state (historyLogs, waterLog) — no
+// new network or AI calls, just re-grouping data the dashboard/streaks
+// already fetched.
+function weeklySummary() {
+  const days = last7Days();
+  const foodByDay = groupByDay(state.historyLogs);
+  const waterByDay = groupByDay(state.waterLog);
+  const g = state.goals;
+
+  let proteinDaysHit = 0, waterDaysHit = 0;
+  let totalCalories = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+
+  for (const day of days) {
+    const dayTotals = sumMacros(foodByDay.get(day) || []);
+    totalCalories += dayTotals.calories;
+    totalProtein += dayTotals.protein_g;
+    totalCarbs += dayTotals.carbs_g;
+    totalFat += dayTotals.fat_g;
+    if (dayTotals.protein_g >= g.protein_g) proteinDaysHit++;
+
+    const dayWaterOz = (waterByDay.get(day) || []).reduce((sum, w) => sum + (Number(w.amount_oz) || 0), 0);
+    if (dayWaterOz >= (g.water_oz || 64)) waterDaysHit++;
+  }
+
+  return {
+    proteinDaysHit,
+    waterDaysHit,
+    avgCalories: totalCalories / 7,
+    avgProtein: totalProtein / 7,
+    avgCarbs: totalCarbs / 7,
+    avgFat: totalFat / 7,
+  };
+}
+
 function updateStreakPill() {
   const { current } = computeStreaks(state.historyLogs, state.goals.protein_g);
   $('#streakPill').textContent = `🔥 ${current} day streak`;
@@ -1702,6 +1761,24 @@ function miniPlateHtml(label, value, goal, color) {
   </div>`;
 }
 
+// Water isn't one of the four core macros, so it gets the compact ring
+// treatment (like the old sugar tracker did) rather than a full-size plate
+// — but unlike sugar, it has a real per-user editable goal (state.goals.water_oz),
+// not a fixed guideline, so the goal is shown as a note under the ring.
+function waterPlateHtml(value, goal) {
+  const pct = goal > 0 ? value / goal : 0;
+  return `<div class="mini-plate plate-secondary">
+    <div class="ring-wrap">
+      ${ringSvg(pct, 'var(--macro-water)')}
+      <div class="ring-inner">
+        <div class="ring-value">${round(value)}</div>
+      </div>
+    </div>
+    <div class="plate-label">WATER</div>
+    <div class="plate-note">goal ${round(goal)}oz</div>
+  </div>`;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════════════
@@ -1718,6 +1795,13 @@ function renderDashboard() {
   const calorieInRange = totals.calories >= calorieRange.low && totals.calories <= calorieRange.high;
   const calorieColor = calorieInRange ? 'var(--macro-calories)' : 'var(--text-dim)';
 
+  const today = localDateStr();
+  const todayWaterOz = state.waterLog
+    .filter((w) => localDateStr(new Date(w.logged_at)) === today)
+    .reduce((sum, w) => sum + (Number(w.amount_oz) || 0), 0);
+
+  const ws = weeklySummary();
+
   const panel = $('#panel-dashboard');
   panel.innerHTML = `
     <div class="card">
@@ -1727,12 +1811,31 @@ function renderDashboard() {
         ${plateHtml('PROTEIN', totals.protein_g, g.protein_g, 'var(--macro-protein)')}
         ${plateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--macro-carbs)')}
         ${plateHtml('FAT', totals.fat_g, g.fat_g, 'var(--macro-fat)')}
+        ${waterPlateHtml(todayWaterOz, g.water_oz || 64)}
       </div>
       <p class="muted" style="margin-top:0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
       <div class="row" style="margin-top:0.5rem;">
         <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
         <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
       </div>
+      <div class="row" style="margin-top:0.5rem;align-items:center;gap:0.5rem;">
+        <span class="muted">💧 Water:</span>
+        <div class="chip-row">
+          <button class="chip" data-water="8">+8oz</button>
+          <button class="chip" data-water="16">+16oz</button>
+          <button class="chip" data-water="24">+24oz</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>This Week</h3>
+      <div class="row" style="margin-top:0.25rem;">
+        <span class="badge on">🥩 Protein goal hit: ${ws.proteinDaysHit}/7 days</span>
+        <span class="badge">💧 Hydration goal hit: ${ws.waterDaysHit}/7 days</span>
+      </div>
+      <p class="muted" style="margin-top:0.75rem;margin-bottom:0.25rem;">Daily averages vs. goal, last 7 days:</p>
+      <p class="muted">Calories ${round(ws.avgCalories)} / ${round(g.calories)} · Protein ${round(ws.avgProtein)}g / ${round(g.protein_g)}g · Carbs ${round(ws.avgCarbs)}g / ${round(g.carbs_g)}g · Fat ${round(ws.avgFat)}g / ${round(g.fat_g)}g</p>
     </div>
 
     <div class="card">
@@ -1759,6 +1862,7 @@ function renderDashboard() {
   `;
 
   $$('[data-delete-log]', panel).forEach((btn) => btn.addEventListener('click', () => deleteLog(btn.dataset.deleteLog)));
+  $$('[data-water]', panel).forEach((btn) => btn.addEventListener('click', () => logWater(Number(btn.dataset.water))));
   $$('[data-quicklog-fav]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const fav = state.favorites.find((f) => f.id === btn.dataset.quicklogFav);
     if (fav) logFood({ food_name: fav.food_name, calories: fav.calories, protein_g: fav.protein_g, carbs_g: fav.carbs_g, fat_g: fav.fat_g, source: 'favorite' });
@@ -1779,6 +1883,14 @@ async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source 
   if (error) return toast('Could not log food: ' + error.message);
   toast(`Logged: ${food_name}`);
   await loadHistory();
+  renderAll();
+}
+
+async function logWater(amountOz) {
+  const { error } = await supabase.from('water_logs').insert({ user_id: state.user.id, amount_oz: amountOz });
+  if (error) return toast('Could not log water: ' + error.message);
+  toast(`+${amountOz}oz water logged`);
+  await loadWaterLog();
   renderAll();
 }
 
@@ -2530,6 +2642,7 @@ function renderProfile() {
         <div class="field"><label>Protein (g)</label><input class="input mono" id="goal_pro" type="number" value="${round(state.goals.protein_g)}"></div>
         <div class="field"><label>Carbs (g)</label><input class="input mono" id="goal_carb" type="number" value="${round(state.goals.carbs_g)}"></div>
         <div class="field"><label>Fat (g)</label><input class="input mono" id="goal_fat" type="number" value="${round(state.goals.fat_g)}"></div>
+        <div class="field"><label>Water (oz)</label><input class="input mono" id="goal_water" type="number" value="${round(state.goals.water_oz || 64)}"></div>
       </div>
       <button class="btn btn-primary" id="goal_save">Save Goals</button>
     </div>
@@ -2648,6 +2761,7 @@ function renderProfile() {
       protein_g: Number($('#goal_pro').value) || 0,
       carbs_g: Number($('#goal_carb').value) || 0,
       fat_g: Number($('#goal_fat').value) || 0,
+      water_oz: Number($('#goal_water').value) || 64,
       // goal_mode intentionally omitted — merge-duplicates leaves it
       // untouched, so manually editing goals here doesn't clobber whatever
       // the calculator last derived for the Dashboard's calorie-range shading.
