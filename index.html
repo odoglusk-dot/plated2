@@ -1818,12 +1818,16 @@ function renderDashboard() {
         <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
         <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
       </div>
-      <div class="row" style="margin-top:0.5rem;align-items:center;gap:0.5rem;">
+      <div class="row" style="margin-top:0.5rem;align-items:center;gap:0.5rem;flex-wrap:wrap;">
         <span class="muted">💧 Water:</span>
         <div class="chip-row">
           <button class="chip" data-water="8">+8oz</button>
           <button class="chip" data-water="16">+16oz</button>
           <button class="chip" data-water="24">+24oz</button>
+        </div>
+        <div class="row" style="flex:none;gap:0.4rem;align-items:center;">
+          <input class="input mono" id="water_custom_oz" type="number" min="1" placeholder="oz" style="width:64px;padding:0.4rem 0.5rem;">
+          <button class="btn btn-sm" id="water_custom_log">Log</button>
         </div>
       </div>
     </div>
@@ -1863,6 +1867,14 @@ function renderDashboard() {
 
   $$('[data-delete-log]', panel).forEach((btn) => btn.addEventListener('click', () => deleteLog(btn.dataset.deleteLog)));
   $$('[data-water]', panel).forEach((btn) => btn.addEventListener('click', () => logWater(Number(btn.dataset.water))));
+  const logCustomWater = () => {
+    const input = $('#water_custom_oz');
+    const amount = Number(input.value);
+    if (!amount || amount <= 0) return toast('Enter an amount in oz first.');
+    logWater(amount);
+  };
+  $('#water_custom_log').addEventListener('click', logCustomWater);
+  $('#water_custom_oz').addEventListener('keydown', (e) => { if (e.key === 'Enter') logCustomWater(); });
   $$('[data-quicklog-fav]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const fav = state.favorites.find((f) => f.id === btn.dataset.quicklogFav);
     if (fav) logFood({ food_name: fav.food_name, calories: fav.calories, protein_g: fav.protein_g, carbs_g: fav.carbs_g, fat_g: fav.fat_g, source: 'favorite' });
