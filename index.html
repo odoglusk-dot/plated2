@@ -231,6 +231,19 @@
     cursor: pointer; font-size: 0.85rem; }
   .chip:hover { border-color: var(--accent); }
 
+  /* ── History: collapsible day cards ──────────────────────────── */
+  .history-day { border-bottom: 1px solid var(--border); padding: 0.75rem 0; }
+  .history-day:last-child { border-bottom: none; }
+  .history-day-header { display: flex; align-items: center; gap: 0.6rem; width: 100%;
+    background: none; border: none; padding: 0; margin: 0; cursor: pointer; text-align: left;
+    font: inherit; color: inherit; }
+  .history-day-header .chevron { display: inline-block; flex: none; color: var(--text-dim);
+    transition: transform 0.25s ease; }
+  .history-day-header .chevron.expanded { transform: rotate(90deg); }
+  .history-day-body { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+  .history-day-body-inner { padding-top: 0.6rem; }
+  .meal-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; }
+
   .sub-nav { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
   .sub-nav button { flex: none; }
 
@@ -2287,6 +2300,26 @@ async function callFunction(name, body) {
 // ══════════════════════════════════════════════════════════════════
 // HISTORY TAB
 // ══════════════════════════════════════════════════════════════════
+// Which days are expanded, persisted across re-renders (e.g. logging food
+// from another tab triggers renderAll() -> renderHistory() again) — starts
+// with just today expanded, everything else collapsed.
+const expandedHistoryDays = new Set([localDateStr()]);
+
+// Photo logging never persists the image anywhere today (it's only sent to
+// the AI for a one-off estimate, then discarded) — food_logs has no image
+// column. This stays a no-op until that changes, but is ready to show a
+// thumbnail the moment a row actually has one.
+function historyMealRowHtml(l) {
+  const thumb = l.photo_url ? `<img class="meal-thumb" src="${esc(l.photo_url)}" alt="">` : '';
+  return `<div class="log-row">
+    ${thumb}
+    <div style="flex:1;">
+      <div class="name">${esc(l.food_name)}</div>
+      <div class="macros">${round(l.calories)} kcal · P${round(l.protein_g)} C${round(l.carbs_g)} F${round(l.fat_g)}</div>
+    </div>
+  </div>`;
+}
+
 function renderHistory() {
   const panel = $('#panel-history');
   const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
@@ -2311,19 +2344,59 @@ function renderHistory() {
         const dayLogs = byDay.get(day);
         const totals = sumMacros(dayLogs);
         const met = totals.protein_g >= state.goals.protein_g;
-        return `<div style="margin-top:0.9rem;">
-          <div class="row" style="align-items:center;">
+        const isExpanded = expandedHistoryDays.has(day);
+        return `<div class="history-day">
+          <button class="history-day-header" data-day-toggle="${day}" aria-expanded="${isExpanded}">
+            <span class="chevron ${isExpanded ? 'expanded' : ''}">▸</span>
             <strong>${day}</strong>
             <span class="badge ${met ? 'on' : ''}">${round(totals.protein_g)}g protein</span>
             <span class="muted">${round(totals.calories)} kcal</span>
+          </button>
+          <div class="history-day-body" data-day-body="${day}">
+            <div class="history-day-body-inner">
+              ${dayLogs.map(historyMealRowHtml).join('')}
+            </div>
           </div>
-          ${dayLogs.map((l) => `<div class="log-row"><div class="name">${esc(l.food_name)}</div><div class="macros">${round(l.calories)} kcal · P${round(l.protein_g)} C${round(l.carbs_g)} F${round(l.fat_g)}</div></div>`).join('')}
         </div>`;
       }).join('')}
     </div>
   `;
 
   $('#exportCsvBtn')?.addEventListener('click', exportHistoryCsv);
+
+  // Sync each body's max-height to its persisted expand/collapse state.
+  // Uses a generous fixed cap rather than measuring scrollHeight — this
+  // render can happen while the History tab isn't the active one (e.g.
+  // bootstrapApp()'s initial renderAll() renders every tab while Dashboard
+  // is showing), and .tab-panel:not(.active) is display:none, under which
+  // scrollHeight always reads 0. The click handler below still measures
+  // scrollHeight precisely, since a click can only happen while visible.
+  $$('[data-day-body]', panel).forEach((body) => {
+    if (expandedHistoryDays.has(body.dataset.dayBody)) body.style.maxHeight = '2000px';
+  });
+
+  // Toggling flips styles on the existing elements directly, rather than
+  // going through renderHistory() again — re-rendering would replace the
+  // DOM node outright and the max-height transition couldn't animate
+  // across that, it'd just snap to the new state.
+  $$('[data-day-toggle]', panel).forEach((header) => {
+    header.addEventListener('click', () => {
+      const day = header.dataset.dayToggle;
+      const body = panel.querySelector(`[data-day-body="${day}"]`);
+      const chevron = header.querySelector('.chevron');
+      if (expandedHistoryDays.has(day)) {
+        expandedHistoryDays.delete(day);
+        body.style.maxHeight = '0px';
+        chevron.classList.remove('expanded');
+        header.setAttribute('aria-expanded', 'false');
+      } else {
+        expandedHistoryDays.add(day);
+        body.style.maxHeight = body.scrollHeight + 'px';
+        chevron.classList.add('expanded');
+        header.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
 }
 
 function exportHistoryCsv() {
