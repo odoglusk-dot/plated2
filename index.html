@@ -188,12 +188,20 @@
   .streak-pill { font-family: var(--font-mono); font-size: 0.85rem; background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 999px; padding: 0.3rem 0.8rem; }
 
-  .tab-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.15rem; padding: 0.4rem 0.6rem; background: var(--surface);
+  .tab-nav { padding: 0.4rem 0.6rem; background: var(--surface);
     border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 19; }
+  .mode-switch { display: flex; gap: 0.4rem; padding-bottom: 0.4rem; margin-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border); }
+  .mode-switch-btn { flex: 1; font-family: var(--font-display); letter-spacing: 0.02em; font-size: 0.78rem;
+    padding: 0.45rem 0.5rem; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text-dim); cursor: pointer; text-align: center; }
+  .mode-switch-btn.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+  .tab-btn-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.15rem; }
   .tab-btn { font-family: var(--font-display); letter-spacing: 0.01em; font-size: 0.82rem; padding: 0.5rem 0.1rem;
     border-radius: 8px; background: transparent; border: none; color: var(--text-dim); cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
   .tab-btn.active { color: var(--accent); background: var(--surface-2); }
+  .tab-btn.mode-hidden { display: none; }
 
   main.tab-panels { padding: 1.25rem; max-width: 880px; margin: 0 auto; }
   .tab-panel { display: none; }
@@ -220,6 +228,28 @@
   .mini-plate .plate-label { font-size: 0.58rem; }
   .plate-secondary { justify-self: start; align-self: end; opacity: 0.85; }
   .plate-note { font-size: 0.6rem; color: var(--text-dim); }
+
+  /* ── Training (IronLog merge) ─────────────────────────────────── */
+  .plate-stack { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+  .plate-stack-svg { width: 100%; max-width: 320px; height: 140px; }
+  .plate-stack-label { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-dim); letter-spacing: 0.02em; }
+  .reps-per-set-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .reps-per-set-cell { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+  .reps-per-set-cell span { font-size: 0.68rem; color: var(--text-dim); }
+  .reps-per-set-cell .input { width: 44px; text-align: center; padding: 0.4rem 0; }
+  .live-comparison { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; }
+  .live-comparison-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
+  .mini-line-svg { width: 100%; height: 60px; display: block; }
+  .today-summary-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; text-align: center; }
+  .lift-detail-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
+  .lift-detail-title { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; }
+  .goal-progress-bar { background: var(--surface-2); border-radius: 6px; height: 10px; overflow: hidden; margin-bottom: 0.4rem; }
+  .goal-progress-fill { height: 100%; }
+  .pr-banner { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; border-color: var(--accent); }
+  .checkbox-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); font-weight: normal; margin-bottom: 0.9rem; }
+  .checkbox-row input { width: auto; }
+  .stat-num { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 500; }
+  .small { font-size: 0.78rem; }
 
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
@@ -505,14 +535,22 @@
   </div>
 
   <nav class="tab-nav" id="tabNav">
-    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-    <button class="tab-btn" data-tab="log">Log Food</button>
-    <button class="tab-btn" data-tab="history">History</button>
-    <button class="tab-btn" data-tab="weight">Weight</button>
-    <button class="tab-btn" data-tab="supplements">Supplements</button>
-    <button class="tab-btn" data-tab="meals">Meals</button>
-    <button class="tab-btn" data-tab="ask">Ask AI</button>
-    <button class="tab-btn" data-tab="profile">Profile</button>
+    <div class="mode-switch">
+      <button class="mode-switch-btn active" data-mode="nutrition">🥗 Nutrition</button>
+      <button class="mode-switch-btn" data-mode="training">🏋️ Training</button>
+    </div>
+    <div class="tab-btn-row">
+      <button class="tab-btn active" data-tab="dashboard" data-mode="nutrition">Dashboard</button>
+      <button class="tab-btn" data-tab="log" data-mode="nutrition">Log Food</button>
+      <button class="tab-btn" data-tab="history" data-mode="nutrition">History</button>
+      <button class="tab-btn" data-tab="weight" data-mode="nutrition">Weight</button>
+      <button class="tab-btn" data-tab="supplements" data-mode="nutrition">Supplements</button>
+      <button class="tab-btn" data-tab="meals" data-mode="nutrition">Meals</button>
+      <button class="tab-btn" data-tab="ask" data-mode="nutrition">Ask AI</button>
+      <button class="tab-btn" data-tab="profile" data-mode="nutrition">Profile</button>
+      <button class="tab-btn mode-hidden" data-tab="training-dashboard" data-mode="training">Dashboard</button>
+      <button class="tab-btn mode-hidden" data-tab="lifts" data-mode="training">Lifts</button>
+    </div>
   </nav>
 
   <main class="tab-panels">
@@ -524,6 +562,8 @@
     <section class="tab-panel" data-tab="meals" id="panel-meals"></section>
     <section class="tab-panel" data-tab="ask" id="panel-ask"></section>
     <section class="tab-panel" data-tab="profile" id="panel-profile"></section>
+    <section class="tab-panel" data-tab="training-dashboard" id="panel-training-dashboard"></section>
+    <section class="tab-panel" data-tab="lifts" id="panel-lifts"></section>
   </main>
 
   <footer class="legal">
@@ -609,7 +649,11 @@ const state = {
   weightLog: [],
   supplementLogs: [],
   waterLog: [], // last 14 days — plenty of buffer for "today" + the 7-day weekly summary
+  lifts: [], // strength-training log, all-time (mirrors historyLogs' "load once, filter client-side" approach)
+  exerciseGoals: [],
   activeTab: 'dashboard',
+  appMode: 'nutrition', // 'nutrition' | 'training'
+  lastTabByMode: { nutrition: 'dashboard', training: 'training-dashboard' },
   aiRemaining: null,
   subscription: null,
   referrals: [],
@@ -1468,7 +1512,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadReferrals()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadReferrals()]);
   renderAll();
 }
 
@@ -1585,6 +1629,20 @@ async function loadWaterLog() {
   state.waterLog = data || [];
 }
 
+// Training (IronLog merge). All-time, same "load once, filter/aggregate
+// client-side" approach as historyLogs — a personal lift log is small
+// enough that this is simpler than windowed queries, and features like
+// career volume and plateau detection need the full history anyway.
+async function loadLifts() {
+  const { data } = await supabase.from('lifts').select('*').eq('user_id', state.user.id).order('date', { ascending: true });
+  state.lifts = data || [];
+}
+
+async function loadExerciseGoals() {
+  const { data } = await supabase.from('exercise_goals').select('*').eq('user_id', state.user.id);
+  state.exerciseGoals = data || [];
+}
+
 async function loadReferrals() {
   const { data } = await supabase.from('referrals').select('status').eq('referrer_user_id', state.user.id);
   state.referrals = data || [];
@@ -1599,6 +1657,8 @@ function renderAll() {
   renderMeals();
   renderAsk();
   renderProfile();
+  renderTrainingDashboard();
+  renderLiftsTab();
   updateStreakPill();
 }
 
@@ -1606,9 +1666,18 @@ function renderAll() {
 // TAB NAVIGATION
 // ══════════════════════════════════════════════════════════════════
 $$('.tab-btn').forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
+$$('.mode-switch-btn').forEach((btn) => btn.addEventListener('click', () => setAppMode(btn.dataset.mode)));
+
+function setAppMode(mode) {
+  state.appMode = mode;
+  $$('.mode-switch-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+  $$('.tab-btn').forEach((b) => b.classList.toggle('mode-hidden', b.dataset.mode !== mode));
+  setActiveTab(state.lastTabByMode[mode]);
+}
 
 function setActiveTab(tab) {
   state.activeTab = tab;
+  state.lastTabByMode[state.appMode] = tab;
   $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
 }
@@ -3034,6 +3103,835 @@ function renderProfile() {
       toast('Could not delete account: ' + err.message);
     }
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TRAINING (IronLog merge) — calculation helpers
+// ══════════════════════════════════════════════════════════════════
+// Ported from IronLog's IronLog.jsx. Field names are adapted to this
+// file's snake_case-from-the-DB convention (l.reps_per_set, not
+// l.repsPerSet — no camelCase mapping layer, matching how every other
+// table in this app is handled). Date handling is also tightened: the
+// original sometimes parsed a plain "YYYY-MM-DD" string with plain
+// `new Date(dateStr)`, which JS treats as UTC midnight — for anyone in a
+// UTC-positive-offset timezone that's the *previous* local day, a real
+// correctness bug for week-boundary/day-of-week logic. Ported call sites
+// use `new Date(\`${dateStr}T00:00:00\`)` (forces local midnight) instead,
+// matching the pattern already used elsewhere in this file (e.g. the
+// goal calculator's target-date handling), and use this file's existing
+// localDateStr() instead of `.toISOString().slice(0, 10)` when going
+// back from a Date to a date-string, for the same reason.
+
+const COMMON_LIFTS = ['Back Squat', 'Bench Press', 'Deadlift', 'Front Squat', 'Overhead Press', 'Power Clean'];
+
+const MUSCLE_GROUPS = ['Legs', 'Push', 'Pull', 'Core', 'Full Body', 'Other'];
+const MUSCLE_GROUP_COLORS = {
+  Legs: '#5E7A8C',
+  Push: 'var(--danger)',
+  Pull: 'var(--success)',
+  Core: '#A38F6E',
+  'Full Body': '#8F6EA3',
+  Other: 'var(--text-dim)',
+};
+const DEFAULT_MUSCLE_GROUP = {
+  'Back Squat': 'Legs',
+  'Front Squat': 'Legs',
+  'Bench Press': 'Push',
+  'Overhead Press': 'Push',
+  Deadlift: 'Pull',
+  'Power Clean': 'Full Body',
+};
+function getMuscleGroup(l) {
+  return l.muscle_group || DEFAULT_MUSCLE_GROUP[l.exercise] || 'Other';
+}
+
+// Epley formula estimated 1-rep max
+function e1RM(weight, reps) {
+  if (!weight || !reps || reps <= 0) return 0;
+  if (reps === 1) return Math.round(weight);
+  return Math.round(weight * (1 + reps / 30));
+}
+
+// total reps across all sets — uses reps_per_set if available (allows
+// different reps per set), falls back to sets × reps for older entries
+function totalReps(l) {
+  if (l.reps_per_set && l.reps_per_set.length) return l.reps_per_set.reduce((a, b) => a + b, 0);
+  return (l.sets || 0) * (l.reps || 0);
+}
+
+function avgReps(repsPerSet) {
+  if (!repsPerSet || repsPerSet.length === 0) return 0;
+  return repsPerSet.reduce((a, b) => a + b, 0) / repsPerSet.length;
+}
+
+function repsDisplay(l) {
+  if (l.reps_per_set && l.reps_per_set.length) return `${l.reps_per_set.join('/')} reps`;
+  return `${l.reps} reps × ${l.sets} sets`;
+}
+
+// flags true if the best e1RM in the last 3 sessions hasn't beaten the
+// best e1RM before that
+function detectPlateau(history) {
+  if (history.length < 4) return false;
+  const sorted = [...history].sort((a, b) => new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`));
+  const withE1RM = sorted.map((l) => ({ ...l, e1rm: e1RM(l.weight, l.reps) }));
+  const recent = withE1RM.slice(-3);
+  const prior = withE1RM.slice(0, -3);
+  if (prior.length === 0) return false;
+  const priorBest = Math.max(...prior.map((l) => l.e1rm));
+  const recentBest = Math.max(...recent.map((l) => l.e1rm));
+  return recentBest <= priorBest;
+}
+
+function getWeekStart(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const day = d.getDay(); // 0 = Sunday
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  return localDateStr(monday);
+}
+
+function fmtLiftDate(dateStr) {
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// lighthearted "what does this weight add up to" comparison for the
+// career volume stat
+const VOLUME_COMPARISONS = [
+  { unit: 'car', plural: 'cars', lb: 4000, emoji: '🚗', max: 50000 },
+  { unit: 'school bus', plural: 'school buses', lb: 24000, emoji: '🚌', max: 1000000 },
+  { unit: 'Boeing 737', plural: 'Boeing 737s', lb: 150000, emoji: '✈️', max: Infinity },
+];
+function volumeFunFact(totalLb) {
+  if (!totalLb || totalLb <= 0) return null;
+  const tier = VOLUME_COMPARISONS.find((t) => totalLb < t.max);
+  const count = totalLb / tier.lb;
+  const countLabel = count < 10 ? count.toFixed(1) : Math.round(count).toLocaleString();
+  const label = count === 1 ? tier.unit : tier.plural;
+  return `${tier.emoji} that's about ${countLabel} ${label}`;
+}
+
+// Bodyweight is unified into state.weightLog (weight_lb/logged_date), not
+// a separate table — see the schema migration notes. Most recent entry on
+// or before dateStr; a simple scan since a personal weight history is
+// already loaded client-side in full.
+function bodyweightAsOf(dateStr, weightLogEntries) {
+  let best = null;
+  for (const w of weightLogEntries) {
+    if (w.logged_date <= dateStr && (!best || w.logged_date > best.logged_date)) best = w;
+  }
+  return best;
+}
+
+function latestBodyweightEntry(weightLogEntries) {
+  return weightLogEntries.length
+    ? [...weightLogEntries].sort((a, b) => new Date(`${b.logged_date}T00:00:00`) - new Date(`${a.logged_date}T00:00:00`))[0]
+    : null;
+}
+
+function subtractDays(dateStr, days) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() - days);
+  return localDateStr(d);
+}
+
+// how far above the trailing 4-week average a week's volume must be to
+// trigger the volume-spike warning
+const VOLUME_SPIKE_THRESHOLD = 0.4;
+
+// compares this week's volume to the trailing 4-week average; returns
+// null when there isn't a spike, or when there isn't enough history to judge one
+function computeVolumeSpike(lifts, currentWeekStart, threshold = VOLUME_SPIKE_THRESHOLD) {
+  const weeklyVolume = {};
+  for (const l of lifts) {
+    const wk = getWeekStart(l.date);
+    weeklyVolume[wk] = (weeklyVolume[wk] || 0) + l.weight * totalReps(l);
+  }
+
+  const currentVolume = weeklyVolume[currentWeekStart] || 0;
+  if (currentVolume === 0) return null;
+
+  const priorVolumes = [];
+  const cursor = new Date(`${currentWeekStart}T00:00:00`);
+  for (let i = 0; i < 4; i++) {
+    cursor.setDate(cursor.getDate() - 7);
+    priorVolumes.push(weeklyVolume[localDateStr(cursor)] || 0);
+  }
+
+  if (priorVolumes.filter((v) => v > 0).length < 2) return null; // not enough history to judge a spike yet
+
+  const avgVolume = priorVolumes.reduce((a, b) => a + b, 0) / priorVolumes.length;
+  if (avgVolume <= 0) return null;
+
+  const pctAbove = ((currentVolume - avgVolume) / avgVolume) * 100;
+  if (pctAbove < threshold * 100) return null;
+
+  return { weekStart: currentWeekStart, currentVolume, avgVolume, pctAbove: Math.round(pctAbove) };
+}
+
+// simple least-squares fit — no need for anything fancier for a goal projection
+function linearRegression(points) {
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumXX = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumXX - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+}
+
+// projects the date e1RM would cross targetWeight at the current linear
+// rate of improvement; null when there's not enough history or the trend
+// isn't heading toward the goal
+function projectGoalDate(history, targetWeight) {
+  if (history.length < 3) return null;
+  const sorted = [...history].sort((a, b) => new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`));
+  const firstDate = new Date(`${sorted[0].date}T00:00:00`);
+  const points = sorted.map((l) => ({
+    x: Math.round((new Date(`${l.date}T00:00:00`) - firstDate) / 86400000),
+    y: e1RM(l.weight, l.reps),
+  }));
+  const reg = linearRegression(points);
+  if (!reg || reg.slope <= 0) return null;
+  const xTarget = (targetWeight - reg.intercept) / reg.slope;
+  return localDateStr(new Date(firstDate.getTime() + xTarget * 86400000));
+}
+
+// plate math — bar + plates needed per side for a given total weight
+const PLATE_DEFS = [
+  { lb: 45, color: 'var(--accent)', r: 46 },
+  { lb: 35, color: 'var(--text-dim)', r: 40 },
+  { lb: 25, color: 'var(--danger)', r: 35 },
+  { lb: 10, color: '#4A6FA5', r: 27 },
+  { lb: 5, color: 'var(--success)', r: 22 },
+  { lb: 2.5, color: '#8C8C8C', r: 17 },
+];
+function platesForWeight(totalLb, barLb = 45) {
+  let perSide = Math.max(0, (totalLb - barLb) / 2);
+  const used = [];
+  for (const p of PLATE_DEFS) {
+    while (perSide >= p.lb - 0.001) {
+      used.push(p);
+      perSide -= p.lb;
+    }
+  }
+  return used;
+}
+
+function plateStackHtml(weight, barLb = 45) {
+  const plates = platesForWeight(weight, barLb);
+  const barY = 60;
+  const platesSvg = plates.length === 0
+    ? `<text x="160" y="${barY + 4}" text-anchor="middle" fill="var(--text-dim)" font-size="11" font-family="var(--font-mono)">bar only</text>`
+    : plates.map((p, i) => {
+        const x = 78 + i * 16;
+        return `<ellipse cx="${x}" cy="${barY}" rx="${p.r * 0.22}" ry="${p.r}" fill="${p.color}" stroke="var(--surface)" stroke-width="1.5"></ellipse>`;
+      }).join('');
+  const summary = plates.length === 0
+    ? `${barLb} lb bar`
+    : plates.reduce((acc, p) => {
+        const found = acc.find((a) => a.lb === p.lb);
+        if (found) found.n++; else acc.push({ lb: p.lb, n: 1 });
+        return acc;
+      }, []).map((a) => `${a.n}×${a.lb}`).join('  ·  ');
+  return `<div class="plate-stack">
+    <svg viewBox="0 0 320 140" class="plate-stack-svg">
+      <rect x="10" y="${barY - 4}" width="300" height="8" rx="3" fill="var(--text-dim)"></rect>
+      <rect x="60" y="${barY - 6}" width="14" height="12" fill="var(--border)"></rect>
+      ${platesSvg}
+    </svg>
+    <div class="plate-stack-label">${summary}</div>
+  </div>`;
+}
+
+// ── Lifts tab (log form, autocomplete, history editing, goals) ─────
+// Unlike React's IronLog source, there's no component-local state here —
+// following this file's existing pattern (e.g. logSubTab), form/editing
+// state lives in module-level variables and every mutation re-renders the
+// whole panel from state, same as every other tab in this file.
+let liftsSelectedExercise = null;
+let liftForm = {
+  exercise: '', muscleGroup: '', bodyRegion: '', weight: '', sets: 3,
+  repsPerSet: ['5', '5', '5'], date: localDateStr(), isSuperset: false, supersetGroup: '',
+};
+let liftFormError = '';
+let liftFormSaving = false;
+let prBanner = null; // { exercise, weight, improvement } — dismissed manually, not auto-timed
+
+let goalCardEditing = false;
+let goalCardError = '';
+let goalCardSaving = false;
+
+let liftHistoryEditingId = null;
+let liftHistoryEditForm = null; // { weight, date, repsPerSet }
+let liftHistoryError = '';
+let liftHistorySaving = false;
+let liftHistoryConfirmDeleteId = null;
+let liftHistoryDeleting = false;
+
+let dismissedSpikeWeek = null;
+
+// best (highest-weight) lift per exercise, keyed by exercise name
+function computeLiftPRs(lifts) {
+  const prs = {};
+  for (const l of lifts) {
+    if (!prs[l.exercise] || l.weight > prs[l.exercise].weight) prs[l.exercise] = l;
+  }
+  return prs;
+}
+
+function miniLineSvg(values, w = 300, h = 60) {
+  const pad = 6;
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = (max - min) || 1;
+  const points = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((v - min) / span) * (h - pad * 2);
+    return `${x},${y}`;
+  });
+  return `<svg viewBox="0 0 ${w} ${h}" class="mini-line-svg">
+    <polyline points="${points.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2"></polyline>
+  </svg>`;
+}
+
+function e1rmChartSvg(history) {
+  const w = 600, h = 170, pad = 24;
+  const weights = history.map((l) => l.weight);
+  const e1rms = history.map((l) => e1RM(l.weight, l.reps));
+  const all = [...weights, ...e1rms];
+  const min = Math.min(...all), max = Math.max(...all);
+  const span = (max - min) || 1;
+  const n = history.length;
+  const xAt = (i) => pad + (i / (n - 1)) * (w - pad * 2);
+  const yAt = (v) => h - pad - ((v - min) / span) * (h - pad * 2);
+  const weightPts = weights.map((v, i) => `${xAt(i)},${yAt(v)}`).join(' ');
+  const e1rmPts = e1rms.map((v, i) => `${xAt(i)},${yAt(v)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
+    <polyline points="${weightPts}" fill="none" stroke="var(--accent)" stroke-width="2.5"></polyline>
+    <polyline points="${e1rmPts}" fill="none" stroke="var(--success)" stroke-width="2" stroke-dasharray="4 3"></polyline>
+    ${weights.map((v, i) => `<circle cx="${xAt(i)}" cy="${yAt(v)}" r="3" fill="var(--accent)"></circle>`).join('')}
+  </svg>`;
+}
+
+function liveComparisonHtml(exercise, lifts) {
+  const history = lifts.filter((l) => l.exercise === exercise).sort((a, b) => a.date.localeCompare(b.date));
+  if (history.length === 0) {
+    return `<div class="muted small" style="padding:0.4rem 0.15rem;">First time logging ${esc(exercise)} — no history yet to compare against.</div>`;
+  }
+  const first = history[0], last = history[history.length - 1];
+  const totalChange = last.weight - first.weight;
+  const totalPct = first.weight ? Math.round((totalChange / first.weight) * 100) : 0;
+  const changeColor = totalChange > 0 ? 'var(--success)' : totalChange < 0 ? 'var(--danger)' : 'var(--text-dim)';
+  return `<div class="live-comparison">
+    <div class="live-comparison-head">
+      <div class="muted small">Last logged: <span class="mono" style="color:var(--text);">${last.weight}lb</span> on ${fmtLiftDate(last.date)}</div>
+      ${history.length > 1 ? `<div class="mono small" style="color:${changeColor};">${totalChange > 0 ? '+' : ''}${round(totalChange, 1)}lb (${totalPct > 0 ? '+' : ''}${totalPct}%) since ${fmtLiftDate(first.date)}</div>` : ''}
+    </div>
+    ${history.length > 1 ? miniLineSvg(history.map((l) => l.weight)) : `<div class="muted small">Log one more session to start seeing a trend line here.</div>`}
+  </div>`;
+}
+
+function prefillLiftFormFromLast(exercise) {
+  const history = state.lifts.filter((l) => l.exercise === exercise).sort((a, b) => b.date.localeCompare(a.date));
+  if (history.length === 0) return;
+  const last = history[0];
+  const repsPerSet = last.reps_per_set && last.reps_per_set.length ? last.reps_per_set : Array(last.sets || 1).fill(last.reps);
+  liftForm.weight = String(last.weight);
+  liftForm.sets = repsPerSet.length;
+  liftForm.repsPerSet = repsPerSet.map(String);
+}
+
+function goalCardHtml(exercise, history, bestE1RM, goal) {
+  if (goalCardEditing) {
+    return `<div class="card">
+      <h3>${goal ? 'Edit Goal' : 'Set a Goal'}</h3>
+      <div class="field"><input class="input mono" id="goal_weight" type="number" placeholder="Target weight (lb)" value="${goal ? goal.target_weight : ''}"></div>
+      <div class="field"><input class="input" id="goal_date" type="date" value="${goal ? goal.target_date : ''}"></div>
+      ${goalCardError ? `<div class="muted small" style="color:var(--danger);">${esc(goalCardError)}</div>` : ''}
+      <div class="row" style="align-items:center;">
+        <button class="btn btn-sm btn-primary" id="goal_save" ${goalCardSaving ? 'disabled' : ''}>${goalCardSaving ? 'Saving…' : 'Save'}</button>
+        <button class="btn btn-sm btn-ghost" id="goal_cancel">Cancel</button>
+        ${goal ? `<button class="btn btn-sm btn-ghost" id="goal_remove" style="color:var(--danger);">Remove goal</button>` : ''}
+      </div>
+    </div>`;
+  }
+  if (!goal) {
+    return `<div class="card">
+      <h3>Goal</h3>
+      <p class="muted small">No goal set for ${esc(exercise)} yet.</p>
+      <button class="btn btn-sm" id="goal_start">Set a goal</button>
+    </div>`;
+  }
+  const progress = Math.min(1, Math.max(0, bestE1RM / goal.target_weight));
+  const achieved = bestE1RM >= goal.target_weight;
+  const projectedDate = achieved ? null : projectGoalDate(history, goal.target_weight);
+  const onTrack = projectedDate ? projectedDate <= goal.target_date : null;
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;">
+      <h3>Goal</h3>
+      <button class="btn btn-sm btn-ghost" id="goal_start">Edit</button>
+    </div>
+    <p style="margin:0 0 0.5rem;"><span class="mono" style="color:var(--accent);">${goal.target_weight} lb</span> e1RM by ${fmtLiftDate(goal.target_date)}</p>
+    <div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${progress * 100}%;background:${achieved ? 'var(--success)' : 'var(--accent)'};"></div></div>
+    <p class="muted small">Current e1RM: <span class="mono" style="color:var(--text);">${bestE1RM || 0} lb</span> (${Math.round(progress * 100)}% of goal)</p>
+    ${achieved ? `<p style="color:var(--success);margin:0;">🎉 Goal reached!</p>` :
+      projectedDate ? `<p class="small" style="color:${onTrack ? 'var(--success)' : 'var(--text-dim)'};margin:0;">At your current rate of improvement, projected to hit this around <span style="color:var(--text);">${fmtLiftDate(projectedDate)}</span>${onTrack ? ' — on track!' : ' — behind your target date at this rate.'}</p>` :
+      `<p class="muted small" style="margin:0;">Not enough of an upward trend in your history yet to project a date — keep logging sessions.</p>`}
+  </div>`;
+}
+
+function liftHistoryRowHtml(lift, isLast) {
+  if (liftHistoryEditingId !== lift.id) {
+    return `<div class="log-row"${isLast ? ' style="border-bottom:none;"' : ''}>
+      <span class="muted">${fmtLiftDate(lift.date)}</span>
+      <div class="row" style="align-items:center;gap:0.6rem;flex:none;">
+        <span class="mono">${lift.weight}lb · ${repsDisplay(lift)}</span>
+        <button class="btn btn-sm btn-ghost" data-lift-edit="${lift.id}">Edit</button>
+      </div>
+    </div>`;
+  }
+  const f = liftHistoryEditForm;
+  return `<div style="padding:0.75rem;${isLast ? '' : 'border-bottom:1px solid var(--border);'}display:flex;flex-direction:column;gap:0.5rem;">
+    <div class="row">
+      <input class="input mono" type="number" id="lhe_weight" value="${esc(f.weight)}" placeholder="Weight (lb)">
+      <input class="input" type="date" id="lhe_date" value="${f.date}">
+    </div>
+    <div class="field" style="margin-bottom:0;"><label>Sets</label><input class="input mono" type="number" id="lhe_sets" value="${f.repsPerSet.length}" style="width:70px;"></div>
+    <div class="reps-per-set-row" id="lhe_repsRow">
+      ${f.repsPerSet.map((r, i) => `<input class="input mono" type="number" data-lhe-rep-idx="${i}" value="${esc(r)}" style="width:42px;text-align:center;">`).join('')}
+    </div>
+    ${liftHistoryError ? `<div class="muted small" style="color:var(--danger);">${esc(liftHistoryError)}</div>` : ''}
+    <div class="row" style="align-items:center;">
+      <button class="btn btn-sm btn-primary" id="lhe_save" ${liftHistorySaving ? 'disabled' : ''}>${liftHistorySaving ? 'Saving…' : 'Save'}</button>
+      <button class="btn btn-sm btn-ghost" id="lhe_cancel">Cancel</button>
+      <button class="btn btn-sm btn-ghost" id="lhe_delete" style="color:var(--danger);">Delete</button>
+    </div>
+    ${liftHistoryConfirmDeleteId === lift.id ? `
+    <div class="row" style="align-items:center;">
+      <span class="muted small">Delete this entry for good?</span>
+      <button class="btn btn-sm" id="lhe_confirmDelete" style="background:var(--danger);color:#FFFFFF;" ${liftHistoryDeleting ? 'disabled' : ''}>${liftHistoryDeleting ? 'Deleting…' : 'Yes, delete'}</button>
+      <button class="btn btn-sm btn-ghost" id="lhe_cancelDelete">No</button>
+    </div>` : ''}
+  </div>`;
+}
+
+function renderLiftsTab() {
+  const panel = $('#panel-lifts');
+  if (!panel) return;
+  if (liftsSelectedExercise) renderLiftDetail(panel);
+  else renderLiftLog(panel);
+}
+
+function renderLiftLog(panel) {
+  const lifts = state.lifts;
+  const prs = computeLiftPRs(lifts);
+  const exercises = Array.from(new Set(lifts.map((l) => l.exercise)));
+  const allExerciseOptions = Array.from(new Set([...COMMON_LIFTS, ...exercises]));
+  const today = localDateStr();
+  const todayLifts = lifts.filter((l) => l.date === today);
+  const todaySummary = {
+    exerciseCount: new Set(todayLifts.map((l) => l.exercise)).size,
+    sets: todayLifts.reduce((sum, l) => sum + (l.reps_per_set?.length || l.sets || 0), 0),
+    volume: todayLifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0),
+  };
+  const groupsForFormDate = Array.from(new Set(lifts.filter((l) => l.date === liftForm.date && l.superset_group).map((l) => l.superset_group)));
+
+  panel.innerHTML = `
+    ${prBanner ? `
+    <div class="card pr-banner">
+      <div class="small">🔥 New PR — <strong>${esc(prBanner.exercise)}</strong> at <span class="mono" style="color:var(--accent);">${prBanner.weight} lb</span> · +${prBanner.improvement} lb over your previous best</div>
+      <button class="btn btn-sm btn-ghost" id="prBannerDismiss">✕</button>
+    </div>` : ''}
+    <div class="card">
+      <h3>Log a lift</h3>
+      <div class="field">
+        <label>Exercise</label>
+        <input class="input" id="lift_exercise" list="liftExerciseOptions" value="${esc(liftForm.exercise)}" placeholder="Search or type a new exercise…" autocomplete="off">
+        <datalist id="liftExerciseOptions">${allExerciseOptions.map((o) => `<option value="${esc(o)}">`).join('')}</datalist>
+      </div>
+      ${liftForm.exercise ? `
+      <div class="row">
+        <div class="field"><label>Muscle group</label>
+          <select id="lift_muscleGroup">
+            <option value="">Muscle group…</option>
+            ${MUSCLE_GROUPS.map((m) => `<option value="${m}" ${liftForm.muscleGroup === m ? 'selected' : ''}>${m}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Body region (for map)</label>
+          <select id="lift_bodyRegion">
+            <option value="">Body region…</option>
+            ${BODY_REGIONS.map((r) => `<option value="${r}" ${liftForm.bodyRegion === r ? 'selected' : ''}>${BODY_REGION_LABELS[r]}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field" id="liftLiveComparison">${liveComparisonHtml(liftForm.exercise, lifts)}</div>
+      ` : ''}
+      <div class="row">
+        <div class="field"><label>Weight (lb)</label><input class="input mono" id="lift_weight" type="number" value="${esc(liftForm.weight)}"></div>
+        <div class="field"><label>Sets</label><input class="input mono" id="lift_sets" type="number" min="1" max="20" value="${liftForm.sets}"></div>
+      </div>
+      <div class="field">
+        <label>Reps per set (can vary set to set)</label>
+        <div class="reps-per-set-row" id="liftRepsRow">
+          ${liftForm.repsPerSet.map((r, i) => `<div class="reps-per-set-cell"><span>Set ${i + 1}</span><input class="input mono" type="number" data-rep-idx="${i}" value="${esc(r)}"></div>`).join('')}
+        </div>
+        <div class="muted small" style="margin-top:0.4rem;">Avg: <span class="mono" style="color:var(--accent);">${avgReps(liftForm.repsPerSet.map((r) => Number(r) || 0)).toFixed(1)}</span> reps/set (used for charts) · total ${liftForm.repsPerSet.reduce((s, r) => s + (Number(r) || 0), 0)} reps</div>
+      </div>
+      <div class="field"><label>Date</label><input class="input" id="lift_date" type="date" value="${liftForm.date}"></div>
+      <label class="checkbox-row"><input type="checkbox" id="lift_isSuperset" ${liftForm.isSuperset ? 'checked' : ''}> Part of a superset/circuit</label>
+      ${liftForm.isSuperset ? `
+        <div class="field">
+          <input class="input" id="lift_supersetGroup" list="liftSupersetGroups" placeholder="Group name (e.g. Superset A)" value="${esc(liftForm.supersetGroup)}">
+          <datalist id="liftSupersetGroups">${groupsForFormDate.map((g) => `<option value="${esc(g)}">`).join('')}</datalist>
+        </div>
+        ${groupsForFormDate.length ? `<p class="muted small">Already on ${fmtLiftDate(liftForm.date)}: ${groupsForFormDate.map(esc).join(', ')} — reuse a name to add to that group.</p>` : ''}
+      ` : ''}
+      ${liftFormError ? `<div class="muted small" style="color:var(--danger);margin-bottom:0.5rem;">${esc(liftFormError)}</div>` : ''}
+      <button class="btn btn-primary" id="lift_save" ${liftFormSaving ? 'disabled' : ''}>${liftFormSaving ? 'Saving…' : 'Add lift'}</button>
+    </div>
+    ${todaySummary.sets > 0 ? `
+    <div class="card">
+      <h3>Today so far</h3>
+      <div class="today-summary-row">
+        <div><div class="stat-num">${todaySummary.exerciseCount}</div><div class="muted small">exercise${todaySummary.exerciseCount === 1 ? '' : 's'}</div></div>
+        <div><div class="stat-num">${todaySummary.sets}</div><div class="muted small">set${todaySummary.sets === 1 ? '' : 's'}</div></div>
+        <div><div class="stat-num">${Math.round(todaySummary.volume).toLocaleString()}</div><div class="muted small">volume</div></div>
+      </div>
+    </div>` : ''}
+    ${exercises.length ? `
+    <div class="card">
+      <h3>Exercises</h3>
+      ${exercises.map((ex) => {
+        const hist = lifts.filter((l) => l.exercise === ex).sort((a, b) => a.date.localeCompare(b.date));
+        const plateaued = detectPlateau(hist);
+        const mg = hist.length ? getMuscleGroup(hist[hist.length - 1]) : null;
+        return `
+        <div class="log-row" style="cursor:pointer;" data-lift-exercise="${esc(ex)}">
+          <div>
+            <div class="name">${esc(ex)}</div>
+            <div class="macros">${mg ? `<span style="color:${MUSCLE_GROUP_COLORS[mg]};">${mg}</span>` : ''}${plateaued ? ' · <span style="color:var(--danger);">plateaued</span>' : ''}</div>
+          </div>
+          <span class="mono" style="color:var(--accent);">${prs[ex] ? `${prs[ex].weight} lb PR` : ''}</span>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+  `;
+
+  const exerciseInput = $('#lift_exercise');
+  exerciseInput.addEventListener('input', (e) => { liftForm.exercise = e.target.value; });
+  exerciseInput.addEventListener('change', (e) => {
+    const val = e.target.value.trim();
+    liftForm.exercise = val;
+    if (val) {
+      liftForm.muscleGroup = DEFAULT_MUSCLE_GROUP[val] || liftForm.muscleGroup || '';
+      liftForm.bodyRegion = DEFAULT_BODY_REGION[val] || liftForm.bodyRegion || '';
+      prefillLiftFormFromLast(val);
+    }
+    renderLiftsTab();
+  });
+  const mgSel = $('#lift_muscleGroup');
+  if (mgSel) mgSel.addEventListener('change', (e) => { liftForm.muscleGroup = e.target.value; });
+  const brSel = $('#lift_bodyRegion');
+  if (brSel) brSel.addEventListener('change', (e) => { liftForm.bodyRegion = e.target.value; });
+  $('#lift_weight').addEventListener('input', (e) => { liftForm.weight = e.target.value; });
+  $('#lift_sets').addEventListener('change', (e) => {
+    const count = Math.max(1, Math.min(20, Number(e.target.value) || 1));
+    const fillVal = liftForm.repsPerSet.length ? liftForm.repsPerSet[liftForm.repsPerSet.length - 1] : '5';
+    while (liftForm.repsPerSet.length < count) liftForm.repsPerSet.push(fillVal);
+    liftForm.repsPerSet.length = count;
+    liftForm.sets = count;
+    renderLiftsTab();
+  });
+  $$('[data-rep-idx]', panel).forEach((inp) => inp.addEventListener('input', (e) => {
+    liftForm.repsPerSet[Number(e.target.dataset.repIdx)] = e.target.value;
+  }));
+  $('#lift_date').addEventListener('change', (e) => {
+    liftForm.date = e.target.value || localDateStr();
+    renderLiftsTab();
+  });
+  $('#lift_isSuperset').addEventListener('change', (e) => {
+    liftForm.isSuperset = e.target.checked;
+    renderLiftsTab();
+  });
+  const sgInput = $('#lift_supersetGroup');
+  if (sgInput) sgInput.addEventListener('input', (e) => { liftForm.supersetGroup = e.target.value; });
+  const prDismiss = $('#prBannerDismiss');
+  if (prDismiss) prDismiss.addEventListener('click', () => { prBanner = null; renderLiftsTab(); });
+  $('#lift_save').addEventListener('click', addLiftFromForm);
+
+  $$('[data-lift-exercise]', panel).forEach((row) => row.addEventListener('click', () => {
+    liftsSelectedExercise = row.dataset.liftExercise;
+    liftHistoryEditingId = null;
+    goalCardEditing = false;
+    renderLiftsTab();
+  }));
+}
+
+async function addLiftFromForm() {
+  const exercise = liftForm.exercise.trim();
+  const repsPerSet = liftForm.repsPerSet.map((r) => Number(r) || 0);
+  if (!exercise || !liftForm.weight || repsPerSet.length === 0) return;
+  if (liftForm.isSuperset && !liftForm.supersetGroup.trim()) return;
+  const muscleGroup = liftForm.muscleGroup || DEFAULT_MUSCLE_GROUP[exercise] || 'Other';
+  const reps = Math.round(avgReps(repsPerSet) * 10) / 10;
+  const weightNum = Number(liftForm.weight);
+  const priorBest = computeLiftPRs(state.lifts)[exercise];
+  liftFormSaving = true;
+  liftFormError = '';
+  renderLiftsTab();
+  const { error } = await supabase.from('lifts').insert({
+    user_id: state.user.id,
+    exercise, muscle_group: muscleGroup, body_region: liftForm.bodyRegion || null,
+    weight: weightNum, sets: repsPerSet.length, reps_per_set: repsPerSet, reps,
+    date: liftForm.date, superset_group: liftForm.isSuperset ? (liftForm.supersetGroup.trim() || null) : null,
+  });
+  liftFormSaving = false;
+  if (error) { liftFormError = error.message || 'Failed to save lift.'; renderLiftsTab(); return; }
+  liftForm.weight = '';
+  if (priorBest && weightNum > priorBest.weight) {
+    prBanner = { exercise, weight: weightNum, improvement: Math.round((weightNum - priorBest.weight) * 100) / 100 };
+  }
+  await loadLifts();
+  renderAll();
+}
+
+function renderLiftDetail(panel) {
+  const exercise = liftsSelectedExercise;
+  const history = state.lifts.filter((l) => l.exercise === exercise).sort((a, b) => a.date.localeCompare(b.date));
+  const prs = computeLiftPRs(state.lifts);
+  const pr = prs[exercise];
+  const plateaued = detectPlateau(history);
+  const bestE1RM = history.length ? Math.max(...history.map((l) => e1RM(l.weight, l.reps))) : 0;
+  const muscleGroup = history.length ? getMuscleGroup(history[history.length - 1]) : null;
+  const prBodyweight = pr ? bodyweightAsOf(pr.date, state.weightLog) : null;
+  const currentBW = latestBodyweightEntry(state.weightLog);
+  const strengthScore = bestE1RM > 0 && currentBW ? Math.round((bestE1RM / currentBW.weight_lb) * 100) : null;
+  const goal = state.exerciseGoals.find((g) => g.exercise === exercise) || null;
+
+  panel.innerHTML = `
+    <button class="btn btn-sm btn-ghost" id="liftBackBtn">← All lifts</button>
+    <div class="lift-detail-head">
+      <div class="lift-detail-title">${esc(exercise)}</div>
+      ${muscleGroup ? `<span class="badge" style="color:${MUSCLE_GROUP_COLORS[muscleGroup]};">${muscleGroup}</span>` : ''}
+      ${plateaued ? `<span class="badge" style="color:var(--danger);">Plateaued</span>` : ''}
+    </div>
+    ${plateaued ? `<div class="card" style="border-color:var(--danger);"><p style="margin:0;">No new estimated-1RM peak in your last 3 sessions on ${esc(exercise)}. Consider changing rep range, adding a back-off/deload week, or increasing frequency for this lift.</p></div>` : ''}
+    ${pr ? `<div class="card">
+      <h3>Current PR</h3>
+      ${plateStackHtml(pr.weight)}
+      ${prBodyweight ? `<p class="muted small" style="text-align:center;margin:0.4rem 0 0;">${(pr.weight / prBodyweight.weight_lb).toFixed(2)}x bodyweight</p>` : ''}
+    </div>` : ''}
+    ${bestE1RM > 0 ? `<div class="card">
+      <h3>Estimated 1-Rep Max</h3>
+      <div class="stat-num">${bestE1RM} <span class="muted small">lb (Epley estimate)</span></div>
+    </div>` : ''}
+    ${strengthScore !== null ? `<div class="card">
+      <h3>Strength Score</h3>
+      <div class="stat-num">${strengthScore}</div>
+      <p class="muted small">Weight-adjusted relative strength — e1RM ÷ current bodyweight × 100. Not a certified formula, and not for comparing against other lifters — just a way to see your own progress as bodyweight changes over time.</p>
+    </div>` : ''}
+    ${goalCardHtml(exercise, history, bestE1RM, goal)}
+    ${history.length > 1 ? `<div class="card">
+      <h3>Progress — weight vs. estimated 1RM</h3>
+      ${e1rmChartSvg(history)}
+      <div class="muted small" style="display:flex;gap:0.9rem;margin-top:0.4rem;">
+        <span style="color:var(--accent);">— weight</span>
+        <span style="color:var(--success);">┄ est. 1RM</span>
+      </div>
+    </div>` : ''}
+    <div class="card" style="padding:0;">
+      ${history.slice().reverse().map((l, i, arr) => liftHistoryRowHtml(l, i === arr.length - 1)).join('')}
+    </div>
+  `;
+
+  $('#liftBackBtn').addEventListener('click', () => {
+    liftsSelectedExercise = null;
+    liftHistoryEditingId = null;
+    goalCardEditing = false;
+    renderLiftsTab();
+  });
+  wireLiftDetailEvents(panel, exercise, history, goal);
+}
+
+function wireLiftDetailEvents(panel, exercise, history, goal) {
+  $$('[data-lift-edit]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const lift = history.find((l) => l.id === btn.dataset.liftEdit);
+    const repsPerSet = lift.reps_per_set && lift.reps_per_set.length ? lift.reps_per_set : [lift.reps];
+    liftHistoryEditingId = lift.id;
+    liftHistoryEditForm = { weight: String(lift.weight), date: lift.date, repsPerSet: repsPerSet.map(String) };
+    liftHistoryError = '';
+    liftHistoryConfirmDeleteId = null;
+    renderLiftsTab();
+  }));
+
+  const cancelBtn = $('#lhe_cancel');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => { liftHistoryEditingId = null; renderLiftsTab(); });
+  const weightInput = $('#lhe_weight');
+  if (weightInput) weightInput.addEventListener('input', (e) => { liftHistoryEditForm.weight = e.target.value; });
+  const dateInput = $('#lhe_date');
+  if (dateInput) dateInput.addEventListener('change', (e) => { liftHistoryEditForm.date = e.target.value; });
+  const setsInput = $('#lhe_sets');
+  if (setsInput) setsInput.addEventListener('change', (e) => {
+    const count = Math.max(1, Math.min(20, Number(e.target.value) || 1));
+    const arr = liftHistoryEditForm.repsPerSet;
+    const fillVal = arr.length ? arr[arr.length - 1] : '5';
+    while (arr.length < count) arr.push(fillVal);
+    arr.length = count;
+    renderLiftsTab();
+  });
+  $$('[data-lhe-rep-idx]', panel).forEach((inp) => inp.addEventListener('input', (e) => {
+    liftHistoryEditForm.repsPerSet[Number(e.target.dataset.lheRepIdx)] = e.target.value;
+  }));
+
+  const saveBtn = $('#lhe_save');
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const repsPerSet = liftHistoryEditForm.repsPerSet.map((r) => Number(r) || 0);
+    if (!liftHistoryEditForm.weight || repsPerSet.length === 0) return;
+    const reps = Math.round(avgReps(repsPerSet) * 10) / 10;
+    liftHistorySaving = true;
+    liftHistoryError = '';
+    renderLiftsTab();
+    const { error } = await supabase.from('lifts').update({
+      weight: Number(liftHistoryEditForm.weight), sets: repsPerSet.length,
+      reps_per_set: repsPerSet, reps, date: liftHistoryEditForm.date,
+    }).eq('id', liftHistoryEditingId);
+    liftHistorySaving = false;
+    if (error) { liftHistoryError = error.message || 'Failed to save.'; renderLiftsTab(); return; }
+    liftHistoryEditingId = null;
+    await loadLifts();
+    renderAll();
+  });
+
+  const deleteBtn = $('#lhe_delete');
+  if (deleteBtn) deleteBtn.addEventListener('click', () => { liftHistoryConfirmDeleteId = liftHistoryEditingId; renderLiftsTab(); });
+  const cancelDeleteBtn = $('#lhe_cancelDelete');
+  if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', () => { liftHistoryConfirmDeleteId = null; renderLiftsTab(); });
+  const confirmDeleteBtn = $('#lhe_confirmDelete');
+  if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', async () => {
+    liftHistoryDeleting = true;
+    renderLiftsTab();
+    const { error } = await supabase.from('lifts').delete().eq('id', liftHistoryEditingId);
+    liftHistoryDeleting = false;
+    if (error) { liftHistoryError = error.message || 'Failed to delete.'; liftHistoryConfirmDeleteId = null; renderLiftsTab(); return; }
+    liftHistoryEditingId = null;
+    liftHistoryConfirmDeleteId = null;
+    await loadLifts();
+    renderAll();
+  });
+
+  const goalStartBtn = $('#goal_start');
+  if (goalStartBtn) goalStartBtn.addEventListener('click', () => { goalCardEditing = true; goalCardError = ''; renderLiftsTab(); });
+  const goalCancelBtn = $('#goal_cancel');
+  if (goalCancelBtn) goalCancelBtn.addEventListener('click', () => { goalCardEditing = false; renderLiftsTab(); });
+  const goalSaveBtn = $('#goal_save');
+  if (goalSaveBtn) goalSaveBtn.addEventListener('click', async () => {
+    const weight = Number($('#goal_weight').value);
+    const target_date = $('#goal_date').value;
+    if (!weight || !target_date) return;
+    goalCardSaving = true;
+    goalCardError = '';
+    renderLiftsTab();
+    const { error } = await supabase.from('exercise_goals')
+      .upsert({ user_id: state.user.id, exercise, target_weight: weight, target_date }, { onConflict: 'user_id,exercise' });
+    goalCardSaving = false;
+    if (error) { goalCardError = error.message || 'Failed to save goal.'; renderLiftsTab(); return; }
+    goalCardEditing = false;
+    await loadExerciseGoals();
+    renderAll();
+  });
+  const goalRemoveBtn = $('#goal_remove');
+  if (goalRemoveBtn) goalRemoveBtn.addEventListener('click', async () => {
+    goalCardSaving = true;
+    renderLiftsTab();
+    await supabase.from('exercise_goals').delete().eq('id', goal.id);
+    goalCardSaving = false;
+    goalCardEditing = false;
+    await loadExerciseGoals();
+    renderAll();
+  });
+}
+
+// ── Training Dashboard ──────────────────────────────────────────────
+function renderTrainingDashboard() {
+  const panel = $('#panel-training-dashboard');
+  if (!panel) return;
+  const lifts = state.lifts;
+  const prs = computeLiftPRs(lifts);
+  const prList = Object.values(prs).sort((a, b) => b.date.localeCompare(a.date));
+  const recent = [...lifts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  const careerVolume = lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
+  const funFact = volumeFunFact(careerVolume);
+  const latestBW = latestBodyweightEntry(state.weightLog);
+  const volumeSpike = computeVolumeSpike(lifts, getWeekStart(localDateStr()));
+  const showSpikeWarning = volumeSpike && volumeSpike.weekStart !== dismissedSpikeWeek;
+
+  panel.innerHTML = `
+    ${showSpikeWarning ? `
+    <div class="card pr-banner">
+      <div class="small">⚠️ This week's volume is <strong style="color:var(--accent);">${volumeSpike.pctAbove}%</strong> above your recent 4-week average — consider whether that's intentional, or if you should ease off to avoid overuse injury.</div>
+      <button class="btn btn-sm btn-ghost" id="spikeDismiss">✕</button>
+    </div>` : ''}
+    <div class="row">
+      <div class="card">
+        <h3>Bodyweight</h3>
+        <div class="stat-num">${latestBW ? round(latestBW.weight_lb, 1) : '—'} <span class="muted small">lb</span></div>
+        <div class="muted small">${latestBW ? latestBW.logged_date : 'no entries yet'}</div>
+      </div>
+      <div class="card">
+        <h3>Lifts Logged</h3>
+        <div class="stat-num">${lifts.length}</div>
+        <div class="muted small">${Object.keys(prs).length} exercises tracked</div>
+      </div>
+    </div>
+    ${careerVolume > 0 ? `
+    <div class="card">
+      <h3>Career volume moved</h3>
+      <div class="stat-num">${Math.round(careerVolume).toLocaleString()} <span class="muted small">lb, all-time</span></div>
+      ${funFact ? `<div class="small" style="color:var(--accent);margin-top:0.25rem;">${esc(funFact)}</div>` : ''}
+    </div>` : ''}
+    ${prList.length ? `
+    <div>
+      <h3 style="margin:0 0 0.5rem;">Personal records</h3>
+      <div style="display:flex;gap:0.75rem;overflow-x:auto;padding-bottom:0.4rem;">
+        ${prList.map((pr) => `
+          <div class="card" style="min-width:150px;flex-shrink:0;margin-bottom:0;cursor:pointer;" data-pr-open="${esc(pr.exercise)}">
+            <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin-bottom:0.25rem;">${esc(pr.exercise)}</div>
+            <div class="stat-num" style="font-size:1.2rem;">${pr.weight} <span class="muted small">lb</span></div>
+            <div class="muted small">${pr.date}</div>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
+    ${recent.length ? `
+    <div>
+      <h3 style="margin:0 0 0.5rem;">Recent sessions</h3>
+      <div class="card" style="padding:0;">
+        ${recent.map((l) => `
+          <div class="log-row">
+            <span>${esc(l.exercise)}</span>
+            <span class="mono muted">${l.weight}lb · ${repsDisplay(l)} · ${l.date}</span>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
+    ${lifts.length === 0 ? `
+    <div class="card">
+      <p class="muted" style="text-align:center;">No lifts logged yet. Head to the Lifts tab to record your first session.</p>
+    </div>` : ''}
+  `;
+
+  const spikeDismiss = $('#spikeDismiss');
+  if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderTrainingDashboard(); });
+
+  $$('[data-pr-open]', panel).forEach((card) => card.addEventListener('click', () => {
+    liftsSelectedExercise = card.dataset.prOpen;
+    liftHistoryEditingId = null;
+    goalCardEditing = false;
+    setActiveTab('lifts');
+    renderLiftsTab();
+  }));
 }
 
 // ── Initial session check (in case one already exists on load) ─────

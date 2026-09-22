@@ -5,6 +5,9 @@
 -- ============================================================
 
 -- Drop all tables in correct dependency order (reverse of creation)
+drop table if exists monthly_recaps cascade;
+drop table if exists exercise_goals cascade;
+drop table if exists lifts cascade;
 drop table if exists referrals cascade;
 drop table if exists subscriptions cascade;
 drop table if exists ai_usage cascade;
@@ -322,6 +325,109 @@ alter table referrals enable row level security;
 
 create policy "referrals: select own as referrer" on referrals
   for select using (auth.uid() = referrer_user_id);
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- IRONLOG MERGE (supabase-schema-phase7-ironlog.sql)
+-- ══════════════════════════════════════════════════════════════════════════
+-- Bodyweight tracking is NOT a separate table here — IronLog's bodyweight
+-- (weight, date) is the same shape as weight_log (weight_lb, logged_date)
+-- above, so it's unified into that existing table rather than duplicated.
+
+-- ── lifts ───────────────────────────────────────────────────────────────
+create table lifts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  exercise text not null,
+  muscle_group text,
+  weight numeric not null,
+  sets integer not null,
+  reps_per_set numeric[] not null,
+  reps numeric not null,
+  date date not null,
+  -- entries sharing (user_id, date, superset_group) are bundled together as
+  -- one superset/circuit on the Days view (a later phase)
+  superset_group text,
+  -- finer-grained region for the muscle volume map (a later phase),
+  -- alongside (not replacing) muscle_group above
+  body_region text,
+  created_at timestamptz not null default now()
+);
+
+create index lifts_user_date_idx on lifts (user_id, date);
+
+alter table lifts enable row level security;
+
+create policy "lifts_select_own" on lifts for select using (auth.uid() = user_id);
+create policy "lifts_insert_own" on lifts for insert with check (auth.uid() = user_id);
+create policy "lifts_update_own" on lifts for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "lifts_delete_own" on lifts for delete using (auth.uid() = user_id);
+
+-- ── exercise_goals ──────────────────────────────────────────────────────
+-- One live goal per exercise: target weight by a target date. Named
+-- exercise_goals, not goals — that name is already taken above by the
+-- per-user macro/hydration goals table; these are unrelated tables.
+create table exercise_goals (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  exercise text not null,
+  target_weight numeric not null,
+  target_date date not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, exercise)
+);
+
+create index exercise_goals_user_idx on exercise_goals (user_id);
+
+alter table exercise_goals enable row level security;
+
+create policy "exercise_goals_select_own" on exercise_goals for select using (auth.uid() = user_id);
+create policy "exercise_goals_insert_own" on exercise_goals for insert with check (auth.uid() = user_id);
+create policy "exercise_goals_update_own" on exercise_goals for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "exercise_goals_delete_own" on exercise_goals for delete using (auth.uid() = user_id);
+
+-- ── monthly_recaps ──────────────────────────────────────────────────────
+-- Cached per-month training recap stats (Recaps tab — a later phase).
+create table monthly_recaps (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  month date not null,
+  total_volume numeric not null,
+  training_days integer not null,
+  most_trained_muscle_group text,
+  most_trained_muscle_group_volume numeric,
+  biggest_pr_exercise text,
+  biggest_pr_weight numeric,
+  biggest_pr_improvement numeric,
+  bodyweight_start numeric,
+  bodyweight_end numeric,
+  computed_at timestamptz not null default now(),
+  unique (user_id, month)
+);
+
+create index monthly_recaps_user_month_idx on monthly_recaps (user_id, month);
+
+alter table monthly_recaps enable row level security;
+
+create policy "monthly_recaps_select_own" on monthly_recaps for select using (auth.uid() = user_id);
+create policy "monthly_recaps_insert_own" on monthly_recaps for insert with check (auth.uid() = user_id);
+create policy "monthly_recaps_update_own" on monthly_recaps for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "monthly_recaps_delete_own" on monthly_recaps for delete using (auth.uid() = user_id);
+
+-- ── progress-photos storage bucket ─────────────────────────────────────
+-- Training progress photos (Photos tab — a later phase). Created now
+-- alongside the rest of this migration since it's cheap to have ready.
+insert into storage.buckets (id, name, public)
+values ('progress-photos', 'progress-photos', false)
+on conflict (id) do nothing;
+
+create policy "progress_photos_select_own" on storage.objects for select
+  using (bucket_id = 'progress-photos' and auth.uid()::text = (storage.foldername(name))[1]);
+
+create policy "progress_photos_insert_own" on storage.objects for insert
+  with check (bucket_id = 'progress-photos' and auth.uid()::text = (storage.foldername(name))[1]);
+
+create policy "progress_photos_delete_own" on storage.objects for delete
+  using (bucket_id = 'progress-photos' and auth.uid()::text = (storage.foldername(name))[1]);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE

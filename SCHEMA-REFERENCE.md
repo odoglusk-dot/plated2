@@ -241,6 +241,89 @@ is ever rewarded; the referred user gets nothing extra beyond the normal
 
 ---
 
+### `lifts` — Strength-training log entries (IronLog merge)
+```sql
+id               uuid primary key
+user_id          uuid
+exercise         text
+muscle_group     text (optional)
+weight           numeric
+sets             integer
+reps_per_set     numeric[]
+reps             numeric
+date             date (indexed)
+superset_group   text (optional — bundles entries into one superset/circuit)
+body_region      text (optional — muscle-map region, e.g. 'chest', 'quads')
+created_at       timestamptz
+```
+**Frontend reads/writes:** `exercise, muscle_group, weight, sets,
+reps_per_set, reps, date, superset_group, body_region`
+
+Ported from IronLog's own schema as-is — no naming collision with anything
+in Plated's nutrition side.
+
+---
+
+### `exercise_goals` — One live goal per exercise (IronLog merge)
+```sql
+id              uuid primary key
+user_id         uuid
+exercise        text
+target_weight   numeric
+target_date     date
+created_at      timestamptz
+unique           (user_id, exercise)
+```
+**Frontend reads/writes:** `exercise, target_weight, target_date`
+
+**Named `exercise_goals`, not `goals`** — this is IronLog's `goals` table,
+renamed on the way in because Plated already has a `goals` table (the
+per-user macro/hydration targets above). Same name, unrelated shape and
+meaning; keeping IronLog's original name would have silently collided.
+Setting a new goal for an exercise replaces the old one (upsert on
+`user_id, exercise`).
+
+---
+
+### `monthly_recaps` — Cached monthly training recap stats (IronLog merge)
+```sql
+id                                 uuid primary key
+user_id                            uuid
+month                              date (first day of the month, e.g. 2026-07-01)
+total_volume                       numeric
+training_days                      integer
+most_trained_muscle_group          text (optional)
+most_trained_muscle_group_volume   numeric (optional)
+biggest_pr_exercise                text (optional)
+biggest_pr_weight                  numeric (optional)
+biggest_pr_improvement             numeric (optional)
+bodyweight_start                   numeric (optional)
+bodyweight_end                     numeric (optional)
+computed_at                        timestamptz
+unique                              (user_id, month)
+```
+**Frontend reads/writes:** all columns above except `id`/`computed_at`.
+
+Computed client-side from already-loaded `lifts` and `weight_log` (see
+`computeMonthlyRecap()` in the Recaps tab — not built yet as of this
+migration), then cached here so a given month is only computed once.
+`bodyweight_start`/`bodyweight_end` come from `weight_log`, not a separate
+bodyweight table — see the note on bodyweight unification below.
+
+**Bodyweight note:** IronLog originally tracked bodyweight in its own
+table. That table was **not** ported — Plated's existing `weight_log`
+above (`weight_lb`, `logged_date`) is the same shape as IronLog's
+`bodyweight` (`weight`, `date`), same unit (lb), so bodyweight tracking
+was unified into the table that already existed rather than duplicated.
+
+**Storage:** a `progress-photos` bucket (private, folder-scoped to
+`auth.uid()`) was also created as part of this migration, for the Photos
+tab (not built yet as of this migration). No `photos` table exists yet —
+it's created when that tab is actually built, so there's no unused table
+sitting around in the meantime.
+
+---
+
 ## Naming Rules — CONSISTENT across ALL tables
 
 | Type | Naming | Example | Notes |
@@ -335,3 +418,15 @@ only, nothing dropped); fresh installs get it all from `reset-schema.sql`.
 And again for the Customer Portal's `cancel_at_period_end` column: run
 **`supabase-schema-phase4-portal.sql`** against an existing live database;
 fresh installs get it from `reset-schema.sql`.
+
+For hydration tracking (the `water_oz` goal column and the `water_logs`
+table): run **`supabase-schema-phase6-hydration.sql`** against an existing
+live database; fresh installs get it from `reset-schema.sql`.
+
+For the IronLog merge (`lifts`, `exercise_goals`, `monthly_recaps`, the
+`progress-photos` Storage bucket): run
+**`supabase-schema-phase7-ironlog.sql`** against an existing live database;
+fresh installs get it from `reset-schema.sql`. This does **not** migrate
+any actual rows out of IronLog's separate Supabase project — it only
+creates the tables/bucket in Plated's project, ready to receive that data
+as its own later step.
