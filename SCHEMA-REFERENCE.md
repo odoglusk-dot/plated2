@@ -305,10 +305,10 @@ unique                              (user_id, month)
 **Frontend reads/writes:** all columns above except `id`/`computed_at`.
 
 Computed client-side from already-loaded `lifts` and `weight_log` (see
-`computeMonthlyRecap()` in the Recaps tab — not built yet as of this
-migration), then cached here so a given month is only computed once.
-`bodyweight_start`/`bodyweight_end` come from `weight_log`, not a separate
-bodyweight table — see the note on bodyweight unification below.
+`computeMonthlyRecap()` in the Recaps tab), then cached here so a given
+month is only computed once. `bodyweight_start`/`bodyweight_end` come from
+`weight_log`, not a separate bodyweight table — see the note on bodyweight
+unification below.
 
 **Bodyweight note:** IronLog originally tracked bodyweight in its own
 table. That table was **not** ported — Plated's existing `weight_log`
@@ -316,11 +316,24 @@ above (`weight_lb`, `logged_date`) is the same shape as IronLog's
 `bodyweight` (`weight`, `date`), same unit (lb), so bodyweight tracking
 was unified into the table that already existed rather than duplicated.
 
-**Storage:** a `progress-photos` bucket (private, folder-scoped to
-`auth.uid()`) was also created as part of this migration, for the Photos
-tab (not built yet as of this migration). No `photos` table exists yet —
-it's created when that tab is actually built, so there's no unused table
-sitting around in the meantime.
+### `photos` — Progress photos (IronLog merge, Photos tab)
+```sql
+id                                 uuid primary key
+user_id                            uuid
+storage_path                       text (path within the progress-photos bucket, "<user_id>/<file>.jpg")
+note                               text (optional)
+date                               date
+created_at                         timestamptz
+```
+**Frontend reads/writes:** `storage_path` (write-once, at upload time),
+`note` (editable after the fact), `date`.
+
+Images themselves live in the `progress-photos` Storage bucket (private,
+folder-scoped to `auth.uid()`, created in
+`supabase-schema-phase7-ironlog.sql`) — this table just tracks each
+upload's path. Display URLs are short-lived signed URLs generated
+client-side (`supabase.storage.from('progress-photos').createSignedUrl(...)`),
+never a public link, since the bucket isn't public.
 
 ---
 
@@ -430,3 +443,8 @@ fresh installs get it from `reset-schema.sql`. This does **not** migrate
 any actual rows out of IronLog's separate Supabase project — it only
 creates the tables/bucket in Plated's project, ready to receive that data
 as its own later step.
+
+For the Photos tab (the `photos` table, tracking uploads into the
+`progress-photos` bucket phase7 already created): run
+**`supabase-schema-phase8-photos.sql`** against an existing live database;
+fresh installs get it from `reset-schema.sql`.

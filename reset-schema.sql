@@ -5,6 +5,7 @@
 -- ============================================================
 
 -- Drop all tables in correct dependency order (reverse of creation)
+drop table if exists photos cascade;
 drop table if exists monthly_recaps cascade;
 drop table if exists exercise_goals cascade;
 drop table if exists lifts cascade;
@@ -413,9 +414,7 @@ create policy "monthly_recaps_insert_own" on monthly_recaps for insert with chec
 create policy "monthly_recaps_update_own" on monthly_recaps for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "monthly_recaps_delete_own" on monthly_recaps for delete using (auth.uid() = user_id);
 
--- ── progress-photos storage bucket ─────────────────────────────────────
--- Training progress photos (Photos tab — a later phase). Created now
--- alongside the rest of this migration since it's cheap to have ready.
+-- ── progress-photos storage bucket + photos table (Photos tab) ─────────
 insert into storage.buckets (id, name, public)
 values ('progress-photos', 'progress-photos', false)
 on conflict (id) do nothing;
@@ -428,6 +427,24 @@ create policy "progress_photos_insert_own" on storage.objects for insert
 
 create policy "progress_photos_delete_own" on storage.objects for delete
   using (bucket_id = 'progress-photos' and auth.uid()::text = (storage.foldername(name))[1]);
+
+create table photos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  storage_path text not null,
+  note text,
+  date date not null,
+  created_at timestamptz not null default now()
+);
+
+create index photos_user_date_idx on photos (user_id, date);
+
+alter table photos enable row level security;
+
+create policy "photos_select_own" on photos for select using (auth.uid() = user_id);
+create policy "photos_insert_own" on photos for insert with check (auth.uid() = user_id);
+create policy "photos_update_own" on photos for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "photos_delete_own" on photos for delete using (auth.uid() = user_id);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE

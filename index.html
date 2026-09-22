@@ -250,6 +250,53 @@
   .checkbox-row input { width: auto; }
   .stat-num { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 500; }
   .small { font-size: 0.78rem; }
+  .body-map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .body-map-col { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+  .body-map-label { text-transform: uppercase; letter-spacing: 0.05em; }
+  .body-map-svg { width: 100%; max-width: 150px; }
+  .body-map-region { cursor: pointer; }
+  .heatmap-legend { display: flex; align-items: center; gap: 0.25rem; margin-top: 0.6rem; font-size: 0.68rem; color: var(--text-dim); justify-content: center; }
+  .heatmap-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .muscle-map-detail { border-top: 1px solid var(--border); margin-top: 0.75rem; padding-top: 0.75rem; }
+  .heatmap-scroll { overflow-x: auto; padding-bottom: 0.25rem; }
+  .heatmap-labels-row { display: flex; gap: 3px; }
+  .heatmap-week-label { width: 11px; font-size: 0.6rem; color: var(--text-dim); white-space: nowrap; flex-shrink: 0; }
+  .heatmap-grid { display: flex; gap: 3px; }
+  .heatmap-week-col { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+  .heatmap-cell { width: 11px; height: 11px; border-radius: 2px; cursor: pointer; }
+  .heatmap-cell-empty { cursor: default; }
+  .muscle-group-legend { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.5rem; }
+  .legend-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; color: var(--text-dim); }
+  .legend-swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .plateau-row { font-size: 0.85rem; padding: 0.3rem 0; cursor: pointer; }
+  .day-card { padding: 0; overflow: hidden; }
+  .day-card-head { padding: 0.75rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .day-card-body { border-top: 1px solid var(--border); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .day-lift-row { display: flex; justify-content: space-between; font-size: 0.85rem; cursor: pointer; }
+  .day-extra-row { border-top: 1px solid var(--border); padding-top: 0.5rem; }
+  .day-photos-row { display: flex; gap: 0.4rem; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+  .day-photo-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 4px; }
+  .superset-group { border: 1px dashed var(--accent); border-radius: 6px; padding: 0.4rem 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+  .superset-label { font-size: 0.68rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.15rem; }
+  .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  .photo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .photo-card-img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .photo-card-body { padding: 0.5rem; }
+  .photo-note { font-size: 0.78rem; margin-top: 0.15rem; cursor: pointer; color: var(--text); }
+  .compare-row { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+  .compare-row:last-child { border-bottom: none; }
+  .compare-row-label { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
+  .compare-row-grid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0.5rem; }
+  .compare-fact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.82rem; }
+  .compare-value { font-size: 1rem; }
+  .compare-delta { font-size: 0.7rem; text-align: center; min-width: 56px; }
+  .autocomplete-wrap { position: relative; }
+  .autocomplete-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-height: 180px; overflow-y: auto; z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+  .autocomplete-item { padding: 0.55rem 0.7rem; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover { background: var(--surface-2); }
+  .autocomplete-new { color: var(--accent); }
+  .autocomplete-empty { padding: 0.6rem 0.7rem; font-size: 0.82rem; color: var(--text-dim); }
 
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
@@ -550,6 +597,9 @@
       <button class="tab-btn" data-tab="profile" data-mode="nutrition">Profile</button>
       <button class="tab-btn mode-hidden" data-tab="training-dashboard" data-mode="training">Dashboard</button>
       <button class="tab-btn mode-hidden" data-tab="lifts" data-mode="training">Lifts</button>
+      <button class="tab-btn mode-hidden" data-tab="days" data-mode="training">Days</button>
+      <button class="tab-btn mode-hidden" data-tab="photos" data-mode="training">Photos</button>
+      <button class="tab-btn mode-hidden" data-tab="recaps" data-mode="training">Recaps</button>
     </div>
   </nav>
 
@@ -564,6 +614,9 @@
     <section class="tab-panel" data-tab="profile" id="panel-profile"></section>
     <section class="tab-panel" data-tab="training-dashboard" id="panel-training-dashboard"></section>
     <section class="tab-panel" data-tab="lifts" id="panel-lifts"></section>
+    <section class="tab-panel" data-tab="days" id="panel-days"></section>
+    <section class="tab-panel" data-tab="photos" id="panel-photos"></section>
+    <section class="tab-panel" data-tab="recaps" id="panel-recaps"></section>
   </main>
 
   <footer class="legal">
@@ -651,6 +704,7 @@ const state = {
   waterLog: [], // last 14 days — plenty of buffer for "today" + the 7-day weekly summary
   lifts: [], // strength-training log, all-time (mirrors historyLogs' "load once, filter client-side" approach)
   exerciseGoals: [],
+  photos: [], // {id, storage_path, note, date, signedUrl} — signedUrl attached client-side after load, not a DB column
   activeTab: 'dashboard',
   appMode: 'nutrition', // 'nutrition' | 'training'
   lastTabByMode: { nutrition: 'dashboard', training: 'training-dashboard' },
@@ -1512,7 +1566,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadReferrals()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadReferrals()]);
   renderAll();
 }
 
@@ -1643,6 +1697,18 @@ async function loadExerciseGoals() {
   state.exerciseGoals = data || [];
 }
 
+// The progress-photos bucket is private, so display needs a short-lived
+// signed URL per photo rather than a public link — generated here, once
+// per load, attached to each row as `signedUrl` (not a DB column).
+async function loadPhotos() {
+  const { data } = await supabase.from('photos').select('*').eq('user_id', state.user.id).order('date', { ascending: true });
+  const rows = data || [];
+  if (rows.length === 0) { state.photos = []; return; }
+  const paths = rows.map((r) => r.storage_path);
+  const { data: signed } = await supabase.storage.from('progress-photos').createSignedUrls(paths, 60 * 60);
+  state.photos = rows.map((row, i) => ({ ...row, signedUrl: signed?.[i]?.signedUrl || '' }));
+}
+
 async function loadReferrals() {
   const { data } = await supabase.from('referrals').select('status').eq('referrer_user_id', state.user.id);
   state.referrals = data || [];
@@ -1659,6 +1725,9 @@ function renderAll() {
   renderProfile();
   renderTrainingDashboard();
   renderLiftsTab();
+  renderDaysTab();
+  renderPhotosTab();
+  renderRecapsTab();
   updateStreakPill();
 }
 
@@ -3145,6 +3214,191 @@ function getMuscleGroup(l) {
   return l.muscle_group || DEFAULT_MUSCLE_GROUP[l.exercise] || 'Other';
 }
 
+const BODY_REGIONS = ['chest', 'shoulders', 'biceps', 'triceps', 'back', 'forearms', 'abs', 'quads', 'hamstrings', 'glutes', 'calves'];
+const BODY_REGION_LABELS = {
+  chest: 'Chest', shoulders: 'Shoulders', biceps: 'Biceps', triceps: 'Triceps', back: 'Back',
+  forearms: 'Forearms', abs: 'Abs', quads: 'Quads', hamstrings: 'Hamstrings', glutes: 'Glutes', calves: 'Calves',
+};
+// Power Clean is intentionally left unmapped — it's genuinely full-body and
+// forcing one region would be a worse default than leaving it untagged
+const DEFAULT_BODY_REGION = {
+  'Back Squat': 'quads',
+  'Front Squat': 'quads',
+  'Bench Press': 'chest',
+  'Overhead Press': 'shoulders',
+  Deadlift: 'back',
+};
+function getBodyRegion(l) {
+  return l.body_region || DEFAULT_BODY_REGION[l.exercise] || null;
+}
+
+// ── Muscle map (body-region volume heatmap, shown on the Training Dashboard) ──
+// Increasing-intensity accent scale, shared with the Days tab's training
+// heatmap below — index 0 is "no training."
+const HEATMAP_LEVELS = ['var(--surface-2)', 'rgba(217,119,6,0.22)', 'rgba(217,119,6,0.45)', 'rgba(217,119,6,0.7)', 'var(--accent)'];
+
+// quartile thresholds over the nonzero volumes actually present, so the
+// color scale adapts to each user's own training intensity
+function volumeQuantileThresholds(values) {
+  if (values.length === 0) return [1, 2, 3];
+  const sorted = [...values].sort((a, b) => a - b);
+  const q = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+  return [q(0.25), q(0.5), q(0.75)];
+}
+
+function heatmapLevel(volume, thresholds) {
+  if (volume <= 0) return 0;
+  if (volume < thresholds[0]) return 1;
+  if (volume < thresholds[1]) return 2;
+  if (volume < thresholds[2]) return 3;
+  return 4;
+}
+
+function computeRegionStats(lifts, windowDays) {
+  const cutoff = windowDays ? subtractDays(localDateStr(), windowDays) : null;
+  const stats = {};
+  for (const l of lifts) {
+    if (cutoff && l.date < cutoff) continue;
+    const region = getBodyRegion(l);
+    if (!region) continue;
+    const vol = l.weight * totalReps(l);
+    const setCount = (l.reps_per_set && l.reps_per_set.length) || l.sets || 0;
+    if (!stats[region]) stats[region] = { volume: 0, sets: 0, exercises: new Map() };
+    stats[region].volume += vol;
+    stats[region].sets += setCount;
+    stats[region].exercises.set(l.exercise, (stats[region].exercises.get(l.exercise) || 0) + vol);
+  }
+  return stats;
+}
+
+// simple geometric silhouette — stylized regions, not anatomically precise
+const BODY_MAP_DECORATIVE = {
+  front: [
+    { type: 'circle', cx: 80, cy: 26, r: 16 },
+    { type: 'rect', x: 72, y: 40, width: 16, height: 10, rx: 4 },
+    { type: 'rect', x: 50, y: 232, width: 22, height: 54, rx: 8 },
+    { type: 'rect', x: 88, y: 232, width: 22, height: 54, rx: 8 },
+  ],
+  back: [
+    { type: 'circle', cx: 80, cy: 26, r: 16 },
+    { type: 'rect', x: 72, y: 40, width: 16, height: 10, rx: 4 },
+  ],
+};
+const BODY_MAP_REGIONS = {
+  front: [
+    { region: 'shoulders', shapes: [{ type: 'ellipse', cx: 42, cy: 64, rx: 16, ry: 13 }, { type: 'ellipse', cx: 118, cy: 64, rx: 16, ry: 13 }] },
+    { region: 'chest', shapes: [{ type: 'rect', x: 44, y: 70, width: 72, height: 42, rx: 10 }] },
+    { region: 'biceps', shapes: [{ type: 'rect', x: 18, y: 70, width: 18, height: 52, rx: 8 }, { type: 'rect', x: 124, y: 70, width: 18, height: 52, rx: 8 }] },
+    { region: 'forearms', shapes: [{ type: 'rect', x: 14, y: 124, width: 16, height: 50, rx: 8 }, { type: 'rect', x: 130, y: 124, width: 16, height: 50, rx: 8 }] },
+    { region: 'abs', shapes: [{ type: 'rect', x: 50, y: 114, width: 60, height: 46, rx: 8 }] },
+    { region: 'quads', shapes: [{ type: 'rect', x: 46, y: 162, width: 30, height: 70, rx: 10 }, { type: 'rect', x: 84, y: 162, width: 30, height: 70, rx: 10 }] },
+  ],
+  back: [
+    { region: 'back', shapes: [{ type: 'rect', x: 44, y: 64, width: 72, height: 68, rx: 10 }] },
+    { region: 'triceps', shapes: [{ type: 'rect', x: 18, y: 70, width: 18, height: 60, rx: 8 }, { type: 'rect', x: 124, y: 70, width: 18, height: 60, rx: 8 }] },
+    { region: 'glutes', shapes: [{ type: 'rect', x: 48, y: 134, width: 64, height: 34, rx: 14 }] },
+    { region: 'hamstrings', shapes: [{ type: 'rect', x: 46, y: 170, width: 30, height: 56, rx: 10 }, { type: 'rect', x: 84, y: 170, width: 30, height: 56, rx: 10 }] },
+    { region: 'calves', shapes: [{ type: 'rect', x: 48, y: 230, width: 26, height: 54, rx: 10 }, { type: 'rect', x: 86, y: 230, width: 26, height: 54, rx: 10 }] },
+  ],
+};
+
+function bodyMapShapeSvg(shape, { fill, stroke, strokeWidth, region }) {
+  const attrs = `fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${region ? ` data-region="${region}" class="body-map-region"` : ''}`;
+  if (shape.type === 'circle') return `<circle cx="${shape.cx}" cy="${shape.cy}" r="${shape.r}" ${attrs}></circle>`;
+  if (shape.type === 'ellipse') return `<ellipse cx="${shape.cx}" cy="${shape.cy}" rx="${shape.rx}" ry="${shape.ry}" ${attrs}></ellipse>`;
+  return `<rect x="${shape.x}" y="${shape.y}" width="${shape.width}" height="${shape.height}" rx="${shape.rx}" ${attrs}></rect>`;
+}
+
+function bodyMapSvg(view, regionLevels, selectedRegion) {
+  const decorative = BODY_MAP_DECORATIVE[view]
+    .map((s) => bodyMapShapeSvg(s, { fill: 'var(--border)', stroke: 'var(--border)', strokeWidth: 1 }))
+    .join('');
+  const regions = BODY_MAP_REGIONS[view]
+    .map((r) => {
+      const level = regionLevels[r.region] ?? 0;
+      const isSelected = selectedRegion === r.region;
+      return r.shapes
+        .map((shape) => bodyMapShapeSvg(shape, {
+          fill: HEATMAP_LEVELS[level],
+          stroke: isSelected ? 'var(--accent)' : 'var(--border)',
+          strokeWidth: isSelected ? 2 : 1,
+          region: r.region,
+        }))
+        .join('');
+    })
+    .join('');
+  return `<svg viewBox="0 0 160 300" class="body-map-svg">${decorative}${regions}</svg>`;
+}
+
+const MUSCLE_MAP_WINDOWS = [[7, '7 Days'], [30, '30 Days'], [null, 'All Time']];
+let muscleMapWindow = 7;
+let muscleMapSelectedRegion = null;
+
+function muscleMapHtml(lifts) {
+  const stats = computeRegionStats(lifts, muscleMapWindow);
+  const thresholds = volumeQuantileThresholds(Object.values(stats).map((s) => s.volume).filter((v) => v > 0));
+  const regionLevels = {};
+  for (const region of BODY_REGIONS) regionLevels[region] = heatmapLevel(stats[region]?.volume || 0, thresholds);
+  const selectedStats = muscleMapSelectedRegion ? stats[muscleMapSelectedRegion] : null;
+
+  return `
+    <div class="card">
+      <h3>Muscle Map</h3>
+      <div class="row" style="margin-bottom:0.75rem;">
+        ${MUSCLE_MAP_WINDOWS.map(([key, label]) => `<button class="btn btn-sm ${muscleMapWindow === key ? 'btn-primary' : ''}" data-mm-window="${key === null ? 'all' : key}">${label}</button>`).join('')}
+      </div>
+      <div class="body-map-grid">
+        <div class="body-map-col">
+          <div class="muted small body-map-label">Front</div>
+          ${bodyMapSvg('front', regionLevels, muscleMapSelectedRegion)}
+        </div>
+        <div class="body-map-col">
+          <div class="muted small body-map-label">Back</div>
+          ${bodyMapSvg('back', regionLevels, muscleMapSelectedRegion)}
+        </div>
+      </div>
+      <div class="heatmap-legend">
+        <span>Less</span>
+        ${HEATMAP_LEVELS.map((c) => `<span class="heatmap-swatch" style="background:${c};"></span>`).join('')}
+        <span>More</span>
+      </div>
+      ${muscleMapSelectedRegion ? `
+      <div class="muscle-map-detail">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <strong>${BODY_REGION_LABELS[muscleMapSelectedRegion]}</strong>
+          <button class="btn btn-sm btn-ghost" id="mmCloseRegion">✕</button>
+        </div>
+        ${selectedStats ? `
+          <div class="row" style="gap:1.25rem;margin:0.5rem 0;">
+            <div><div class="stat-num" style="font-size:1.1rem;">${Math.round(selectedStats.volume).toLocaleString()}</div><div class="muted small">lb volume</div></div>
+            <div><div class="stat-num" style="font-size:1.1rem;">${selectedStats.sets}</div><div class="muted small">sets</div></div>
+          </div>
+          <div class="muted small" style="margin-bottom:0.25rem;">Exercises</div>
+          ${[...selectedStats.exercises.entries()].sort((a, b) => b[1] - a[1]).map(([ex, vol]) => `
+            <div class="row" style="justify-content:space-between;">
+              <span style="color:var(--accent);">${esc(ex)}</span>
+              <span class="mono muted">${Math.round(vol).toLocaleString()} lb</span>
+            </div>`).join('')}
+        ` : `<p class="muted small">No ${muscleMapWindow ? `${muscleMapWindow}-day` : 'all-time'} volume for this region yet.</p>`}
+      </div>` : ''}
+    </div>
+  `;
+}
+
+function wireMuscleMapEvents(panel) {
+  $$('[data-mm-window]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    muscleMapWindow = btn.dataset.mmWindow === 'all' ? null : Number(btn.dataset.mmWindow);
+    muscleMapSelectedRegion = null;
+    renderTrainingDashboard();
+  }));
+  $$('.body-map-region', panel).forEach((el) => el.addEventListener('click', () => {
+    muscleMapSelectedRegion = el.dataset.region;
+    renderTrainingDashboard();
+  }));
+  const closeBtn = $('#mmCloseRegion', panel);
+  if (closeBtn) closeBtn.addEventListener('click', () => { muscleMapSelectedRegion = null; renderTrainingDashboard(); });
+}
+
 // Epley formula estimated 1-rep max
 function e1RM(weight, reps) {
   if (!weight || !reps || reps <= 0) return 0;
@@ -3417,6 +3671,42 @@ function e1rmChartSvg(history) {
   </svg>`;
 }
 
+// weight (line, left axis) over avg reps/set (bars, right axis, capped at
+// 90% height so the line stays visually distinct). Native <title> elements
+// stand in for a custom hover tooltip — no extra event wiring needed, and
+// they work identically on touch (tap-and-hold) and mouse.
+function weightRepsComboChartSvg(history, weightLogEntries) {
+  const w = 600, h = 170, padL = 8, padR = 8, padTop = 10, padBottom = 20;
+  const weights = history.map((l) => l.weight);
+  const avgRepsArr = history.map((l) => avgReps(l.reps_per_set && l.reps_per_set.length ? l.reps_per_set : [l.reps]));
+  const minW = Math.min(...weights), maxW = Math.max(...weights);
+  const spanW = (maxW - minW) || 1;
+  const maxReps = Math.max(...avgRepsArr, 1);
+  const n = history.length;
+  const barW = (w - padL - padR) / n;
+  const xAt = (i) => padL + i * barW + barW / 2;
+  const yWeight = (v) => h - padBottom - ((v - minW) / spanW) * (h - padTop - padBottom);
+  const repsBarTop = (v) => h - padBottom - (v / maxReps) * (h - padTop - padBottom) * 0.9;
+
+  const bars = history.map((l, i) => {
+    const x = padL + i * barW;
+    const top = repsBarTop(avgRepsArr[i]);
+    const barH = Math.max((h - padBottom) - top, 0);
+    const bw = bodyweightAsOf(l.date, weightLogEntries);
+    const title = `${fmtLiftDate(l.date)} — ${l.weight} lb, ${round(avgRepsArr[i], 1)} avg reps/set${bw ? ` (${(l.weight / bw.weight_lb).toFixed(2)}x bodyweight)` : ''}`;
+    return `<rect x="${x + barW * 0.15}" y="${top}" width="${Math.max(barW * 0.7, 1)}" height="${barH}" fill="var(--success)" opacity="0.35" rx="2"><title>${esc(title)}</title></rect>`;
+  }).join('');
+
+  const linePts = history.map((l, i) => `${xAt(i)},${yWeight(l.weight)}`).join(' ');
+  const dots = history.map((l, i) => `<circle cx="${xAt(i)}" cy="${yWeight(l.weight)}" r="3" fill="var(--accent)"><title>${esc(fmtLiftDate(l.date))}: ${l.weight} lb</title></circle>`).join('');
+
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
+    ${bars}
+    <polyline points="${linePts}" fill="none" stroke="var(--accent)" stroke-width="2.5"></polyline>
+    ${dots}
+  </svg>`;
+}
+
 function liveComparisonHtml(exercise, lifts) {
   const history = lifts.filter((l) => l.exercise === exercise).sort((a, b) => a.date.localeCompare(b.date));
   if (history.length === 0) {
@@ -3526,6 +3816,62 @@ function renderLiftsTab() {
   else renderLiftLog(panel);
 }
 
+let liftAutocompleteOpen = false;
+
+function autocompleteDropdownHtml(value, options) {
+  const trimmed = value.trim();
+  const filtered = value ? options.filter((o) => o.toLowerCase().includes(value.toLowerCase())) : options;
+  const isNew = trimmed && !options.some((o) => o.toLowerCase() === trimmed.toLowerCase());
+  return `<div class="autocomplete-dropdown">
+    ${filtered.length === 0 && !isNew ? `<div class="autocomplete-empty">No matches</div>` : ''}
+    ${filtered.map((opt) => `<div class="autocomplete-item" data-ac-select="${esc(opt)}">${esc(opt)}</div>`).join('')}
+    ${isNew ? `<div class="autocomplete-item autocomplete-new" data-ac-select="${esc(trimmed)}">+ Add "${esc(trimmed)}" as a new exercise</div>` : ''}
+  </div>`;
+}
+
+// Rendered into its own #liftExerciseWrap container and re-rendered on its
+// own on every keystroke (rather than the whole Lifts panel) so typing
+// doesn't lose focus — only a blur or an actual selection triggers the
+// full-panel re-render needed to reveal the muscle-group/body-region
+// selects and live-comparison card.
+function renderLiftExerciseField(panel, allExerciseOptions) {
+  const wrap = $('#liftExerciseWrap', panel);
+  if (!wrap) return;
+
+  const draw = () => {
+    wrap.innerHTML = `
+      <label>Exercise</label>
+      <input class="input" id="lift_exercise" value="${esc(liftForm.exercise)}" placeholder="Search or type a new exercise…" autocomplete="off">
+      ${liftAutocompleteOpen ? autocompleteDropdownHtml(liftForm.exercise, allExerciseOptions) : ''}
+    `;
+    const input = $('#lift_exercise', wrap);
+    input.addEventListener('focus', () => { liftAutocompleteOpen = true; draw(); focusEnd(input); });
+    input.addEventListener('input', (e) => {
+      liftForm.exercise = e.target.value;
+      liftAutocompleteOpen = true;
+      draw();
+    });
+    input.addEventListener('blur', () => {
+      // delayed so a dropdown item's mousedown (which fires first) can
+      // still register a selection before the dropdown disappears
+      setTimeout(() => { liftAutocompleteOpen = false; renderLiftsTab(); }, 150);
+    });
+    $$('[data-ac-select]', wrap).forEach((item) => item.addEventListener('mousedown', (e) => {
+      e.preventDefault(); // keeps focus on the input instead of the item, avoiding the blur race entirely
+      const val = item.dataset.acSelect;
+      liftForm.exercise = val;
+      liftAutocompleteOpen = false;
+      liftForm.muscleGroup = DEFAULT_MUSCLE_GROUP[val] || liftForm.muscleGroup || '';
+      liftForm.bodyRegion = DEFAULT_BODY_REGION[val] || liftForm.bodyRegion || '';
+      prefillLiftFormFromLast(val);
+      renderLiftsTab();
+    }));
+  };
+  const focusEnd = (input) => { const v = input.value; input.setSelectionRange(v.length, v.length); };
+  draw();
+  if (liftAutocompleteOpen) $('#lift_exercise', wrap).focus();
+}
+
 function renderLiftLog(panel) {
   const lifts = state.lifts;
   const prs = computeLiftPRs(lifts);
@@ -3548,11 +3894,7 @@ function renderLiftLog(panel) {
     </div>` : ''}
     <div class="card">
       <h3>Log a lift</h3>
-      <div class="field">
-        <label>Exercise</label>
-        <input class="input" id="lift_exercise" list="liftExerciseOptions" value="${esc(liftForm.exercise)}" placeholder="Search or type a new exercise…" autocomplete="off">
-        <datalist id="liftExerciseOptions">${allExerciseOptions.map((o) => `<option value="${esc(o)}">`).join('')}</datalist>
-      </div>
+      <div class="field autocomplete-wrap" id="liftExerciseWrap"></div>
       ${liftForm.exercise ? `
       <div class="row">
         <div class="field"><label>Muscle group</label>
@@ -3621,18 +3963,7 @@ function renderLiftLog(panel) {
     </div>` : ''}
   `;
 
-  const exerciseInput = $('#lift_exercise');
-  exerciseInput.addEventListener('input', (e) => { liftForm.exercise = e.target.value; });
-  exerciseInput.addEventListener('change', (e) => {
-    const val = e.target.value.trim();
-    liftForm.exercise = val;
-    if (val) {
-      liftForm.muscleGroup = DEFAULT_MUSCLE_GROUP[val] || liftForm.muscleGroup || '';
-      liftForm.bodyRegion = DEFAULT_BODY_REGION[val] || liftForm.bodyRegion || '';
-      prefillLiftFormFromLast(val);
-    }
-    renderLiftsTab();
-  });
+  renderLiftExerciseField(panel, allExerciseOptions);
   const mgSel = $('#lift_muscleGroup');
   if (mgSel) mgSel.addEventListener('change', (e) => { liftForm.muscleGroup = e.target.value; });
   const brSel = $('#lift_bodyRegion');
@@ -3741,6 +4072,14 @@ function renderLiftDetail(panel) {
       <div class="muted small" style="display:flex;gap:0.9rem;margin-top:0.4rem;">
         <span style="color:var(--accent);">— weight</span>
         <span style="color:var(--success);">┄ est. 1RM</span>
+      </div>
+    </div>` : ''}
+    ${history.length > 1 ? `<div class="card">
+      <h3>Weight vs. reps over time</h3>
+      ${weightRepsComboChartSvg(history, state.weightLog)}
+      <div class="muted small" style="display:flex;gap:0.9rem;margin-top:0.4rem;">
+        <span style="color:var(--accent);">— weight (lb)</span>
+        <span style="display:inline-flex;align-items:center;gap:0.25rem;"><span style="width:9px;height:9px;border-radius:2px;background:var(--success);opacity:0.5;display:inline-block;"></span>avg reps/set (hover a bar for details)</span>
       </div>
     </div>` : ''}
     <div class="card" style="padding:0;">
@@ -3887,6 +4226,7 @@ function renderTrainingDashboard() {
         <div class="muted small">${Object.keys(prs).length} exercises tracked</div>
       </div>
     </div>
+    ${muscleMapHtml(lifts)}
     ${careerVolume > 0 ? `
     <div class="card">
       <h3>Career volume moved</h3>
@@ -3925,6 +4265,8 @@ function renderTrainingDashboard() {
   const spikeDismiss = $('#spikeDismiss');
   if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderTrainingDashboard(); });
 
+  wireMuscleMapEvents(panel);
+
   $$('[data-pr-open]', panel).forEach((card) => card.addEventListener('click', () => {
     liftsSelectedExercise = card.dataset.prOpen;
     liftHistoryEditingId = null;
@@ -3932,6 +4274,687 @@ function renderTrainingDashboard() {
     setActiveTab('lifts');
     renderLiftsTab();
   }));
+}
+
+// ── Photos tab (progress photos, uploaded to the progress-photos bucket) ──
+let photoNote = '';
+let photoUploading = false;
+let photoUploadError = '';
+let photoEditingId = null;
+let photoEditNote = '';
+let photoEditSaving = false;
+let photoEditError = '';
+
+// resized client-side before upload — keeps Storage usage and signed-URL
+// payloads small, matching IronLog's original behavior
+function resizePhotoToBlob(file, maxW = 500) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      img.onload = () => {
+        const scale = Math.min(1, maxW / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Failed to process image.'))), 'image/jpeg', 0.7);
+      };
+      img.onerror = () => reject(new Error('Failed to load image.'));
+      img.src = ev.target.result;
+    };
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function photoCardHtml(photo) {
+  const isEditing = photoEditingId === photo.id;
+  return `
+    <div class="photo-card">
+      <img src="${photo.signedUrl}" alt="${esc(photo.note || 'progress')}" class="photo-card-img">
+      <div class="photo-card-body">
+        <div class="muted small">${fmtLiftDate(photo.date)}</div>
+        ${isEditing ? `
+          <input class="input" id="photoEditInput" value="${esc(photoEditNote)}" placeholder="Note" style="margin-top:0.3rem;">
+          ${photoEditError ? `<div class="muted small" style="color:var(--danger);">${esc(photoEditError)}</div>` : ''}
+          <div class="row" style="margin-top:0.3rem;">
+            <button class="btn btn-sm btn-primary" id="photoEditSave" ${photoEditSaving ? 'disabled' : ''}>${photoEditSaving ? '…' : 'Save'}</button>
+            <button class="btn btn-sm btn-ghost" id="photoEditCancel">Cancel</button>
+          </div>
+        ` : `<div class="photo-note" data-photo-edit="${photo.id}">${photo.note ? esc(photo.note) : '+ add note'}</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderPhotosTab() {
+  const panel = $('#panel-photos');
+  if (!panel) return;
+  const photos = state.photos;
+
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Add progress photo</h3>
+      <div class="field"><input class="input" id="photoNoteInput" placeholder="Note (optional)" value="${esc(photoNote)}"></div>
+      <div class="field"><input type="file" accept="image/*" id="photoFileInput" ${photoUploading ? 'disabled' : ''}></div>
+      ${photoUploading ? `<div class="muted small">Uploading…</div>` : ''}
+      ${photoUploadError ? `<div class="muted small" style="color:var(--danger);">${esc(photoUploadError)}</div>` : ''}
+      <p class="muted small" style="margin-top:0.4rem;">Photos are resized in your browser, then stored privately in Supabase — only you can view them.</p>
+    </div>
+    ${photos.length === 0 ? `<div class="card"><p class="muted" style="text-align:center;">No photos yet.</p></div>` : `
+    <div class="photo-grid">
+      ${[...photos].reverse().map((p) => photoCardHtml(p)).join('')}
+    </div>`}
+  `;
+
+  $('#photoNoteInput').addEventListener('input', (e) => { photoNote = e.target.value; });
+  $('#photoFileInput').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    photoUploadError = '';
+    photoUploading = true;
+    renderPhotosTab();
+    try {
+      const blob = await resizePhotoToBlob(file, 500);
+      const path = `${state.user.id}/${crypto.randomUUID()}.jpg`;
+      const { error: uploadErr } = await supabase.storage.from('progress-photos').upload(path, blob, { contentType: 'image/jpeg' });
+      if (uploadErr) throw uploadErr;
+      const { error: insertErr } = await supabase.from('photos').insert({
+        user_id: state.user.id, storage_path: path, note: photoNote.trim() || null, date: localDateStr(),
+      });
+      if (insertErr) throw insertErr;
+      photoNote = '';
+      await loadPhotos();
+      renderAll();
+    } catch (err) {
+      photoUploadError = err.message || 'Failed to upload photo.';
+      photoUploading = false;
+      renderPhotosTab();
+    }
+  });
+
+  $$('[data-photo-edit]', panel).forEach((el) => el.addEventListener('click', () => {
+    photoEditingId = el.dataset.photoEdit;
+    const photo = photos.find((p) => p.id === photoEditingId);
+    photoEditNote = photo?.note || '';
+    photoEditError = '';
+    renderPhotosTab();
+  }));
+  const editCancelBtn = $('#photoEditCancel');
+  if (editCancelBtn) editCancelBtn.addEventListener('click', () => { photoEditingId = null; renderPhotosTab(); });
+  const editSaveBtn = $('#photoEditSave');
+  if (editSaveBtn) editSaveBtn.addEventListener('click', async () => {
+    const note = $('#photoEditInput').value.trim();
+    photoEditSaving = true;
+    photoEditError = '';
+    renderPhotosTab();
+    const { error } = await supabase.from('photos').update({ note: note || null }).eq('id', photoEditingId);
+    photoEditSaving = false;
+    if (error) { photoEditError = error.message || 'Failed to save.'; renderPhotosTab(); return; }
+    photoEditingId = null;
+    await loadPhotos();
+    renderAll();
+  });
+}
+
+// ── Days tab (heatmap, per-day drill-down, superset grouping) ──────
+function buildHeatmapWeeks(dayVolumeMap, weeksBack) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const currentWeekStart = new Date(`${getWeekStart(localDateStr(today))}T00:00:00`);
+  const weeks = [];
+  for (let w = weeksBack - 1; w >= 0; w--) {
+    const weekStart = new Date(currentWeekStart);
+    weekStart.setDate(weekStart.getDate() - w * 7);
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(weekStart);
+      day.setDate(day.getDate() + d);
+      if (day > today) {
+        week.push(null);
+      } else {
+        const dateStr = localDateStr(day);
+        week.push({ date: dateStr, volume: dayVolumeMap[dateStr] || 0 });
+      }
+    }
+    weeks.push(week);
+  }
+  return weeks;
+}
+
+function weekMonthLabel(week, prevWeek) {
+  const firstDay = week.find((d) => d);
+  if (!firstDay) return '';
+  const month = firstDay.date.slice(0, 7);
+  const prevFirstDay = prevWeek ? prevWeek.find((d) => d) : null;
+  const prevMonth = prevFirstDay ? prevFirstDay.date.slice(0, 7) : null;
+  if (month === prevMonth) return '';
+  return new Date(`${firstDay.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short' });
+}
+
+// bundles consecutive-in-array entries that share a superset_group so the
+// Days view can render them visually grouped instead of as flat rows
+function groupLiftsForDisplay(lifts) {
+  const groups = [];
+  const groupIndex = new Map();
+  for (const l of lifts) {
+    if (l.superset_group) {
+      if (groupIndex.has(l.superset_group)) {
+        groups[groupIndex.get(l.superset_group)].lifts.push(l);
+      } else {
+        groupIndex.set(l.superset_group, groups.length);
+        groups.push({ type: 'group', name: l.superset_group, lifts: [l] });
+      }
+    } else {
+      groups.push({ type: 'single', lift: l });
+    }
+  }
+  return groups;
+}
+
+// current streak: consecutive days (from most recent trained day backward) with at least one lift
+function computeTrainingStreak(lifts) {
+  const trainedDates = new Set(lifts.map((l) => l.date));
+  if (trainedDates.size === 0) return 0;
+  const sortedDates = Array.from(trainedDates).sort((a, b) => b.localeCompare(a));
+  let count = 0;
+  let cursorDate = new Date(`${sortedDates[0]}T00:00:00`);
+  for (const ds of sortedDates) {
+    const d = new Date(`${ds}T00:00:00`);
+    const diff = Math.round((cursorDate - d) / 86400000);
+    if (diff === 0) {
+      count++;
+      cursorDate = new Date(cursorDate.getTime() - 86400000);
+    } else break;
+  }
+  return count;
+}
+
+function heatmapHtml(days) {
+  const dayVolumeMap = {};
+  for (const d of days) dayVolumeMap[d.date] = d.volume;
+  const weeks = buildHeatmapWeeks(dayVolumeMap, 53);
+  const allVolumes = [];
+  for (const week of weeks) for (const day of week) if (day && day.volume > 0) allVolumes.push(day.volume);
+  const thresholds = volumeQuantileThresholds(allVolumes);
+
+  const labelsRow = weeks.map((week, wi) => `<div class="heatmap-week-label">${esc(weekMonthLabel(week, wi === 0 ? null : weeks[wi - 1]))}</div>`).join('');
+  const gridCols = weeks.map((week) => `
+    <div class="heatmap-week-col">
+      ${week.map((day) => {
+        if (!day) return `<div class="heatmap-cell heatmap-cell-empty"></div>`;
+        const level = heatmapLevel(day.volume, thresholds);
+        const title = `${day.date}: ${day.volume ? Math.round(day.volume).toLocaleString() + ' lb' : 'no training'}`;
+        return `<div class="heatmap-cell" style="background:${HEATMAP_LEVELS[level]};" title="${esc(title)}" data-heatmap-date="${day.date}"></div>`;
+      }).join('')}
+    </div>`).join('');
+
+  return `
+    <div class="heatmap-scroll">
+      <div class="heatmap-labels-row">${labelsRow}</div>
+      <div class="heatmap-grid">${gridCols}</div>
+    </div>
+    <div class="heatmap-legend">
+      <span>Less</span>
+      ${HEATMAP_LEVELS.map((c) => `<span class="heatmap-swatch" style="background:${c};"></span>`).join('')}
+      <span>More</span>
+    </div>
+  `;
+}
+
+function dailyVolumeBarSvg(chartData) {
+  const w = 600, h = 140, pad = 16;
+  const max = Math.max(...chartData.map((d) => d.volume), 1);
+  const barW = (w - pad * 2) / chartData.length;
+  const bars = chartData.map((d, i) => {
+    const barH = (d.volume / max) * (h - pad * 2);
+    const x = pad + i * barW;
+    const y = h - pad - barH;
+    return `<rect x="${x + barW * 0.15}" y="${y}" width="${Math.max(barW * 0.7, 1)}" height="${barH}" rx="2" fill="var(--accent)"><title>${esc(d.date)}: ${Math.round(d.volume).toLocaleString()} lb</title></rect>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">${bars}</svg>`;
+}
+
+function weeklyMuscleGroupBarSvg(weeklyData, activeMuscleGroups) {
+  const w = 600, h = 160, pad = 16;
+  const max = Math.max(...weeklyData.map((wk) => activeMuscleGroups.reduce((s, mg) => s + (wk[mg] || 0), 0)), 1);
+  const barW = (w - pad * 2) / weeklyData.length;
+  const bars = weeklyData.map((wk, i) => {
+    let yCursor = h - pad;
+    const x = pad + i * barW;
+    return activeMuscleGroups.map((mg) => {
+      const val = wk[mg] || 0;
+      if (val <= 0) return '';
+      const segH = (val / max) * (h - pad * 2);
+      yCursor -= segH;
+      return `<rect x="${x + barW * 0.1}" y="${yCursor}" width="${Math.max(barW * 0.8, 1)}" height="${segH}" fill="${MUSCLE_GROUP_COLORS[mg]}"><title>${esc(wk.label)} — ${mg}: ${Math.round(val).toLocaleString()} lb</title></rect>`;
+    }).join('');
+  }).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">${bars}</svg>`;
+}
+
+let daysExpandedDate = null;
+let daysHeatmapDay = null;
+
+function renderDaysTab() {
+  const panel = $('#panel-days');
+  if (!panel) return;
+  const lifts = state.lifts;
+  const weightLog = state.weightLog;
+  const photos = state.photos;
+
+  const dayMap = {};
+  const touch = (date) => (dayMap[date] = dayMap[date] || { date, lifts: [], bodyweight: null, photos: [] });
+  for (const l of lifts) touch(l.date).lifts.push(l);
+  for (const w of weightLog) { const d = touch(w.logged_date); d.bodyweight = w; }
+  for (const p of photos) touch(p.date).photos.push(p);
+  const days = Object.values(dayMap).map((d) => ({
+    ...d,
+    volume: d.lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0),
+    exerciseCount: new Set(d.lifts.map((l) => l.exercise)).size,
+  })).sort((a, b) => b.date.localeCompare(a.date));
+
+  if (days.length === 0) {
+    panel.innerHTML = `<div class="card"><p class="muted" style="text-align:center;">No days logged yet. Add a lift or a weight entry to start building your daily log.</p></div>`;
+    return;
+  }
+
+  const chartData = [...days].sort((a, b) => a.date.localeCompare(b.date)).filter((d) => d.volume > 0)
+    .map((d) => ({ date: fmtLiftDate(d.date), volume: d.volume }));
+
+  const weeklyMap = {};
+  for (const l of lifts) {
+    const wk = getWeekStart(l.date);
+    weeklyMap[wk] = weeklyMap[wk] || { week: wk };
+    const mg = getMuscleGroup(l);
+    weeklyMap[wk][mg] = (weeklyMap[wk][mg] || 0) + l.weight * totalReps(l);
+  }
+  const weeklyData = Object.values(weeklyMap).sort((a, b) => a.week.localeCompare(b.week)).map((w) => ({ ...w, label: fmtLiftDate(w.week) }));
+  const activeMuscleGroups = MUSCLE_GROUPS.filter((mg) => weeklyData.some((w) => w[mg]));
+
+  const byExercise = {};
+  for (const l of lifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
+  const plateauedExercises = Object.keys(byExercise).filter((ex) => detectPlateau(byExercise[ex]));
+
+  const streak = computeTrainingStreak(lifts);
+  const heatmapDayInfo = daysHeatmapDay ? days.find((d) => d.date === daysHeatmapDay) : null;
+
+  panel.innerHTML = `
+    <div class="row">
+      <div class="card"><h3>Days Logged</h3><div class="stat-num">${days.length}</div></div>
+      <div class="card"><h3>Current Streak</h3><div class="stat-num">${streak} <span class="muted small">day${streak === 1 ? '' : 's'}</span></div></div>
+    </div>
+    <div class="card">
+      <h3>Training heatmap — past year</h3>
+      ${heatmapHtml(days)}
+      ${daysHeatmapDay ? `
+      <div class="muscle-map-detail">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <strong>${fmtLiftDate(daysHeatmapDay)}</strong>
+          <button class="btn btn-sm btn-ghost" id="heatmapDayClose">✕</button>
+        </div>
+        ${heatmapDayInfo && heatmapDayInfo.lifts.length > 0 ? `
+          ${heatmapDayInfo.lifts.map((l) => `
+            <div class="row" style="justify-content:space-between;">
+              <span style="color:var(--accent);">${esc(l.exercise)}</span>
+              <span class="mono muted">${l.weight}lb · ${repsDisplay(l)}</span>
+            </div>`).join('')}
+          <p class="muted small">Total volume: <span class="mono" style="color:var(--text);">${Math.round(heatmapDayInfo.volume).toLocaleString()} lb</span></p>
+        ` : `<p class="muted small">No lifts logged this day.</p>`}
+      </div>` : ''}
+    </div>
+    ${chartData.length > 1 ? `<div class="card"><h3>Volume per day (weight × sets × reps)</h3>${dailyVolumeBarSvg(chartData)}</div>` : ''}
+    ${weeklyData.length > 1 ? `<div class="card">
+      <h3>Weekly volume by muscle group</h3>
+      ${weeklyMuscleGroupBarSvg(weeklyData, activeMuscleGroups)}
+      <div class="muscle-group-legend">
+        ${activeMuscleGroups.map((mg) => `<span class="legend-item"><span class="legend-swatch" style="background:${MUSCLE_GROUP_COLORS[mg]};"></span>${mg}</span>`).join('')}
+      </div>
+    </div>` : ''}
+    ${plateauedExercises.length ? `<div class="card" style="border-color:var(--danger);">
+      <h3>Plateau watch</h3>
+      ${plateauedExercises.map((ex) => `<div class="plateau-row" data-plateau-open="${esc(ex)}"><span style="color:var(--danger);">●</span> ${esc(ex)} — no est. 1RM improvement in last 3 sessions</div>`).join('')}
+    </div>` : ''}
+    <div>
+      <h3 style="margin:0 0 0.5rem;">Daily log</h3>
+      ${days.map((d) => {
+        const isOpen = daysExpandedDate === d.date;
+        return `
+        <div class="card day-card">
+          <div class="day-card-head" data-day-toggle="${d.date}">
+            <div>
+              <div class="name">${fmtLiftDate(d.date)}</div>
+              <div class="muted small">${d.exerciseCount > 0 ? `${d.exerciseCount} exercise${d.exerciseCount === 1 ? '' : 's'}` : 'no lifts'}${d.bodyweight ? ` · ${d.bodyweight.weight_lb}lb bodyweight` : ''}${d.photos.length ? ` · ${d.photos.length} photo${d.photos.length === 1 ? '' : 's'}` : ''}</div>
+            </div>
+            <div class="row" style="align-items:center;flex:none;gap:0.6rem;">
+              ${d.volume > 0 ? `<span class="mono" style="color:var(--accent);">${d.volume.toLocaleString()} vol</span>` : ''}
+              <span class="muted">${isOpen ? '▲' : '▼'}</span>
+            </div>
+          </div>
+          ${isOpen ? `
+          <div class="day-card-body">
+            ${d.lifts.length ? groupLiftsForDisplay(d.lifts).map((item) => item.type === 'single' ? `
+              <div class="day-lift-row" data-day-open-lift="${esc(item.lift.exercise)}">
+                <span style="color:var(--accent);">${esc(item.lift.exercise)}</span>
+                <span class="mono muted">${item.lift.weight}lb · ${repsDisplay(item.lift)}</span>
+              </div>` : `
+              <div class="superset-group">
+                <div class="superset-label">⚭ ${esc(item.name)}</div>
+                ${item.lifts.map((l) => `
+                  <div class="day-lift-row" data-day-open-lift="${esc(l.exercise)}">
+                    <span>${esc(l.exercise)}</span>
+                    <span class="mono muted">${l.weight}lb · ${repsDisplay(l)}</span>
+                  </div>`).join('')}
+              </div>`).join('') : ''}
+            ${d.bodyweight ? `<div class="muted small day-extra-row">Bodyweight: <span class="mono" style="color:var(--text);">${d.bodyweight.weight_lb} lb</span></div>` : ''}
+            ${d.photos.length ? `<div class="day-photos-row">${d.photos.map((p) => `<img src="${p.signedUrl}" alt="${esc(p.note || 'progress')}" class="day-photo-thumb">`).join('')}</div>` : ''}
+          </div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  const heatmapDayClose = $('#heatmapDayClose');
+  if (heatmapDayClose) heatmapDayClose.addEventListener('click', () => { daysHeatmapDay = null; renderDaysTab(); });
+  $$('[data-heatmap-date]', panel).forEach((cell) => cell.addEventListener('click', () => {
+    daysHeatmapDay = cell.dataset.heatmapDate;
+    renderDaysTab();
+  }));
+  $$('[data-day-toggle]', panel).forEach((el) => el.addEventListener('click', () => {
+    daysExpandedDate = daysExpandedDate === el.dataset.dayToggle ? null : el.dataset.dayToggle;
+    renderDaysTab();
+  }));
+  $$('[data-day-open-lift], [data-plateau-open]', panel).forEach((el) => el.addEventListener('click', () => {
+    const ex = el.dataset.dayOpenLift || el.dataset.plateauOpen;
+    liftsSelectedExercise = ex;
+    liftHistoryEditingId = null;
+    goalCardEditing = false;
+    setActiveTab('lifts');
+    renderLiftsTab();
+  }));
+}
+
+// ── Recaps tab (monthly training recap, cached in monthly_recaps) ──
+function monthKey(dateStr) {
+  return dateStr.slice(0, 7); // "YYYY-MM"
+}
+
+function monthRangeStrs(monthStr) {
+  // monthStr is the first day of the month, e.g. "2026-07-01"
+  const [y, m] = monthStr.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return { startStr: monthStr, endStr: `${monthStr.slice(0, 8)}${String(lastDay).padStart(2, '0')}` };
+}
+
+// every calendar month with data, up to (not including) the current in-progress month
+function eligibleRecapMonths(lifts, weightLogEntries) {
+  const allDates = [...lifts.map((l) => l.date), ...weightLogEntries.map((w) => w.logged_date)];
+  if (allDates.length === 0) return [];
+  const minMonth = allDates.reduce((min, d) => (monthKey(d) < min ? monthKey(d) : min), monthKey(allDates[0]));
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const months = [];
+  let [y, m] = minMonth.split('-').map(Number);
+  while (`${y}-${String(m).padStart(2, '0')}` < currentMonth) {
+    months.push(`${y}-${String(m).padStart(2, '0')}-01`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return months.reverse(); // most recent first
+}
+
+// walks the full lift history chronologically (not just the target month) so
+// "biggest PR" reflects a real improvement over the prior best, not just
+// the best lift that happened to land inside the month
+function computeMonthlyRecap(monthStr, allLifts, allWeightLog) {
+  const { startStr, endStr } = monthRangeStrs(monthStr);
+  const sorted = [...allLifts].sort((a, b) => a.date.localeCompare(b.date));
+
+  const runningBest = {};
+  let biggestPR = null;
+  let totalVolume = 0;
+  const muscleVolume = {};
+  const trainedDates = new Set();
+
+  for (const l of sorted) {
+    if (l.date > endStr) break;
+    const priorBest = runningBest[l.exercise];
+    const inMonth = l.date >= startStr && l.date <= endStr;
+
+    if (inMonth) {
+      const vol = l.weight * totalReps(l);
+      totalVolume += vol;
+      const mg = getMuscleGroup(l);
+      muscleVolume[mg] = (muscleVolume[mg] || 0) + vol;
+      trainedDates.add(l.date);
+
+      if (priorBest && l.weight > priorBest.weight) {
+        const improvement = Math.round((l.weight - priorBest.weight) * 100) / 100;
+        if (!biggestPR || improvement > biggestPR.improvement) {
+          biggestPR = { exercise: l.exercise, weight: l.weight, improvement };
+        }
+      }
+    }
+
+    if (!priorBest || l.weight > priorBest.weight) runningBest[l.exercise] = l;
+  }
+
+  const topMuscleGroup = Object.entries(muscleVolume).sort((a, b) => b[1] - a[1])[0];
+  const bwStart = bodyweightAsOf(startStr, allWeightLog);
+  const bwEnd = bodyweightAsOf(endStr, allWeightLog);
+
+  return {
+    month: monthStr,
+    total_volume: totalVolume,
+    training_days: trainedDates.size,
+    most_trained_muscle_group: topMuscleGroup ? topMuscleGroup[0] : null,
+    most_trained_muscle_group_volume: topMuscleGroup ? topMuscleGroup[1] : null,
+    biggest_pr_exercise: biggestPR?.exercise ?? null,
+    biggest_pr_weight: biggestPR?.weight ?? null,
+    biggest_pr_improvement: biggestPR?.improvement ?? null,
+    bodyweight_start: bwStart?.weight_lb ?? null,
+    bodyweight_end: bwEnd?.weight_lb ?? null,
+  };
+}
+
+// checks the cache first, only computes (and then caches) on a miss
+async function getOrComputeRecap(month, lifts, weightLog) {
+  const { data: cached } = await supabase.from('monthly_recaps').select('*').eq('user_id', state.user.id).eq('month', month).maybeSingle();
+  if (cached) return cached;
+  const computed = computeMonthlyRecap(month, lifts, weightLog);
+  const { data: saved, error } = await supabase.from('monthly_recaps')
+    .upsert({ user_id: state.user.id, ...computed }, { onConflict: 'user_id,month' })
+    .select().single();
+  if (error) throw error;
+  return saved;
+}
+
+function monthLabel(monthStr) {
+  return new Date(`${monthStr}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function singleRecapHtml(recap) {
+  const bwDelta = recap.bodyweight_start != null && recap.bodyweight_end != null
+    ? Math.round((recap.bodyweight_end - recap.bodyweight_start) * 10) / 10 : null;
+  return `
+    <div class="card">
+      <h3>Total Volume</h3>
+      <div class="stat-num">${Math.round(recap.total_volume).toLocaleString()} <span class="muted small">lb</span></div>
+    </div>
+    <div class="row">
+      <div class="card">
+        <h3>Training Days</h3>
+        <div class="stat-num" style="font-size:1.3rem;">${recap.training_days}</div>
+      </div>
+      <div class="card">
+        <h3>Most Trained</h3>
+        <div style="font-weight:600;color:${recap.most_trained_muscle_group ? MUSCLE_GROUP_COLORS[recap.most_trained_muscle_group] : 'var(--text-dim)'};">${recap.most_trained_muscle_group || '—'}</div>
+        ${recap.most_trained_muscle_group_volume != null ? `<div class="muted small">${Math.round(recap.most_trained_muscle_group_volume).toLocaleString()} lb volume</div>` : ''}
+      </div>
+    </div>
+    <div class="card">
+      <h3>Biggest PR</h3>
+      ${recap.biggest_pr_exercise ? `
+        <div style="font-weight:600;color:var(--accent);">🔥 ${esc(recap.biggest_pr_exercise)}</div>
+        <div class="stat-num" style="font-size:1.3rem;margin-top:0.15rem;">${recap.biggest_pr_weight} <span class="muted small">lb</span></div>
+        <div class="small" style="color:var(--success);margin-top:0.15rem;">+${recap.biggest_pr_improvement} lb over prior best</div>
+      ` : `<p class="muted small">No new PRs this month.</p>`}
+    </div>
+    <div class="card">
+      <h3>Bodyweight Change</h3>
+      ${recap.bodyweight_start != null && recap.bodyweight_end != null ? `
+        <div class="row" style="align-items:baseline;gap:0.5rem;">
+          <span class="mono" style="font-size:1.2rem;">${recap.bodyweight_start} → ${recap.bodyweight_end} <span class="muted small">lb</span></span>
+          <span class="small" style="color:${bwDelta > 0 ? 'var(--success)' : bwDelta < 0 ? 'var(--danger)' : 'var(--text-dim)'};">(${bwDelta > 0 ? '+' : ''}${bwDelta} lb)</span>
+        </div>
+      ` : `<p class="muted small">Not enough bodyweight data for this month.</p>`}
+    </div>
+  `;
+}
+
+function compareMetricRowHtml(label, valueA, valueB) {
+  const hasBoth = valueA != null && valueB != null;
+  const delta = hasBoth ? valueB - valueA : null;
+  const pct = hasBoth && valueA !== 0 ? (delta / valueA) * 100 : null;
+  const deltaColor = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--text-dim)';
+  return `
+    <div class="compare-row">
+      <div class="compare-row-label">${esc(label)}</div>
+      <div class="compare-row-grid">
+        <div class="mono compare-value">${valueA != null ? Math.round(valueA).toLocaleString() : '—'}</div>
+        <div class="mono compare-delta" style="color:${deltaColor};">${hasBoth ? `${delta > 0 ? '+' : ''}${Math.round(delta).toLocaleString()}${pct != null ? ` (${delta > 0 ? '+' : ''}${Math.round(pct)}%)` : ''}` : '—'}</div>
+        <div class="mono compare-value" style="text-align:right;">${valueB != null ? Math.round(valueB).toLocaleString() : '—'}</div>
+      </div>
+    </div>`;
+}
+
+function compareFactRowHtml(label, contentA, contentB) {
+  return `
+    <div class="compare-row">
+      <div class="compare-row-label">${esc(label)}</div>
+      <div class="compare-fact-grid">
+        <div>${contentA}</div>
+        <div style="text-align:right;">${contentB}</div>
+      </div>
+    </div>`;
+}
+
+function compareRecapHtml(a, b) {
+  const bwChange = (r) => (r.bodyweight_start != null && r.bodyweight_end != null ? `${r.bodyweight_start} → ${r.bodyweight_end} lb` : null);
+  return `
+    <div class="card" style="padding:0 0.9rem;">
+      ${compareMetricRowHtml('Total Volume (lb)', a.total_volume, b.total_volume)}
+      ${compareMetricRowHtml('Training Days', a.training_days, b.training_days)}
+      ${compareFactRowHtml('Biggest PR',
+        a.biggest_pr_exercise ? `<span style="color:var(--accent);">${esc(a.biggest_pr_exercise)}</span><br><span class="mono muted">${a.biggest_pr_weight} lb</span>` : `<span class="muted">None</span>`,
+        b.biggest_pr_exercise ? `<span style="color:var(--accent);">${esc(b.biggest_pr_exercise)}</span><br><span class="mono muted">${b.biggest_pr_weight} lb</span>` : `<span class="muted">None</span>`
+      )}
+      ${compareFactRowHtml('Most Trained Muscle Group',
+        `<span style="color:${a.most_trained_muscle_group ? MUSCLE_GROUP_COLORS[a.most_trained_muscle_group] : 'var(--text-dim)'};">${a.most_trained_muscle_group || '—'}</span>`,
+        `<span style="color:${b.most_trained_muscle_group ? MUSCLE_GROUP_COLORS[b.most_trained_muscle_group] : 'var(--text-dim)'};">${b.most_trained_muscle_group || '—'}</span>`
+      )}
+      ${compareFactRowHtml('Bodyweight Change (start → end)',
+        bwChange(a) ? `<span class="mono">${bwChange(a)}</span>` : `<span class="muted">No data</span>`,
+        bwChange(b) ? `<span class="mono">${bwChange(b)}</span>` : `<span class="muted">No data</span>`
+      )}
+    </div>
+  `;
+}
+
+let recapsMode = 'single';
+let recapsSelectedMonth = null;
+let recapsCompareA = null;
+let recapsCompareB = null;
+
+function renderSingleMonthRecap(months) {
+  const body = $('#recapsBody');
+  if (!body) return;
+  const idx = months.indexOf(recapsSelectedMonth);
+
+  body.innerHTML = `
+    <div class="row" style="justify-content:space-between;align-items:center;margin-top:0.75rem;">
+      <button class="btn btn-sm btn-ghost" id="recapOlder" ${idx >= months.length - 1 ? 'disabled' : ''}>← Older</button>
+      <strong>${monthLabel(recapsSelectedMonth)}</strong>
+      <button class="btn btn-sm btn-ghost" id="recapNewer" ${idx <= 0 ? 'disabled' : ''}>Newer →</button>
+    </div>
+    <div id="recapContent"></div>
+  `;
+
+  $('#recapOlder').addEventListener('click', () => { recapsSelectedMonth = months[idx + 1]; renderRecapsTab(); });
+  $('#recapNewer').addEventListener('click', () => { recapsSelectedMonth = months[idx - 1]; renderRecapsTab(); });
+
+  const contentEl = $('#recapContent');
+  contentEl.innerHTML = `<p class="muted" style="text-align:center;padding:1.5rem 0;">Crunching the numbers…</p>`;
+  const requestedMonth = recapsSelectedMonth;
+
+  getOrComputeRecap(requestedMonth, state.lifts, state.weightLog).then((recap) => {
+    if (recapsSelectedMonth !== requestedMonth) return; // superseded by a newer click
+    contentEl.innerHTML = singleRecapHtml(recap);
+  }).catch((err) => {
+    if (recapsSelectedMonth !== requestedMonth) return;
+    contentEl.innerHTML = `<div class="card" style="border-color:var(--danger);"><p style="color:var(--danger);margin:0;">${esc(err.message || 'Failed to load recap.')}</p></div>`;
+  });
+}
+
+function renderMonthCompare(months) {
+  const body = $('#recapsBody');
+  if (!body) return;
+
+  body.innerHTML = `
+    <div class="row" style="margin-top:0.75rem;">
+      <select id="recapMonthA">${months.map((m) => `<option value="${m}" ${m === recapsCompareA ? 'selected' : ''}>${monthLabel(m)}</option>`).join('')}</select>
+      <select id="recapMonthB">${months.map((m) => `<option value="${m}" ${m === recapsCompareB ? 'selected' : ''}>${monthLabel(m)}</option>`).join('')}</select>
+    </div>
+    <div id="recapCompareContent"></div>
+  `;
+  $('#recapMonthA').addEventListener('change', (e) => { recapsCompareA = e.target.value; renderRecapsTab(); });
+  $('#recapMonthB').addEventListener('change', (e) => { recapsCompareB = e.target.value; renderRecapsTab(); });
+
+  const contentEl = $('#recapCompareContent');
+  contentEl.innerHTML = `<p class="muted" style="text-align:center;padding:1.5rem 0;">Crunching the numbers…</p>`;
+  const requestedA = recapsCompareA, requestedB = recapsCompareB;
+
+  Promise.all([
+    getOrComputeRecap(requestedA, state.lifts, state.weightLog),
+    getOrComputeRecap(requestedB, state.lifts, state.weightLog),
+  ]).then(([a, b]) => {
+    if (recapsCompareA !== requestedA || recapsCompareB !== requestedB) return;
+    contentEl.innerHTML = compareRecapHtml(a, b);
+  }).catch((err) => {
+    if (recapsCompareA !== requestedA || recapsCompareB !== requestedB) return;
+    contentEl.innerHTML = `<div class="card" style="border-color:var(--danger);"><p style="color:var(--danger);margin:0;">${esc(err.message || 'Failed to load comparison.')}</p></div>`;
+  });
+}
+
+function renderRecapsTab() {
+  const panel = $('#panel-recaps');
+  if (!panel) return;
+  const months = eligibleRecapMonths(state.lifts, state.weightLog);
+
+  if (months.length === 0) {
+    panel.innerHTML = `<div class="card"><p class="muted" style="text-align:center;">No completed months yet — recaps show up once a full calendar month has passed since your first entry.</p></div>`;
+    return;
+  }
+  if (!recapsSelectedMonth || !months.includes(recapsSelectedMonth)) recapsSelectedMonth = months[0];
+  if (!recapsCompareA || !months.includes(recapsCompareA)) recapsCompareA = months[1] || months[0];
+  if (!recapsCompareB || !months.includes(recapsCompareB)) recapsCompareB = months[0];
+
+  panel.innerHTML = `
+    <div class="row">
+      <button class="btn btn-sm ${recapsMode === 'single' ? 'btn-primary' : ''}" data-recap-mode="single">Single Month</button>
+      <button class="btn btn-sm ${recapsMode === 'compare' ? 'btn-primary' : ''}" data-recap-mode="compare">Compare</button>
+    </div>
+    <div id="recapsBody"></div>
+  `;
+
+  $$('[data-recap-mode]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    recapsMode = btn.dataset.recapMode;
+    renderRecapsTab();
+  }));
+
+  if (recapsMode === 'single') renderSingleMonthRecap(months);
+  else renderMonthCompare(months);
 }
 
 // ── Initial session check (in case one already exists on load) ─────
