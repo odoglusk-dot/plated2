@@ -297,6 +297,22 @@
   .autocomplete-item:hover { background: var(--surface-2); }
   .autocomplete-new { color: var(--accent); }
   .autocomplete-empty { padding: 0.6rem 0.7rem; font-size: 0.82rem; color: var(--text-dim); }
+  .balance-bars { display: flex; flex-direction: column; gap: 0.5rem; }
+  .balance-row { display: grid; grid-template-columns: 5rem 1fr auto; align-items: center; gap: 0.5rem; }
+  .balance-row-label { font-size: 0.8rem; }
+  .balance-bar-track { background: var(--surface-2); border-radius: 5px; height: 10px; overflow: hidden; }
+  .balance-bar-fill { height: 100%; border-radius: 5px; }
+  .balance-row-pct { font-size: 0.75rem; width: 2.5rem; text-align: right; }
+  .ratio-row { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+  .ratio-row:last-child { border-bottom: none; }
+  .ratio-label { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; }
+  .leaderboard { display: flex; flex-direction: column; }
+  .leaderboard-row { display: flex; justify-content: space-between; padding: 0.45rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; cursor: pointer; }
+  .leaderboard-row:last-child { border-bottom: none; }
+  .recovery-row { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+  .recovery-row:last-child { border-bottom: none; }
+  .goal-overview-row { padding: 0.5rem 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .goal-overview-row:last-child { border-bottom: none; }
 
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
@@ -600,6 +616,7 @@
       <button class="tab-btn mode-hidden" data-tab="days" data-mode="training">Days</button>
       <button class="tab-btn mode-hidden" data-tab="photos" data-mode="training">Photos</button>
       <button class="tab-btn mode-hidden" data-tab="recaps" data-mode="training">Recaps</button>
+      <button class="tab-btn mode-hidden" data-tab="insights" data-mode="training">Insights</button>
     </div>
   </nav>
 
@@ -617,6 +634,7 @@
     <section class="tab-panel" data-tab="days" id="panel-days"></section>
     <section class="tab-panel" data-tab="photos" id="panel-photos"></section>
     <section class="tab-panel" data-tab="recaps" id="panel-recaps"></section>
+    <section class="tab-panel" data-tab="insights" id="panel-insights"></section>
   </main>
 
   <footer class="legal">
@@ -1728,6 +1746,7 @@ function renderAll() {
   renderDaysTab();
   renderPhotosTab();
   renderRecapsTab();
+  renderInsightsTab();
   updateStreakPill();
 }
 
@@ -4955,6 +4974,301 @@ function renderRecapsTab() {
 
   if (recapsMode === 'single') renderSingleMonthRecap(months);
   else renderMonthCompare(months);
+}
+
+// ── Insights tab (training balance, progress rate, recovery, consistency) ──
+
+// ── Training balance ──
+function muscleGroupVolumeTotals(lifts, windowDays) {
+  const cutoff = windowDays ? subtractDays(localDateStr(), windowDays) : null;
+  const totals = {};
+  for (const mg of MUSCLE_GROUPS) totals[mg] = 0;
+  for (const l of lifts) {
+    if (cutoff && l.date < cutoff) continue;
+    totals[getMuscleGroup(l)] += l.weight * totalReps(l);
+  }
+  return totals;
+}
+
+function muscleBalanceHtml(lifts) {
+  const totals = muscleGroupVolumeTotals(lifts, null);
+  const grand = Object.values(totals).reduce((a, b) => a + b, 0);
+  const groupsWithData = MUSCLE_GROUPS.filter((mg) => totals[mg] > 0);
+  if (grand === 0) return `<p class="muted small">Log a few sessions across different muscle groups to see your training balance.</p>`;
+  const max = Math.max(...Object.values(totals));
+  return `<div class="balance-bars">
+    ${groupsWithData.sort((a, b) => totals[b] - totals[a]).map((mg) => {
+      const pct = Math.round((totals[mg] / grand) * 100);
+      const widthPct = max ? (totals[mg] / max) * 100 : 0;
+      return `<div class="balance-row">
+        <div class="balance-row-label">${mg}</div>
+        <div class="balance-bar-track"><div class="balance-bar-fill" style="width:${widthPct}%;background:${MUSCLE_GROUP_COLORS[mg]};"></div></div>
+        <div class="balance-row-pct mono">${pct}%</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// classic lifter ratios — flags a likely imbalance when one side of a
+// push/pull or hip-hinge/knee-bend pair is unusually far ahead of the other.
+// Matched by name pattern rather than an exact COMMON_LIFTS name, since a
+// user's "Row" might be logged as "Barbell Row", "Pendlay Row", etc.
+const STRENGTH_RATIOS = [
+  { patternA: /squat/i, patternB: /deadlift/i, label: 'Squat : Deadlift', low: 0.7, high: 0.95, note: 'Deadlift is typically 5–30% heavier than squat for most lifters — a big deviation either way can be worth a look.' },
+  { patternA: /bench/i, patternB: /overhead press|shoulder press|\bohp\b/i, label: 'Bench : Overhead Press', low: 0.55, high: 0.75, note: 'Overhead press is typically 55–75% of bench — a lower ratio often means undertrained shoulders/triceps relative to chest.' },
+  { patternA: /bench/i, patternB: /row/i, label: 'Bench : Row', low: 0.85, high: 1.15, note: 'A push (bench) meaningfully ahead of its matching pull (row) is a common sign of an undertrained back.' },
+];
+
+function bestLiftMatching(lifts, pattern) {
+  const matches = lifts.filter((l) => pattern.test(l.exercise));
+  if (matches.length === 0) return null;
+  return matches.reduce((best, l) => (l.weight > best.weight ? l : best));
+}
+
+function computeStrengthRatios(lifts) {
+  return STRENGTH_RATIOS.map((r) => {
+    const liftA = bestLiftMatching(lifts, r.patternA);
+    const liftB = bestLiftMatching(lifts, r.patternB);
+    if (!liftA || !liftB) return { ...r, ready: false };
+    const ratio = liftB.weight / liftA.weight;
+    const status = ratio < r.low ? 'low' : ratio > r.high ? 'high' : 'balanced';
+    return { ...r, ready: true, exerciseA: liftA.exercise, exerciseB: liftB.exercise, weightA: liftA.weight, weightB: liftB.weight, ratio, status };
+  });
+}
+
+function strengthRatiosHtml(lifts) {
+  return computeStrengthRatios(lifts).map((r) => {
+    if (!r.ready) return `<div class="ratio-row"><div class="ratio-label">${esc(r.label)}</div><p class="muted small">Not enough data yet — log both lifts to see this.</p></div>`;
+    const statusColor = r.status === 'balanced' ? 'var(--success)' : 'var(--danger)';
+    const statusLabel = r.status === 'balanced' ? 'Balanced' : r.status === 'low' ? `${r.exerciseB} lagging` : `${r.exerciseB} ahead`;
+    return `<div class="ratio-row">
+      <div class="ratio-label">${esc(r.exerciseA)} : ${esc(r.exerciseB)}</div>
+      <div class="row" style="align-items:baseline;gap:0.5rem;">
+        <span class="mono">${r.weightA} lb : ${r.weightB} lb</span>
+        <span class="mono small" style="color:${statusColor};">${r.ratio.toFixed(2)}x · ${statusLabel}</span>
+      </div>
+      <p class="muted small">${esc(r.note)}</p>
+    </div>`;
+  }).join('');
+}
+
+// ── Progress rate leaderboard ──
+// same linear-regression-over-e1RM approach as projectGoalDate, but
+// reported as a plain lb/week slope instead of a target-date projection
+function computeProgressRates(lifts) {
+  const byExercise = {};
+  for (const l of lifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
+  const rows = [];
+  for (const [exercise, hist] of Object.entries(byExercise)) {
+    if (hist.length < 3) continue;
+    const sorted = [...hist].sort((a, b) => a.date.localeCompare(b.date));
+    const firstDate = new Date(`${sorted[0].date}T00:00:00`);
+    const points = sorted.map((l) => ({
+      x: Math.round((new Date(`${l.date}T00:00:00`) - firstDate) / 86400000),
+      y: e1RM(l.weight, l.reps),
+    }));
+    const reg = linearRegression(points);
+    if (!reg) continue;
+    rows.push({ exercise, lbPerWeek: reg.slope * 7, sessions: hist.length });
+  }
+  return rows.sort((a, b) => b.lbPerWeek - a.lbPerWeek);
+}
+
+function progressLeaderboardHtml(lifts) {
+  const rows = computeProgressRates(lifts);
+  if (rows.length === 0) return `<p class="muted small">Log at least 3 sessions on an exercise to see its progress rate.</p>`;
+  return `<div class="leaderboard">
+    ${rows.map((r) => {
+      const color = r.lbPerWeek > 0.05 ? 'var(--success)' : r.lbPerWeek < -0.05 ? 'var(--danger)' : 'var(--text-dim)';
+      return `<div class="leaderboard-row" data-insight-open="${esc(r.exercise)}">
+        <span>${esc(r.exercise)}</span>
+        <span class="mono small" style="color:${color};">${r.lbPerWeek > 0 ? '+' : ''}${r.lbPerWeek.toFixed(2)} lb e1RM/wk</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ── Rep-range distribution ──
+const REP_RANGE_BUCKETS = [
+  { label: '1–5', min: 1, max: 5 },
+  { label: '6–10', min: 6, max: 10 },
+  { label: '11–15', min: 11, max: 15 },
+  { label: '16+', min: 16, max: Infinity },
+];
+
+function repRangeDistribution(lifts) {
+  const buckets = REP_RANGE_BUCKETS.map((b) => ({ ...b, sets: 0, e1rmSum: 0, e1rmCount: 0 }));
+  for (const l of lifts) {
+    const repsPerSet = l.reps_per_set && l.reps_per_set.length ? l.reps_per_set : [l.reps];
+    for (const reps of repsPerSet) {
+      const bucket = buckets.find((b) => reps >= b.min && reps <= b.max);
+      if (!bucket) continue;
+      bucket.sets++;
+      bucket.e1rmSum += e1RM(l.weight, reps);
+      bucket.e1rmCount++;
+    }
+  }
+  return buckets;
+}
+
+function repRangeDistributionHtml(lifts) {
+  const buckets = repRangeDistribution(lifts);
+  const totalSets = buckets.reduce((s, b) => s + b.sets, 0);
+  if (totalSets === 0) return `<p class="muted small">Log some sets to see your rep-range distribution.</p>`;
+  const maxSets = Math.max(...buckets.map((b) => b.sets), 1);
+  return `<div class="balance-bars">
+    ${buckets.map((b) => `
+      <div class="balance-row">
+        <div class="balance-row-label">${b.label}</div>
+        <div class="balance-bar-track"><div class="balance-bar-fill" style="width:${(b.sets / maxSets) * 100}%;background:var(--accent);"></div></div>
+        <div class="balance-row-pct mono small" style="width:auto;white-space:nowrap;">${b.sets} sets${b.e1rmCount ? ` · ${Math.round(b.e1rmSum / b.e1rmCount)} e1RM` : ''}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+// ── Recovery: days since each muscle group was last trained ──
+function daysSinceTrainedPerGroup(lifts) {
+  const lastTrained = {};
+  for (const l of lifts) {
+    const mg = getMuscleGroup(l);
+    if (!lastTrained[mg] || l.date > lastTrained[mg]) lastTrained[mg] = l.date;
+  }
+  const today = localDateStr();
+  return Object.keys(lastTrained).map((mg) => {
+    const days = Math.round((new Date(`${today}T00:00:00`) - new Date(`${lastTrained[mg]}T00:00:00`)) / 86400000);
+    return { muscleGroup: mg, lastDate: lastTrained[mg], days };
+  }).sort((a, b) => b.days - a.days);
+}
+
+function recoveryHtml(lifts) {
+  const rows = daysSinceTrainedPerGroup(lifts);
+  if (rows.length === 0) return `<p class="muted small">Log a lift to start tracking recovery.</p>`;
+  return rows.map((r) => {
+    const overdue = r.days > 7;
+    return `<div class="recovery-row">
+      <span style="color:${overdue ? 'var(--danger)' : 'var(--text)'};">${r.muscleGroup}</span>
+      <span class="mono small" style="color:${overdue ? 'var(--danger)' : 'var(--text-dim)'};">${r.days} day${r.days === 1 ? '' : 's'} ago${overdue ? ' · overdue' : ''}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Weekly training-frequency trend ──
+function weeklyFrequencyData(lifts, weeksBack) {
+  const counts = {};
+  for (const l of lifts) {
+    const wk = getWeekStart(l.date);
+    counts[wk] = counts[wk] || new Set();
+    counts[wk].add(l.date);
+  }
+  const weeks = [];
+  const cursor = new Date(`${getWeekStart(localDateStr())}T00:00:00`);
+  for (let i = 0; i < weeksBack; i++) {
+    const wk = localDateStr(cursor);
+    weeks.push({ week: wk, days: counts[wk] ? counts[wk].size : 0 });
+    cursor.setDate(cursor.getDate() - 7);
+  }
+  return weeks.reverse();
+}
+
+function weeklyFrequencyChartHtml(lifts) {
+  const weeks = weeklyFrequencyData(lifts, 12);
+  if (weeks.every((w) => w.days === 0)) return `<p class="muted small">Log a few weeks of training to see your frequency trend.</p>`;
+  const w = 600, h = 100, pad = 10;
+  const barW = (w - pad * 2) / weeks.length;
+  const bars = weeks.map((wk, i) => {
+    const barH = (wk.days / 7) * (h - pad * 2);
+    const x = pad + i * barW;
+    const y = h - pad - barH;
+    return `<rect x="${x + barW * 0.15}" y="${y}" width="${Math.max(barW * 0.7, 1)}" height="${Math.max(barH, 0)}" rx="2" fill="var(--accent)"><title>Week of ${fmtLiftDate(wk.week)}: ${wk.days}/7 days trained</title></rect>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">${bars}</svg>
+    <p class="muted small" style="margin-top:0.3rem;">Training days per week, last ${weeks.length} weeks.</p>`;
+}
+
+// ── Deload recommendation ──
+// stronger, more specific than the plain volume-spike banner: only fires
+// when a volume spike coincides with a meaningful share of tracked
+// exercises actually plateaued, since either signal alone is common and
+// not necessarily cause for concern
+function computeDeloadSignal(lifts) {
+  const volumeSpike = computeVolumeSpike(lifts, getWeekStart(localDateStr()));
+  const byExercise = {};
+  for (const l of lifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
+  const totalExercises = Object.keys(byExercise).length;
+  const plateauedCount = Object.values(byExercise).filter((hist) => detectPlateau(hist)).length;
+  const plateauRatio = totalExercises ? plateauedCount / totalExercises : 0;
+  return { suggest: !!volumeSpike && plateauRatio >= 0.3, volumeSpike, plateauedCount, totalExercises };
+}
+
+// ── Goals overview (consolidated, vs. opening each exercise individually) ──
+function goalsOverviewHtml(lifts, exerciseGoals) {
+  if (exerciseGoals.length === 0) return `<p class="muted small">No goals set yet — open any exercise in the Lifts tab to set one.</p>`;
+  return exerciseGoals.map((g) => {
+    const hist = lifts.filter((l) => l.exercise === g.exercise);
+    const bestE1RM = hist.length ? Math.max(...hist.map((l) => e1RM(l.weight, l.reps))) : 0;
+    const progress = Math.min(1, Math.max(0, bestE1RM / g.target_weight));
+    const achieved = bestE1RM >= g.target_weight;
+    return `<div class="goal-overview-row" data-insight-open="${esc(g.exercise)}">
+      <div class="row" style="justify-content:space-between;">
+        <strong>${esc(g.exercise)}</strong>
+        <span class="mono small">${bestE1RM || 0} / ${g.target_weight} lb</span>
+      </div>
+      <div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${progress * 100}%;background:${achieved ? 'var(--success)' : 'var(--accent)'};"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderInsightsTab() {
+  const panel = $('#panel-insights');
+  if (!panel) return;
+  const lifts = state.lifts;
+  const deload = computeDeloadSignal(lifts);
+
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Training Balance</h3>
+      <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Share of all-time volume by muscle group.</p>
+      ${muscleBalanceHtml(lifts)}
+    </div>
+    <div class="card">
+      <h3>Strength Ratios</h3>
+      ${strengthRatiosHtml(lifts)}
+    </div>
+    ${deload.suggest ? `
+    <div class="card" style="border-color:var(--danger);">
+      <h3>Consider a Deload</h3>
+      <p style="margin:0;">🛑 This week's volume is up ${deload.volumeSpike.pctAbove}% with ${deload.plateauedCount}/${deload.totalExercises} tracked exercises plateaued — that combination often means it's time to cut volume/intensity by roughly 40–50% for a week rather than pushing harder.</p>
+    </div>` : ''}
+    <div class="card">
+      <h3>Progress Leaderboard</h3>
+      <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Estimated-1RM trend per exercise, across all logged history.</p>
+      ${progressLeaderboardHtml(lifts)}
+    </div>
+    <div class="card">
+      <h3>Rep Range Distribution</h3>
+      ${repRangeDistributionHtml(lifts)}
+    </div>
+    <div class="card">
+      <h3>Recovery — Days Since Trained</h3>
+      ${recoveryHtml(lifts)}
+    </div>
+    <div class="card">
+      <h3>Weekly Training Frequency</h3>
+      ${weeklyFrequencyChartHtml(lifts)}
+    </div>
+    <div class="card">
+      <h3>Goals Overview</h3>
+      ${goalsOverviewHtml(lifts, state.exerciseGoals)}
+    </div>
+  `;
+
+  $$('[data-insight-open]', panel).forEach((el) => el.addEventListener('click', () => {
+    liftsSelectedExercise = el.dataset.insightOpen;
+    liftHistoryEditingId = null;
+    goalCardEditing = false;
+    setActiveTab('lifts');
+    renderLiftsTab();
+  }));
 }
 
 // ── Initial session check (in case one already exists on load) ─────
