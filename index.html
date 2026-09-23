@@ -320,7 +320,10 @@
   .ratio-row:last-child { border-bottom: none; }
   .ratio-label { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; }
   .leaderboard { display: flex; flex-direction: column; }
-  .leaderboard-row { display: flex; justify-content: space-between; padding: 0.45rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; cursor: pointer; }
+  .leaderboard-row { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.45rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; cursor: pointer; }
+  .leaderboard-row > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .leaderboard-spark { width: 70px; flex-shrink: 0; }
+  .leaderboard-spark svg { display: block; width: 100%; height: 22px; }
   .leaderboard-row:last-child { border-bottom: none; }
   .recovery-row { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
   .recovery-row:last-child { border-bottom: none; }
@@ -4313,12 +4316,16 @@ function renderTrainingDashboard() {
     <div>
       <h3 style="margin:0 0 0.5rem;">Personal records</h3>
       <div style="display:flex;gap:0.75rem;overflow-x:auto;padding-bottom:0.4rem;">
-        ${prList.map((pr) => `
+        ${prList.map((pr) => {
+          const history = lifts.filter((l) => l.exercise === pr.exercise).sort((a, b) => a.date.localeCompare(b.date));
+          return `
           <div class="card" style="min-width:150px;flex-shrink:0;margin-bottom:0;cursor:pointer;" data-pr-open="${esc(pr.exercise)}">
             <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin-bottom:0.25rem;">${esc(pr.exercise)}</div>
             <div class="stat-num" style="font-size:1.2rem;">${pr.weight} <span class="muted small">lb</span></div>
             <div class="muted small">${pr.date}</div>
-          </div>`).join('')}
+            ${history.length > 1 ? `<div style="margin-top:0.35rem;">${miniLineSvg(history.map((l) => l.weight), 130, 32)}</div>` : ''}
+          </div>`;
+        }).join('')}
       </div>
     </div>` : ''}
     ${recent.length ? `
@@ -5148,8 +5155,11 @@ function progressLeaderboardHtml(lifts) {
   return `<div class="leaderboard">
     ${rows.map((r) => {
       const color = r.lbPerWeek > 0.05 ? 'var(--success)' : r.lbPerWeek < -0.05 ? 'var(--danger)' : 'var(--text-dim)';
+      const history = lifts.filter((l) => l.exercise === r.exercise).sort((a, b) => a.date.localeCompare(b.date));
+      const e1rms = history.map((l) => e1RM(l.weight, l.reps));
       return `<div class="leaderboard-row" data-insight-open="${esc(r.exercise)}">
         <span>${esc(r.exercise)}</span>
+        ${e1rms.length > 1 ? `<span class="leaderboard-spark">${miniLineSvg(e1rms, 70, 22)}</span>` : ''}
         <span class="mono small" style="color:${color};">${r.lbPerWeek > 0 ? '+' : ''}${r.lbPerWeek.toFixed(2)} lb e1RM/wk</span>
       </div>`;
     }).join('')}
@@ -5286,6 +5296,93 @@ function goalsOverviewHtml(lifts, exerciseGoals) {
   }).join('');
 }
 
+// ── Nutrition × Training correlation (pure aggregation, no AI) ──
+// One row per week that has either nutrition or training data: percentage
+// of that week's logged days meeting the protein goal, and that week's
+// lift volume. Both grouped by the same Monday-start week used everywhere
+// else in Training, so the two series line up.
+function weeklyNutritionTrainingCorrelation(historyLogs, proteinGoal, lifts) {
+  const proteinByDay = {};
+  for (const l of historyLogs) {
+    const date = localDateStr(new Date(l.logged_at));
+    proteinByDay[date] = (proteinByDay[date] || 0) + (Number(l.protein_g) || 0);
+  }
+  const weekProtein = {};
+  for (const [date, protein] of Object.entries(proteinByDay)) {
+    const wk = getWeekStart(date);
+    weekProtein[wk] = weekProtein[wk] || { hit: 0, total: 0 };
+    weekProtein[wk].total++;
+    if (proteinGoal && protein >= proteinGoal) weekProtein[wk].hit++;
+  }
+
+  const weekVolume = {};
+  for (const l of lifts) {
+    const wk = getWeekStart(l.date);
+    weekVolume[wk] = (weekVolume[wk] || 0) + l.weight * totalReps(l);
+  }
+
+  const allWeeks = Array.from(new Set([...Object.keys(weekProtein), ...Object.keys(weekVolume)])).sort();
+  return allWeeks.map((wk) => ({
+    week: wk,
+    proteinPct: weekProtein[wk] ? Math.round((weekProtein[wk].hit / weekProtein[wk].total) * 100) : null,
+    volume: weekVolume[wk] || 0,
+  }));
+}
+
+// weeks where both series dropped from the prior week at once — the one
+// pattern worth calling out explicitly rather than just showing the chart
+function findCorrelatedDips(data) {
+  const dips = [];
+  for (let i = 1; i < data.length; i++) {
+    const cur = data[i], prev = data[i - 1];
+    if (cur.proteinPct == null || prev.proteinPct == null) continue;
+    if (cur.proteinPct < prev.proteinPct && cur.volume < prev.volume && prev.volume > 0) {
+      dips.push(cur.week);
+    }
+  }
+  return dips;
+}
+
+function correlationChartSvg(data) {
+  const w = 600, h = 170, pad = 20;
+  const n = data.length;
+  const maxVolume = Math.max(...data.map((d) => d.volume), 1);
+  const barW = (w - pad * 2) / n;
+  const xAt = (i) => pad + i * barW + barW / 2;
+  const yVolTop = (v) => h - pad - (v / maxVolume) * (h - pad * 2) * 0.85;
+  const yProtein = (pct) => h - pad - (pct / 100) * (h - pad * 2);
+
+  const bars = data.map((d, i) => {
+    const x = pad + i * barW;
+    const top = yVolTop(d.volume);
+    return `<rect x="${x + barW * 0.15}" y="${top}" width="${Math.max(barW * 0.7, 1)}" height="${Math.max((h - pad) - top, 0)}" fill="var(--accent)" opacity="0.3" rx="2"><title>Week of ${fmtLiftDate(d.week)}: ${Math.round(d.volume).toLocaleString()} lb volume</title></rect>`;
+  }).join('');
+
+  const proteinPoints = data.filter((d) => d.proteinPct != null);
+  const linePts = proteinPoints.map((d) => `${xAt(data.indexOf(d))},${yProtein(d.proteinPct)}`).join(' ');
+  const dots = proteinPoints.map((d) => `<circle cx="${xAt(data.indexOf(d))}" cy="${yProtein(d.proteinPct)}" r="3" fill="var(--success)"><title>Week of ${fmtLiftDate(d.week)}: ${d.proteinPct}% of days hit protein goal</title></circle>`).join('');
+
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
+    ${bars}
+    <polyline points="${linePts}" fill="none" stroke="var(--success)" stroke-width="2.5"></polyline>
+    ${dots}
+  </svg>`;
+}
+
+function correlationHtml() {
+  const data = weeklyNutritionTrainingCorrelation(state.historyLogs, state.goals.protein_g, state.lifts);
+  if (data.length < 2) return `<p class="muted small">Log both food and lifts for a couple of weeks to see this.</p>`;
+  const dips = findCorrelatedDips(data);
+  return `
+    ${correlationChartSvg(data)}
+    <div class="muted small" style="display:flex;gap:0.9rem;margin-top:0.4rem;">
+      <span style="display:inline-flex;align-items:center;gap:0.25rem;"><span style="width:9px;height:9px;border-radius:2px;background:var(--accent);opacity:0.5;display:inline-block;"></span>lift volume</span>
+      <span style="color:var(--success);">— % days hit protein goal</span>
+    </div>
+    ${dips.length ? `<p class="small" style="color:var(--danger);margin-top:0.6rem;margin-bottom:0;">⚠️ Protein consistency and training volume dropped together the week of ${dips.map((wk) => fmtLiftDate(wk)).join(', ')} — worth noticing if that's a pattern.</p>` : `<p class="muted small" style="margin-top:0.6rem;margin-bottom:0;">No weeks yet where both dropped together.</p>`}
+  `;
+}
+
 function renderInsightsTab() {
   const panel = $('#panel-insights');
   if (!panel) return;
@@ -5323,6 +5420,11 @@ function renderInsightsTab() {
     <div class="card">
       <h3>Weekly Training Frequency</h3>
       ${weeklyFrequencyChartHtml(lifts)}
+    </div>
+    <div class="card">
+      <h3>Nutrition × Training</h3>
+      <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Weekly protein-goal consistency vs. lift volume — no AI, just your own logged data grouped by week.</p>
+      ${correlationHtml()}
     </div>
     <div class="card">
       <h3>Goals Overview</h3>
