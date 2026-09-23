@@ -1768,6 +1768,11 @@ function setActiveTab(tab) {
   state.lastTabByMode[state.appMode] = tab;
   $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
+  // The Days tab's heatmap is rendered (by renderAll()) while every tab is
+  // still hidden, where scrollWidth reads 0 and scrollLeft is a no-op — so
+  // re-apply it now that the panel is actually visible, same reasoning as
+  // renderHistory()'s max-height sync above.
+  if (tab === 'days') scrollHeatmapToNow($('#panel-days'));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -4510,7 +4515,7 @@ function heatmapHtml(days) {
     </div>`).join('');
 
   return `
-    <div class="heatmap-scroll">
+    <div class="heatmap-scroll" id="heatmapScroll">
       <div class="heatmap-labels-row">${labelsRow}</div>
       <div class="heatmap-grid">${gridCols}</div>
     </div>
@@ -4520,6 +4525,15 @@ function heatmapHtml(days) {
       <span>More</span>
     </div>
   `;
+}
+
+// The heatmap is wider than the viewport and scrolls horizontally, oldest
+// week on the left — without this, it loads scrolled to the START (a wall
+// of "no training" from a year ago) with the user's actual recent activity
+// invisible off to the right, looking broken rather than just unscrolled.
+function scrollHeatmapToNow(panel) {
+  const scroller = $('#heatmapScroll', panel);
+  if (scroller) scroller.scrollLeft = scroller.scrollWidth;
 }
 
 function dailyVolumeBarSvg(chartData) {
@@ -4673,6 +4687,8 @@ function renderDaysTab() {
       }).join('')}
     </div>
   `;
+
+  scrollHeatmapToNow(panel);
 
   const heatmapDayClose = $('#heatmapDayClose');
   if (heatmapDayClose) heatmapDayClose.addEventListener('click', () => { daysHeatmapDay = null; renderDaysTab(); });
