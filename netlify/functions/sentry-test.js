@@ -20,7 +20,7 @@ exports.handler = withErrorReporting(async () => {
 
   const testId = Date.now().toString(36);
   try {
-    throw new Error(`Plated Sentry setup check (functions side) — test id ${testId}`);
+    throw new Error(`Kraft Sentry setup check (functions side) — test id ${testId}`);
   } catch (err) {
     await captureError(err, { function: 'sentry-test', purpose: 'manual verification, safe to ignore/resolve' });
   }

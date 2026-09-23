@@ -76,10 +76,10 @@ exports.handler = withErrorReporting(async () => {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          from: process.env.RESEND_FROM_EMAIL || 'Plated <reminders@example.com>',
+          from: process.env.RESEND_FROM_EMAIL || 'Kraft <reminders@example.com>',
           to: user.email,
           subject: "Haven't logged today yet?",
-          text: "Just a friendly nudge — you haven't logged any food in Plated today. A quick log now keeps your streak alive.\n\nTurn this off anytime: Plated -> Profile -> Email Reminders.",
+          text: "Just a friendly nudge — you haven't logged any food in Kraft today. A quick log now keeps your streak alive.\n\nTurn this off anytime: Kraft -> Profile -> Email Reminders.",
         }),
       });
       if (emailRes.ok) sent++;

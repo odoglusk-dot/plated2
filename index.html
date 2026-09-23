@@ -3,31 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Plated — Macro &amp; Supplement Tracker</title>
+<title>Kraft — Macro &amp; Strength Tracker</title>
 <meta name="description" content="Track macros, supplements, and weight with an app built for training days. AI-powered food logging, goal calculator, and progress tracking — 3-day free trial.">
 
 <!-- Open Graph / social preview -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Plated — Macro &amp; Supplement Tracker">
+<meta property="og:title" content="Kraft — Macro &amp; Strength Tracker">
 <meta property="og:description" content="Track macros, supplements, and weight with an app built for training days. AI-powered food logging, goal calculator, and progress tracking.">
 <meta property="og:image" content="og-image.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Plated — Macro &amp; Supplement Tracker">
+<meta name="twitter:title" content="Kraft — Macro &amp; Strength Tracker">
 <meta name="twitter:description" content="Track macros, supplements, and weight with an app built for training days.">
 <meta name="twitter:image" content="og-image.png">
 
 <!-- Add to Home Screen (Android + iOS) — manifest, icons, theme color -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#FFFFFF">
+<meta name="theme-color" content="#101112">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Plated">
+<meta name="apple-mobile-web-app-title" content="Kraft">
 <meta name="mobile-web-app-capable" content="yes">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 
 <!-- Error monitoring (Sentry free tier), errors-only (no tracing/replay) to
      keep this lightweight and avoid capturing extra session data for a
@@ -46,22 +46,23 @@
 </script>
 <style>
   :root {
-    --bg: #FAFAF9;
-    --surface: #FFFFFF;
-    --surface-2: #F2F0EB;
-    --surface-3: #EAE7E0;
-    --border: #E5E3DE;
-    --text: #1C1B18;
-    --text-dim: #6B6862;
-    --accent: #D97706;
+    --bg: #16181A;
+    --surface: #1D1F21;
+    --surface-2: #24262A;
+    --surface-3: #2C2E33;
+    --nav-bg: #101112;
+    --border: #33363B;
+    --text: #EDECE8;
+    --text-dim: #8F8C84;
+    --accent: #C6A15B;
     --danger: #DC5B4A;
     --success: #4E9A5A;
     --macro-protein: #DC5B4A;
-    --macro-calories: #3B7FBF;
-    --macro-carbs: #D97706;
+    --macro-calories: #5B9BD9;
+    --macro-carbs: #C6A15B;
     --macro-fat: #4E9A5A;
     --macro-water: #4AA3C4;
-    --font-display: 'Bebas Neue', sans-serif;
+    --font-display: 'Oswald', sans-serif;
     --font-body: 'Inter', sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
   }
@@ -69,13 +70,14 @@
   html, body { margin: 0; padding: 0; }
   body {
     background-color: var(--bg);
-    background-image: repeating-linear-gradient(135deg, rgba(28,27,24,0.025) 0 2px, transparent 2px 10px);
+    background-image: repeating-linear-gradient(135deg, rgba(0,0,0,0.08) 0 2px, transparent 2px 10px);
     color: var(--text);
     font-family: var(--font-body);
     min-height: 100vh;
   }
-  h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0.03em; font-weight: 400; }
+  h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0.03em; font-weight: 500; }
   .mono { font-family: var(--font-mono); }
+  label, .tab-btn, .mode-switch-btn { text-transform: uppercase; }
   a { color: var(--accent); }
   button { font-family: inherit; }
   .hidden { display: none !important; }
@@ -98,7 +100,7 @@
     background: var(--surface-2); color: var(--text); cursor: pointer; transition: filter .15s, border-color .15s; font-size: 0.92rem; }
   .btn:hover { border-color: var(--accent); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-primary { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+  .btn-primary { background: var(--accent); color: var(--nav-bg); border-color: var(--accent); }
   .btn-primary:hover { filter: brightness(1.08); }
   .btn-danger { background: transparent; border-color: var(--danger); color: var(--danger); }
   .btn-danger:hover { background: rgba(220,91,74,0.1); }
@@ -123,7 +125,7 @@
     font-size: 0.9rem; max-width: 90vw; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
   .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700;
     letter-spacing: 0.03em; background: var(--surface-3); color: var(--text-dim); }
-  .badge.on { color: #FFFFFF; background: var(--accent); }
+  .badge.on { color: var(--nav-bg); background: var(--accent); }
 
   /* ── Auth screen ──────────────────────────────────────────────── */
   #authScreen, #paywallScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
@@ -134,12 +136,12 @@
   .auth-tagline { text-align: center; color: var(--text-dim); margin-bottom: 1.75rem; font-size: 0.9rem; }
   .auth-toggle { display: flex; margin-bottom: 1.25rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .auth-toggle button { flex: 1; padding: 0.6rem; background: var(--surface); border: none; color: var(--text-dim); cursor: pointer; font-weight: 600; }
-  .auth-toggle button.active { background: var(--accent); color: #FFFFFF; }
+  .auth-toggle button.active { background: var(--accent); color: var(--nav-bg); }
   #authError { color: var(--danger); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
   #authNote { color: var(--success); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
   .consent-line { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.75rem; display: flex; gap: 0.4rem; align-items: flex-start; }
   .consent-line input { width: auto; margin-top: 0.2rem; }
-  #ageGateField .btn.active-choice { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+  #ageGateField .btn.active-choice { background: var(--accent); color: var(--nav-bg); border-color: var(--accent); }
 
   .password-wrap { position: relative; }
   .password-wrap .input { padding-right: 2.6rem; }
@@ -182,13 +184,13 @@
 
   /* ── App shell ────────────────────────────────────────────────── */
   .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.25rem;
-    border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 20; }
-  .logo { font-size: 1.7rem; color: var(--accent); }
+    border-bottom: 1px solid var(--border); background: var(--nav-bg); position: sticky; top: 0; z-index: 20; }
+  .logo { font-size: 1.7rem; color: var(--accent); font-family: var(--font-display); letter-spacing: 0.05em; }
   .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
   .streak-pill { font-family: var(--font-mono); font-size: 0.85rem; background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 999px; padding: 0.3rem 0.8rem; }
 
-  .tab-nav { padding: 0.4rem 0.6rem; background: var(--surface);
+  .tab-nav { padding: 0.4rem 0.6rem; background: var(--nav-bg);
     border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 19; }
   .mode-switch { display: flex; gap: 0.4rem; padding-bottom: 0.4rem; margin-bottom: 0.4rem;
     border-bottom: 1px solid var(--border); }
@@ -249,6 +251,17 @@
   .checkbox-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); font-weight: normal; margin-bottom: 0.9rem; }
   .checkbox-row input { width: auto; }
   .stat-num { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 500; }
+  /* Hero stat card: one dominant number per screen — square corners, a
+     brass left-border accent instead of a full outline, on the plain
+     dark surface (not a lighter "raised" card) so it reads as a callout. */
+  .hero-stat-card { background: var(--surface); border: none; border-left: 3px solid var(--accent);
+    border-radius: 0; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
+  .hero-stat-card h3 { margin: 0 0 0.4rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 500; }
+  .hero-stat-card .stat-num { font-size: 2.2rem; color: var(--accent); }
+  /* Secondary stat cards: small uppercase label, mono value, laid out 2-up */
+  .stat-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .stat-card-sm { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 0; }
+  .stat-card-sm h3 { margin: 0 0 0.35rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 500; }
   .small { font-size: 0.78rem; }
   .body-map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   .body-map-col { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
@@ -368,6 +381,7 @@
 
   footer.legal { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.78rem; }
   footer.legal a { color: var(--text-dim); text-decoration: underline; }
+  .brand-story { margin: 1rem auto 0; max-width: 32rem; color: var(--text-dim); font-size: 0.72rem; font-style: italic; opacity: 0.85; }
 
   @media (max-width: 480px) {
     .ring-wrap { width: 82px; height: 82px; }
@@ -379,14 +393,14 @@
 
 <div id="landingScreen">
   <nav class="landing-nav">
-    <div class="logo">PLATED</div>
+    <div class="logo">KRAFT</div>
     <button class="btn" id="landingLogInBtn">Log In</button>
   </nav>
 
   <div class="landing-hero">
-    <div class="display">PLATED</div>
-    <p class="pitch">Macro and supplement tracking built for training days — describe or snap a photo of what you ate, and AI fills in the macros.</p>
-    <p class="subpitch">A goal calculator that checks your pace is actually safe, daily progress rings, supplement tracking, and a data assistant that answers questions about your own history.</p>
+    <div class="display">KRAFT</div>
+    <p class="pitch">Macro tracking and strength training in one app — describe or snap a photo of what you ate and AI fills in the macros, then log your lifts right alongside it.</p>
+    <p class="subpitch">A goal calculator that checks your pace is actually safe, daily progress rings, PRs and training insights, and a data assistant that answers questions about your own history.</p>
     <div class="landing-cta-row">
       <button class="btn btn-primary" id="landingStartTrialBtn">Start 3-Day Free Trial</button>
       <button class="btn" id="landingLogInBtn2">Log In</button>
@@ -397,15 +411,15 @@
   <div class="landing-section">
     <div class="screenshot-row">
       <div class="screenshot-card">
-        <img src="screenshot-dashboard.png" alt="Plated dashboard showing daily calorie, protein, carb, and fat progress rings" loading="lazy">
+        <img src="screenshot-dashboard.png" alt="Kraft dashboard showing daily calorie, protein, carb, and fat progress rings" loading="lazy">
         <p class="caption">Today's progress, at a glance</p>
       </div>
       <div class="screenshot-card">
-        <img src="screenshot-log.png" alt="Plated AI food logging screen estimating macros from a text description" loading="lazy">
+        <img src="screenshot-log.png" alt="Kraft AI food logging screen estimating macros from a text description" loading="lazy">
         <p class="caption">Describe a meal — AI estimates the macros</p>
       </div>
       <div class="screenshot-card">
-        <img src="screenshot-calculator.png" alt="Plated goal calculator with a target weight, target date, and calculated calorie and macro targets" loading="lazy">
+        <img src="screenshot-calculator.png" alt="Kraft goal calculator with a target weight, target date, and calculated calorie and macro targets" loading="lazy">
         <p class="caption">A calculator that checks your pace is safe</p>
       </div>
     </div>
@@ -460,15 +474,16 @@
   </div>
 
   <footer class="legal">
-    Plated is not a medical device and does not provide medical advice.
+    Kraft is not a medical device and does not provide medical advice.
     <a href="TERMS_OF_SERVICE.md">Terms</a> · <a href="PRIVACY_POLICY.md">Privacy</a>
+    <p class="brand-story">Kraft — German/Scandinavian for "strength." Built by an athlete who got tired of tracking macros and lifts in two different apps.</p>
   </footer>
 </div>
 
 <div id="authScreen" class="hidden">
   <div class="auth-box">
-    <div class="auth-logo">PLATED</div>
-    <div class="auth-tagline">Macro &amp; supplement tracking, built for training days.</div>
+    <div class="auth-logo">KRAFT</div>
+    <div class="auth-tagline">Macro tracking and strength training, together.</div>
     <div class="hazard-divider" style="margin-bottom:1.5rem;"></div>
 
     <div class="auth-toggle" id="authToggle">
@@ -507,7 +522,7 @@
         </div>
         <div id="parentalConsentNote" class="hidden" style="margin-top:0.6rem;">
           <p class="muted" style="margin-top:0;">Since you're under 18, a parent or guardian should be aware of
-            and approve your use of Plated — including the $4.99/month subscription — before you continue.</p>
+            and approve your use of Kraft — including the $4.99/month subscription — before you continue.</p>
           <div class="consent-line" style="margin-top:0;">
             <input type="checkbox" id="parentalConsentCheck">
             <label style="margin:0;color:var(--text-dim);font-weight:400;" for="parentalConsentCheck">
@@ -564,8 +579,8 @@
 
 <div id="paywallScreen" class="hidden">
   <div class="auth-box">
-    <div class="auth-logo">PLATED</div>
-    <div class="auth-tagline">Macro &amp; supplement tracking, built for training days.</div>
+    <div class="auth-logo">KRAFT</div>
+    <div class="auth-tagline">Macro tracking and strength training, together.</div>
     <div class="hazard-divider" style="margin-bottom:1.5rem;"></div>
 
     <div id="paywallProcessing" class="hidden" style="text-align:center;">
@@ -590,7 +605,7 @@
     <div class="spinner"></div>
   </div>
   <div class="topbar">
-    <div class="logo">PLATED</div>
+    <div class="logo">KRAFT</div>
     <div class="topbar-right">
       <span class="streak-pill" id="streakPill" title="Current protein-goal streak">🔥 0 day streak</span>
       <button class="btn btn-sm" id="signOutBtn">Sign Out</button>
@@ -638,7 +653,7 @@
   </main>
 
   <footer class="legal">
-    Plated is not a medical device and does not provide medical advice.
+    Kraft is not a medical device and does not provide medical advice.
     <a href="TERMS_OF_SERVICE.md">Terms</a> · <a href="PRIVACY_POLICY.md">Privacy</a>
   </footer>
 </div>
@@ -661,7 +676,7 @@ const SUPPORT_EMAIL = 'odoglusk+platedsupport@gmail.com';
 // so its mailto link is bound once here from SUPPORT_EMAIL rather than
 // duplicating the address as a second hardcoded literal that could drift
 // out of sync with the constant above.
-document.getElementById('paywallBillingHelpLink').href = `mailto:${SUPPORT_EMAIL}?subject=Plated%20billing%20question`;
+document.getElementById('paywallBillingHelpLink').href = `mailto:${SUPPORT_EMAIL}?subject=Kraft%20billing%20question`;
 
 // ── Small DOM helpers ────────────────────────────────────────────────
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -1506,13 +1521,13 @@ function renderPaywallProcessing() {
 
 function renderPaywallScreen(sub) {
   let heading = 'Start Your Free Trial';
-  let body = "Plated is $4.99/month after a 3-day free trial — cancel anytime, you won't be charged until the trial ends.";
+  let body = "Kraft is $4.99/month after a 3-day free trial — cancel anytime, you won't be charged until the trial ends.";
   if (sub?.status === 'past_due') {
     heading = 'Payment Failed';
-    body = "We couldn't process your last payment. Update your card by subscribing again to keep using Plated.";
+    body = "We couldn't process your last payment. Update your card by subscribing again to keep using Kraft.";
   } else if (sub?.status === 'canceled') {
     heading = 'Your Subscription Has Ended';
-    body = 'Resubscribe to get back into Plated — $4.99/month after a 3-day free trial.';
+    body = 'Resubscribe to get back into Kraft — $4.99/month after a 3-day free trial.';
   }
   $('#paywallHeading').textContent = heading;
   $('#paywallBody').textContent = body;
@@ -2938,7 +2953,7 @@ function renderProfile() {
       <h3>Subscription</h3>
       <p class="muted">${subscriptionStatusLabel(state.subscription)}</p>
       <button class="btn" id="manage_subscription_btn">Manage Subscription</button>
-      <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Plated%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
+      <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Kraft%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
     </div>
 
     <div class="card">
@@ -2978,7 +2993,7 @@ function renderProfile() {
     <div class="card">
       <h3>Support</h3>
       <p class="muted">Something broken, or just have a question?</p>
-      <a class="btn" href="mailto:${SUPPORT_EMAIL}?subject=Plated%20support">Contact Support</a>
+      <a class="btn" href="mailto:${SUPPORT_EMAIL}?subject=Kraft%20support">Contact Support</a>
     </div>
 
     <div class="card">
@@ -4238,13 +4253,13 @@ function renderTrainingDashboard() {
       <div class="small">⚠️ This week's volume is <strong style="color:var(--accent);">${volumeSpike.pctAbove}%</strong> above your recent 4-week average — consider whether that's intentional, or if you should ease off to avoid overuse injury.</div>
       <button class="btn btn-sm btn-ghost" id="spikeDismiss">✕</button>
     </div>` : ''}
-    <div class="row">
-      <div class="card">
+    <div class="stat-grid-2">
+      <div class="stat-card-sm">
         <h3>Bodyweight</h3>
         <div class="stat-num">${latestBW ? round(latestBW.weight_lb, 1) : '—'} <span class="muted small">lb</span></div>
         <div class="muted small">${latestBW ? latestBW.logged_date : 'no entries yet'}</div>
       </div>
-      <div class="card">
+      <div class="stat-card-sm">
         <h3>Lifts Logged</h3>
         <div class="stat-num">${lifts.length}</div>
         <div class="muted small">${Object.keys(prs).length} exercises tracked</div>
@@ -4252,7 +4267,7 @@ function renderTrainingDashboard() {
     </div>
     ${muscleMapHtml(lifts)}
     ${careerVolume > 0 ? `
-    <div class="card">
+    <div class="hero-stat-card">
       <h3>Career volume moved</h3>
       <div class="stat-num">${Math.round(careerVolume).toLocaleString()} <span class="muted small">lb, all-time</span></div>
       ${funFact ? `<div class="small" style="color:var(--accent);margin-top:0.25rem;">${esc(funFact)}</div>` : ''}
@@ -4813,16 +4828,16 @@ function singleRecapHtml(recap) {
   const bwDelta = recap.bodyweight_start != null && recap.bodyweight_end != null
     ? Math.round((recap.bodyweight_end - recap.bodyweight_start) * 10) / 10 : null;
   return `
-    <div class="card">
+    <div class="hero-stat-card">
       <h3>Total Volume</h3>
       <div class="stat-num">${Math.round(recap.total_volume).toLocaleString()} <span class="muted small">lb</span></div>
     </div>
-    <div class="row">
-      <div class="card">
+    <div class="stat-grid-2">
+      <div class="stat-card-sm">
         <h3>Training Days</h3>
         <div class="stat-num" style="font-size:1.3rem;">${recap.training_days}</div>
       </div>
-      <div class="card">
+      <div class="stat-card-sm">
         <h3>Most Trained</h3>
         <div style="font-weight:600;color:${recap.most_trained_muscle_group ? MUSCLE_GROUP_COLORS[recap.most_trained_muscle_group] : 'var(--text-dim)'};">${recap.most_trained_muscle_group || '—'}</div>
         ${recap.most_trained_muscle_group_volume != null ? `<div class="muted small">${Math.round(recap.most_trained_muscle_group_volume).toLocaleString()} lb volume</div>` : ''}
