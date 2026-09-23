@@ -353,6 +353,12 @@
   .chip-del:hover { color: var(--danger); border-color: var(--danger); }
   .chip-confirm { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--surface-2);
     border: 1px solid var(--danger); border-radius: 999px; padding: 0.3rem 0.3rem 0.3rem 0.8rem; font-size: 0.8rem; }
+  .chip.chip-active { background: var(--accent); color: var(--nav-bg); border-color: var(--accent); font-weight: 600; }
+
+  /* ── Training splits ──────────────────────────────────────────── */
+  .split-preset-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .split-day-row { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; }
+  .exercise-focus-tag { color: var(--accent); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; margin-left: 0.4rem; }
 
   /* ── History: collapsible day cards ──────────────────────────── */
   .history-day { border-bottom: 1px solid var(--border); padding: 0.75rem 0; }
@@ -770,6 +776,7 @@ const state = {
   lifts: [], // strength-training log, all-time (mirrors historyLogs' "load once, filter client-side" approach)
   exerciseGoals: [],
   photos: [], // {id, storage_path, note, date, signedUrl} — signedUrl attached client-side after load, not a DB column
+  trainingSplit: null, // {id, name, days, start_date} | null — one active split, see loadTrainingSplit()
   activeTab: 'dashboard',
   appMode: 'nutrition', // 'nutrition' | 'training'
   lastTabByMode: { nutrition: 'dashboard', training: 'training-dashboard' },
@@ -1637,7 +1644,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadReferrals()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals()]);
   renderAll();
 }
 
@@ -1778,6 +1785,11 @@ async function loadPhotos() {
   const paths = rows.map((r) => r.storage_path);
   const { data: signed } = await supabase.storage.from('progress-photos').createSignedUrls(paths, 60 * 60);
   state.photos = rows.map((row, i) => ({ ...row, signedUrl: signed?.[i]?.signedUrl || '' }));
+}
+
+async function loadTrainingSplit() {
+  const { data } = await supabase.from('training_splits').select('*').eq('user_id', state.user.id).maybeSingle();
+  state.trainingSplit = data || null;
 }
 
 async function loadReferrals() {
@@ -4054,19 +4066,28 @@ function renderLiftLog(panel) {
     ${exercises.length ? `
     <div class="card">
       <h3>Exercises</h3>
-      ${exercises.map((ex) => {
-        const hist = lifts.filter((l) => l.exercise === ex).sort((a, b) => a.date.localeCompare(b.date));
-        const plateaued = detectPlateau(hist);
-        const mg = hist.length ? getMuscleGroup(hist[hist.length - 1]) : null;
-        return `
+      ${(() => {
+        // Today's split focus, if any — purely a highlight/sort hint, never
+        // filters the list or restricts logging.
+        const split = state.trainingSplit;
+        const todayFocusGroups = split ? (split.days[computeSplitDayIndex(split, localDateStr())].muscle_groups || []) : [];
+        const rows = exercises.map((ex) => {
+          const hist = lifts.filter((l) => l.exercise === ex).sort((a, b) => a.date.localeCompare(b.date));
+          const plateaued = detectPlateau(hist);
+          const mg = hist.length ? getMuscleGroup(hist[hist.length - 1]) : null;
+          const isFocus = mg && todayFocusGroups.includes(mg);
+          return { ex, hist, plateaued, mg, isFocus };
+        });
+        if (todayFocusGroups.length) rows.sort((a, b) => (b.isFocus - a.isFocus));
+        return rows.map(({ ex, plateaued, mg, isFocus }) => `
         <div class="log-row" style="cursor:pointer;" data-lift-exercise="${esc(ex)}">
           <div>
-            <div class="name">${esc(ex)}</div>
+            <div class="name">${esc(ex)}${isFocus ? `<span class="exercise-focus-tag">Today</span>` : ''}</div>
             <div class="macros">${mg ? `<span style="color:${MUSCLE_GROUP_COLORS[mg]};">${mg}</span>` : ''}${plateaued ? ' · <span style="color:var(--danger);">plateaued</span>' : ''}</div>
           </div>
           <span class="mono" style="color:var(--accent);">${prs[ex] ? `${prs[ex].weight} lb PR` : ''}</span>
-        </div>`;
-      }).join('')}
+        </div>`).join('');
+      })()}
     </div>` : ''}
   `;
 
@@ -4301,6 +4322,182 @@ function wireLiftDetailEvents(panel, exercise, history, goal) {
   });
 }
 
+// ── Training splits (presets + custom builder) ──────────────────────
+// muscle_groups values match MUSCLE_GROUPS so the Lifts tab can highlight
+// exercises tagged to today's focus — a hint only, never restricts logging.
+const SPLIT_PRESETS = [
+  { name: 'Push/Pull/Legs', days: [
+    { label: 'Push', muscle_groups: ['Push'] },
+    { label: 'Pull', muscle_groups: ['Pull'] },
+    { label: 'Legs', muscle_groups: ['Legs'] },
+  ] },
+  { name: 'Upper/Lower', days: [
+    { label: 'Upper', muscle_groups: ['Push', 'Pull'] },
+    { label: 'Lower', muscle_groups: ['Legs'] },
+  ] },
+  { name: 'Bro Split', days: [
+    { label: 'Chest', muscle_groups: ['Push'] },
+    { label: 'Back', muscle_groups: ['Pull'] },
+    { label: 'Legs', muscle_groups: ['Legs'] },
+    { label: 'Shoulders', muscle_groups: ['Push'] },
+    { label: 'Arms', muscle_groups: ['Push', 'Pull'] },
+  ] },
+  { name: 'Arnold Split', days: [
+    { label: 'Chest/Back', muscle_groups: ['Push', 'Pull'] },
+    { label: 'Shoulders/Arms', muscle_groups: ['Push', 'Pull'] },
+    { label: 'Legs', muscle_groups: ['Legs'] },
+    { label: 'Chest/Back', muscle_groups: ['Push', 'Pull'] },
+    { label: 'Shoulders/Arms', muscle_groups: ['Push', 'Pull'] },
+    { label: 'Legs', muscle_groups: ['Legs'] },
+    { label: 'Rest', muscle_groups: [] },
+  ] },
+];
+
+function computeSplitDayIndex(split, dateStr) {
+  const start = new Date(`${split.start_date}T00:00:00`);
+  const today = new Date(`${dateStr}T00:00:00`);
+  const daysSince = Math.round((today - start) / 86400000);
+  const n = split.days.length;
+  return ((daysSince % n) + n) % n;
+}
+
+let splitEditorOpen = false;
+let splitEditorPreset = null; // preset name, or 'custom'
+let splitCustomDays = null; // days array being edited
+let splitStartDate = localDateStr();
+
+function customSplitBuilderHtml() {
+  return `<div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.6rem;">
+    ${splitCustomDays.map((d, i) => `
+      <div class="split-day-row">
+        <input class="input" data-split-day-label="${i}" value="${esc(d.label)}" placeholder="Day ${i + 1} name">
+        <div class="chip-row" style="margin-top:0.4rem;">
+          ${MUSCLE_GROUPS.map((mg) => `<button class="chip ${d.muscle_groups.includes(mg) ? 'chip-active' : ''}" data-split-day-mg="${i}|${mg}">${mg}</button>`).join('')}
+        </div>
+        <button class="btn btn-sm btn-ghost" data-split-day-remove="${i}" style="margin-top:0.4rem;">Remove day</button>
+      </div>`).join('')}
+    <button class="btn btn-sm" id="splitDayAddBtn">+ Add day</button>
+  </div>`;
+}
+
+function splitEditorHtml() {
+  return `<div class="card">
+    <h3>Choose a split</h3>
+    <div class="split-preset-grid">
+      ${SPLIT_PRESETS.map((p) => `<button class="btn btn-sm ${splitEditorPreset === p.name ? 'btn-primary' : ''}" data-split-preset="${esc(p.name)}">${esc(p.name)}</button>`).join('')}
+      <button class="btn btn-sm ${splitEditorPreset === 'custom' ? 'btn-primary' : ''}" data-split-preset="custom">Custom</button>
+    </div>
+    ${splitEditorPreset === 'custom' ? customSplitBuilderHtml() : ''}
+    ${splitEditorPreset ? `
+    <div class="field" style="margin-top:0.75rem;">
+      <label>Start date (day 1 of the rotation)</label>
+      <input class="input" type="date" id="splitStartDate" value="${splitStartDate}">
+    </div>
+    <button class="btn btn-primary" id="splitSaveBtn">Save split</button>
+    ` : ''}
+    ${state.trainingSplit ? `<button class="btn btn-ghost" id="splitRemoveBtn" style="margin-left:0.5rem;">Remove split</button>` : ''}
+  </div>`;
+}
+
+function todaysFocusHtml() {
+  const split = state.trainingSplit;
+  const editor = splitEditorOpen ? splitEditorHtml() : '';
+  if (!split) {
+    return `<div class="card">
+      <h3>Training Split</h3>
+      <p class="muted small">No split set — pick a preset or build your own to get a "today's focus" hint here.</p>
+      <button class="btn btn-sm" id="splitSetupBtn">${splitEditorOpen ? 'Close' : 'Set up a split'}</button>
+    </div>${editor}`;
+  }
+  const idx = computeSplitDayIndex(split, localDateStr());
+  const today = split.days[idx];
+  return `<div class="hero-stat-card">
+    <h3>${esc(split.name)} — Day ${idx + 1}/${split.days.length}</h3>
+    <div class="stat-num" style="font-size:1.6rem;">${esc(today.label)}</div>
+    ${today.muscle_groups?.length ? `<div class="muted small" style="margin-top:0.25rem;">${today.muscle_groups.join(', ')}</div>` : ''}
+    <button class="btn btn-sm btn-ghost" id="splitSetupBtn" style="margin-top:0.5rem;">${splitEditorOpen ? 'Close' : 'Change split'}</button>
+  </div>${editor}`;
+}
+
+function wireSplitEvents(panel) {
+  const setupBtn = $('#splitSetupBtn', panel);
+  if (setupBtn) setupBtn.addEventListener('click', () => {
+    splitEditorOpen = !splitEditorOpen;
+    if (splitEditorOpen) {
+      if (state.trainingSplit) {
+        const matches = SPLIT_PRESETS.find((p) => p.name === state.trainingSplit.name);
+        splitEditorPreset = matches ? matches.name : 'custom';
+        splitCustomDays = JSON.parse(JSON.stringify(state.trainingSplit.days));
+        splitStartDate = state.trainingSplit.start_date;
+      } else {
+        splitEditorPreset = null;
+        splitCustomDays = null;
+        splitStartDate = localDateStr();
+      }
+    }
+    renderTrainingDashboard();
+  });
+
+  $$('[data-split-preset]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const name = btn.dataset.splitPreset;
+    splitEditorPreset = name;
+    if (name === 'custom') {
+      splitCustomDays = splitCustomDays && splitCustomDays.length ? splitCustomDays : [{ label: 'Day 1', muscle_groups: [] }];
+    } else {
+      splitCustomDays = JSON.parse(JSON.stringify(SPLIT_PRESETS.find((p) => p.name === name).days));
+    }
+    renderTrainingDashboard();
+  }));
+
+  const startDateInput = $('#splitStartDate', panel);
+  if (startDateInput) startDateInput.addEventListener('change', (e) => { splitStartDate = e.target.value; });
+
+  $$('[data-split-day-label]', panel).forEach((inp) => inp.addEventListener('input', (e) => {
+    splitCustomDays[Number(e.target.dataset.splitDayLabel)].label = e.target.value;
+  }));
+  $$('[data-split-day-mg]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const [i, mg] = btn.dataset.splitDayMg.split('|');
+    const day = splitCustomDays[Number(i)];
+    const idx = day.muscle_groups.indexOf(mg);
+    if (idx >= 0) day.muscle_groups.splice(idx, 1); else day.muscle_groups.push(mg);
+    renderTrainingDashboard();
+  }));
+  $$('[data-split-day-remove]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    splitCustomDays.splice(Number(btn.dataset.splitDayRemove), 1);
+    renderTrainingDashboard();
+  }));
+  const addDayBtn = $('#splitDayAddBtn', panel);
+  if (addDayBtn) addDayBtn.addEventListener('click', () => {
+    splitCustomDays.push({ label: `Day ${splitCustomDays.length + 1}`, muscle_groups: [] });
+    renderTrainingDashboard();
+  });
+
+  const saveBtn = $('#splitSaveBtn', panel);
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const name = splitEditorPreset === 'custom' ? 'Custom' : splitEditorPreset;
+    const days = (splitCustomDays || []).filter((d) => d.label.trim());
+    if (days.length === 0) return toast('Add at least one day first.');
+    const { error } = await supabase.from('training_splits').upsert({
+      user_id: state.user.id, name, days, start_date: splitStartDate || localDateStr(), updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+    if (error) return toast('Could not save split: ' + error.message);
+    splitEditorOpen = false;
+    splitEditorPreset = null;
+    splitCustomDays = null;
+    await loadTrainingSplit();
+    renderAll();
+  });
+
+  const removeBtn = $('#splitRemoveBtn', panel);
+  if (removeBtn) removeBtn.addEventListener('click', async () => {
+    const { error } = await supabase.from('training_splits').delete().eq('user_id', state.user.id);
+    if (error) return toast('Could not remove split: ' + error.message);
+    splitEditorOpen = false; splitEditorPreset = null; splitCustomDays = null;
+    await loadTrainingSplit();
+    renderAll();
+  });
+}
+
 // ── Training Dashboard ──────────────────────────────────────────────
 function renderTrainingDashboard() {
   const panel = $('#panel-training-dashboard');
@@ -4316,6 +4513,7 @@ function renderTrainingDashboard() {
   const showSpikeWarning = volumeSpike && volumeSpike.weekStart !== dismissedSpikeWeek;
 
   panel.innerHTML = `
+    ${todaysFocusHtml()}
     ${showSpikeWarning ? `
     <div class="card pr-banner">
       <div class="small">⚠️ This week's volume is <strong style="color:var(--accent);">${volumeSpike.pctAbove}%</strong> above your recent 4-week average — consider whether that's intentional, or if you should ease off to avoid overuse injury.</div>
@@ -4377,6 +4575,7 @@ function renderTrainingDashboard() {
   if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderTrainingDashboard(); });
 
   wireMuscleMapEvents(panel);
+  wireSplitEvents(panel);
 
   $$('[data-pr-open]', panel).forEach((card) => card.addEventListener('click', () => {
     liftsSelectedExercise = card.dataset.prOpen;

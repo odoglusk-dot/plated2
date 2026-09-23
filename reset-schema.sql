@@ -5,6 +5,7 @@
 -- ============================================================
 
 -- Drop all tables in correct dependency order (reverse of creation)
+drop table if exists training_splits cascade;
 drop table if exists photos cascade;
 drop table if exists monthly_recaps cascade;
 drop table if exists exercise_goals cascade;
@@ -445,6 +446,27 @@ create policy "photos_select_own" on photos for select using (auth.uid() = user_
 create policy "photos_insert_own" on photos for insert with check (auth.uid() = user_id);
 create policy "photos_update_own" on photos for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "photos_delete_own" on photos for delete using (auth.uid() = user_id);
+
+-- ── training_splits ──────────────────────────────────────────────────
+-- One active split per user — a preset or custom weekly rotation used to
+-- show a "today's focus" hint and filter the Lifts tab, not a program
+-- manager. See supabase-schema-phase9-splits.sql for the full rationale.
+create table training_splits (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique references auth.users(id) on delete cascade,
+  name text not null,
+  days jsonb not null,
+  start_date date not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table training_splits enable row level security;
+
+create policy "training_splits_select_own" on training_splits for select using (auth.uid() = user_id);
+create policy "training_splits_insert_own" on training_splits for insert with check (auth.uid() = user_id);
+create policy "training_splits_update_own" on training_splits for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "training_splits_delete_own" on training_splits for delete using (auth.uid() = user_id);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE

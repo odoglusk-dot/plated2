@@ -335,6 +335,28 @@ upload's path. Display URLs are short-lived signed URLs generated
 client-side (`supabase.storage.from('progress-photos').createSignedUrl(...)`),
 never a public link, since the bucket isn't public.
 
+### `training_splits` — Active weekly training split (presets + custom)
+```sql
+id                                 uuid primary key
+user_id                            uuid (unique — one active split per user)
+name                               text
+days                               jsonb (ordered array: [{"label": "Push", "muscle_groups": ["Push"]}, ...])
+start_date                         date (day 1 of the rotation)
+created_at                         timestamptz
+updated_at                         timestamptz
+```
+**Frontend reads/writes:** all of `name`/`days`/`start_date` together, via
+upsert — picking a preset or saving the custom builder replaces the whole
+row (`onConflict: 'user_id'`) rather than versioning multiple saved splits.
+
+Deliberately lightweight: one row per user, not a program-management
+system. "Today's slot" is computed client-side —
+`daysSinceStart % days.length` — from `start_date`, never stored as its
+own column. `muscle_groups` values match the app's existing
+`MUSCLE_GROUPS` categories (`Legs`/`Push`/`Pull`/`Core`/`Full Body`/`Other`)
+so the Lifts tab can highlight exercises tagged to today's focus; this is
+a hint only, never restricts logging.
+
 ---
 
 ## Naming Rules — CONSISTENT across ALL tables
@@ -447,4 +469,8 @@ as its own later step.
 For the Photos tab (the `photos` table, tracking uploads into the
 `progress-photos` bucket phase7 already created): run
 **`supabase-schema-phase8-photos.sql`** against an existing live database;
+fresh installs get it from `reset-schema.sql`.
+
+For training splits (the `training_splits` table): run
+**`supabase-schema-phase9-splits.sql`** against an existing live database;
 fresh installs get it from `reset-schema.sql`.
