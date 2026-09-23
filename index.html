@@ -303,6 +303,9 @@
   .photo-card-img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
   .photo-card-body { padding: 0.5rem; }
   .photo-note { font-size: 0.78rem; margin-top: 0.15rem; cursor: pointer; color: var(--text); }
+  .recap-preview { margin-top: 0.75rem; display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+  .recap-preview img { width: 100%; max-width: 240px; border-radius: 10px; border: 1px solid var(--border); display: block; }
+  .recap-preview a { text-decoration: none; }
   .compare-row { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
   .compare-row:last-child { border-bottom: none; }
   .compare-row-label { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
@@ -1972,6 +1975,107 @@ function updateStreakPill() {
   $('#streakPill').textContent = `🔥 ${current} day streak`;
 }
 
+// ── Shareable weekly recap image ────────────────────────────────────
+function computeWeeklyRecapData() {
+  const days = last7Days();
+  const foodByDay = groupByDay(state.historyLogs);
+  const ws = weeklySummary();
+  const daysLogged = days.filter((d) => (foodByDay.get(d) || []).length > 0).length;
+
+  // "Notable PR" = a lift logged this week whose weight matches that
+  // exercise's all-time best on the same date — i.e. it was the PR-setting
+  // session, not just any lift on an exercise you happen to hold a PR in.
+  const prs = computeLiftPRs(state.lifts);
+  const weekStart = days[0];
+  const prByExercise = {};
+  for (const l of state.lifts) {
+    if (l.date < weekStart) continue;
+    const pr = prs[l.exercise];
+    if (pr && pr.date === l.date && pr.weight === l.weight) prByExercise[l.exercise] = l;
+  }
+
+  return {
+    weekStart,
+    weekEnd: days[days.length - 1],
+    daysLogged,
+    proteinDaysHit: ws.proteinDaysHit,
+    prs: Object.entries(prByExercise).map(([exercise, l]) => ({ exercise, weight: l.weight })),
+  };
+}
+
+// Instagram Story dimensions (1080x1920). Downloadable PNG rather than the
+// Web Share API — unreliable from a home-screen-installed PWA, especially
+// on iOS, so download-then-share is the dependable path.
+async function generateWeeklyRecapCanvas(data) {
+  if (document.fonts?.ready) await document.fonts.ready;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1920;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#16181A';
+  ctx.fillRect(0, 0, 1080, 1920);
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 2;
+  for (let x = -1920; x < 1080; x += 26) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + 1920, 1920);
+    ctx.stroke();
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#C6A15B';
+  ctx.font = '600 92px Oswald, sans-serif';
+  ctx.fillText('KRAFT', 540, 230);
+
+  ctx.fillStyle = '#8F8C84';
+  ctx.font = '400 34px Inter, sans-serif';
+  ctx.fillText(`Week of ${fmtLiftDate(data.weekStart)} – ${fmtLiftDate(data.weekEnd)}`, 540, 285);
+
+  ctx.fillStyle = '#C6A15B';
+  ctx.fillRect(340, 340, 400, 4);
+
+  ctx.fillStyle = '#EDECE8';
+  ctx.font = '600 220px "IBM Plex Mono", monospace';
+  ctx.fillText(String(data.daysLogged), 540, 640);
+  ctx.fillStyle = '#8F8C84';
+  ctx.font = '500 38px Oswald, sans-serif';
+  ctx.fillText('DAYS LOGGED THIS WEEK', 540, 695);
+
+  ctx.fillStyle = '#EDECE8';
+  ctx.font = '600 110px "IBM Plex Mono", monospace';
+  ctx.fillText(`${data.proteinDaysHit}/7`, 540, 880);
+  ctx.fillStyle = '#8F8C84';
+  ctx.font = '500 34px Oswald, sans-serif';
+  ctx.fillText('PROTEIN GOAL HIT', 540, 925);
+
+  let y = 1080;
+  ctx.fillStyle = '#C6A15B';
+  ctx.font = '600 44px Oswald, sans-serif';
+  ctx.fillText(data.prs.length ? 'NEW PRs THIS WEEK' : 'NO NEW PRs THIS WEEK', 540, y);
+  y += 80;
+  if (data.prs.length === 0) {
+    ctx.fillStyle = '#8F8C84';
+    ctx.font = '400 40px Inter, sans-serif';
+    ctx.fillText('Keep pushing — next week.', 540, y);
+  } else {
+    ctx.font = '500 42px Inter, sans-serif';
+    for (const pr of data.prs.slice(0, 6)) {
+      ctx.fillStyle = '#EDECE8';
+      ctx.fillText(`${pr.exercise} — ${pr.weight} lb`, 540, y);
+      y += 64;
+    }
+  }
+
+  ctx.fillStyle = '#8F8C84';
+  ctx.font = '400 30px Inter, sans-serif';
+  ctx.fillText('Tracked with Kraft', 540, 1860);
+
+  return canvas;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // RING SVG
 // ══════════════════════════════════════════════════════════════════
@@ -2097,6 +2201,8 @@ function renderDashboard() {
       </div>
       <p class="muted" style="margin-top:0.75rem;margin-bottom:0.25rem;">Daily averages vs. goal, last 7 days:</p>
       <p class="muted">Calories ${round(ws.avgCalories)} / ${round(g.calories)} · Protein ${round(ws.avgProtein)}g / ${round(g.protein_g)}g · Carbs ${round(ws.avgCarbs)}g / ${round(g.carbs_g)}g · Fat ${round(ws.avgFat)}g / ${round(g.fat_g)}g</p>
+      <button class="btn btn-sm" id="shareRecapBtn" style="margin-top:0.75rem;">Share weekly recap</button>
+      <div id="recapPreviewSlot"></div>
     </div>
 
     <div class="card">
@@ -2130,6 +2236,28 @@ function renderDashboard() {
       </div>
     </div>` : ''}
   `;
+
+  $('#shareRecapBtn').addEventListener('click', async () => {
+    const btn = $('#shareRecapBtn');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    try {
+      const data = computeWeeklyRecapData();
+      const canvas = await generateWeeklyRecapCanvas(data);
+      const dataUrl = canvas.toDataURL('image/png');
+      $('#recapPreviewSlot').innerHTML = `
+        <div class="recap-preview">
+          <img src="${dataUrl}" alt="Weekly recap">
+          <a class="btn btn-sm btn-primary" href="${dataUrl}" download="kraft-weekly-recap.png">Download image</a>
+        </div>`;
+    } catch (err) {
+      toast('Could not generate the recap image.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
 
   $$('[data-delete-log]', panel).forEach((btn) => btn.addEventListener('click', () => deleteLog(btn.dataset.deleteLog)));
   $$('[data-water]', panel).forEach((btn) => btn.addEventListener('click', () => logWater(Number(btn.dataset.water))));
