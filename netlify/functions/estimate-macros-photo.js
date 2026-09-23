@@ -2,7 +2,7 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
 // Checks food_cache first using a hash of image + note; if hit, returns immediately without using API budget.
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Krafft, a macro-and-strength-tracking app.
 You will be shown a photo of a food or meal. Estimate its nutritional content from what's visible —
@@ -22,6 +22,10 @@ exports.handler = withErrorReporting(async (event) => {
 
   const auth = await verifyUser(event);
   if (!auth) return jsonResponse(401, { error: 'Sign in required.' });
+
+  if (!(await hasPaidAccess(auth.user.id, auth.token))) {
+    return jsonResponse(402, { error: 'AI photo macro estimation is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
+  }
 
   let payload;
   try {

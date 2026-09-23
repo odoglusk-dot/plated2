@@ -329,6 +329,35 @@ alter table referrals enable row level security;
 create policy "referrals: select own as referrer" on referrals
   for select using (auth.uid() = referrer_user_id);
 
+-- ── friendships (friend-based leaderboard) ──────────────────────────────
+-- Request/accept model; a friend is added by their existing referral_code
+-- rather than a second code. No client insert policy — add-friend.js looks
+-- up the other user by referral_code with the service-role key, same
+-- reasoning as redeem-referral.js above. See
+-- supabase-schema-phase11-friends.sql for the full rationale, including why
+-- there's no separate `tier` column (derived from subscriptions.status).
+create table friendships (
+  id uuid primary key default gen_random_uuid(),
+  requester_id uuid not null references auth.users(id) on delete cascade,
+  addressee_id uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'accepted')),
+  created_at timestamptz not null default now(),
+  responded_at timestamptz,
+  constraint friendships_no_self_friend check (requester_id <> addressee_id),
+  constraint friendships_unique_pair unique (requester_id, addressee_id)
+);
+
+alter table friendships enable row level security;
+
+create policy "friendships_select_own" on friendships for select
+  using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
+create policy "friendships_update_as_addressee" on friendships for update
+  using (auth.uid() = addressee_id) with check (auth.uid() = addressee_id);
+
+create policy "friendships_delete_own" on friendships for delete
+  using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
 -- ══════════════════════════════════════════════════════════════════════════
 -- IRONLOG MERGE (supabase-schema-phase7-ironlog.sql)
 -- ══════════════════════════════════════════════════════════════════════════

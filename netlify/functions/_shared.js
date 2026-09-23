@@ -149,6 +149,25 @@ async function verifyUser(event) {
   return { user, token };
 }
 
+// Server-side gate for AI features. Never trust the client alone for this —
+// a free user's browser could call these functions directly with their own
+// valid session token, bypassing any client-side-only check. Mirrors the
+// same trialing/active check the client uses for its own upgrade prompts
+// (see hasAccess() in index.html), read via the caller's own token against
+// the "select own" RLS policy on subscriptions, same pattern as the rest of
+// this file's Supabase reads.
+async function hasPaidAccess(userId, token) {
+  const base = process.env.SUPABASE_URL;
+  const res = await fetch(
+    `${base}/rest/v1/subscriptions?user_id=eq.${userId}&select=status`,
+    { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return false;
+  const rows = await res.json().catch(() => []);
+  const status = rows[0]?.status;
+  return status === 'trialing' || status === 'active';
+}
+
 // Checks + increments today's AI usage count for this user, scoped by
 // user_id (not browser/device) via RLS using the user's own JWT — so
 // switching devices or clearing local storage can't reset the cap.
@@ -376,6 +395,7 @@ module.exports = {
   getAppBaseUrl,
   jsonResponse,
   verifyUser,
+  hasPaidAccess,
   checkAndIncrementRateLimit,
   callAnthropic,
   calculateCost,

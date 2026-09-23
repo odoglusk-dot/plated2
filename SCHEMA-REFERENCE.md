@@ -485,3 +485,9 @@ fresh installs get it from `reset-schema.sql`.
 For food-log photos (`food_logs.photo_path` and the `food-photos`
 bucket): run **`supabase-schema-phase10-food-photos.sql`** against an
 existing live database; fresh installs get it from `reset-schema.sql`.
+
+For the friend-based leaderboard (the `friendships` table): run
+**`supabase-schema-phase11-friends.sql`** against an existing live database;
+fresh installs get it from `reset-schema.sql`. Free vs. paid tier reuses the
+existing `subscriptions.status` field (trialing/active = paid) — no schema
+change needed for that part.

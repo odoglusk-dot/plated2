@@ -647,6 +647,7 @@
       <p id="paywallBody" class="muted" style="margin-top:0;"></p>
       <div class="paywall-price">$4.99<span class="unit"> / month</span></div>
       <button type="button" class="btn btn-primary btn-block" id="paywallSubscribeBtn">Start 3-Day Free Trial</button>
+      <button type="button" class="btn btn-ghost btn-block" id="paywallCloseBtn" style="margin-top:0.5rem;">Maybe Later — Back to Krafft</button>
       <div id="paywallError" style="color:var(--danger);font-size:0.85rem;margin-top:0.5rem;min-height:1em;text-align:center;"></div>
       <p class="muted" style="font-size:0.8rem;text-align:center;margin-top:0.75rem;">Questions about a charge? <a id="paywallBillingHelpLink" href="#">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
       <button type="button" class="btn btn-ghost btn-block" id="paywallSignOutBtn" style="margin-top:0.5rem;">Sign Out</button>
@@ -817,6 +818,10 @@ const state = {
   aiRemaining: null,
   subscription: null,
   referrals: [],
+  friendships: [],
+  leaderboard: [],
+  incomingFriendRequests: [],
+  outgoingFriendRequestCount: 0,
 };
 
 // ── Static reference data ───────────────────────────────────────────
@@ -1492,6 +1497,8 @@ $('#paywallSignOutBtn').addEventListener('click', async () => {
   await supabase.auth.signOut();
 });
 
+$('#paywallCloseBtn').addEventListener('click', () => closeUpgradeScreen());
+
 $('#paywallSubscribeBtn').addEventListener('click', async () => {
   $('#paywallError').textContent = '';
   const btn = $('#paywallSubscribeBtn');
@@ -1571,7 +1578,7 @@ async function fetchSubscription() {
 // `subscriptions.cancel_at_period_end`).
 function subscriptionStatusLabel(sub) {
   const periodEndStr = sub?.current_period_end ? new Date(sub.current_period_end).toLocaleDateString() : null;
-  if (!sub || sub.status === 'free') return 'No active subscription.';
+  if (!sub || sub.status === 'free') return 'Free tier — manual logging, Quick Add, and your dashboard, no time limit. AI features need a subscription.';
   if (sub.status === 'trialing') {
     return periodEndStr ? `Free trial — converts to a paid subscription on ${periodEndStr}.` : 'Free trial active.';
   }
@@ -1590,20 +1597,31 @@ function hasAccess(sub) {
   return !!sub && (sub.status === 'trialing' || sub.status === 'active');
 }
 
+// Client-side pre-check for the three AI features (Describe It, Snap a
+// Photo, Ask AI) — shows the upgrade screen immediately instead of a wasted
+// round trip. Every AI Netlify function re-checks this same trialing/active
+// condition server-side (hasPaidAccess() in _shared.js), so this is purely a
+// UX shortcut, not the actual gate.
+function requireAIAccess() {
+  if (hasAccess(state.subscription)) return true;
+  showUpgradeScreen();
+  return false;
+}
+
 function renderPaywallProcessing() {
   $('#paywallContent').classList.add('hidden');
   $('#paywallProcessing').classList.remove('hidden');
 }
 
 function renderPaywallScreen(sub) {
-  let heading = 'Start Your Free Trial';
-  let body = "Krafft is $4.99/month after a 3-day free trial — cancel anytime, you won't be charged until the trial ends.";
+  let heading = 'Unlock AI Features';
+  let body = "Krafft's free tier covers manual food and lift logging, Quick Add, and your dashboard — no time limit. AI features (photo/text macro estimation, Ask AI) are $4.99/month after a 3-day free trial.";
   if (sub?.status === 'past_due') {
     heading = 'Payment Failed';
-    body = "We couldn't process your last payment. Update your card by subscribing again to keep using Krafft.";
+    body = "We couldn't process your last payment. Update your card by subscribing again to keep your AI features active — your logged data and free-tier features are unaffected either way.";
   } else if (sub?.status === 'canceled') {
     heading = 'Your Subscription Has Ended';
-    body = 'Resubscribe to get back into Krafft — $4.99/month after a 3-day free trial.';
+    body = "Resubscribe to get AI features back — $4.99/month after a 3-day free trial. You can keep using the free tier's manual logging in the meantime.";
   }
   $('#paywallHeading').textContent = heading;
   $('#paywallBody').textContent = body;
@@ -1613,9 +1631,26 @@ function renderPaywallScreen(sub) {
   $('#paywallContent').classList.remove('hidden');
 }
 
-// The whole-app gate: no part of the app — dashboard, logging, history,
-// everything — renders unless the signed-in user has an active trial or
-// subscription. Called from every place a session becomes available.
+// Voluntary entry point into the upgrade screen — from Profile's Subscription
+// card, or when a free user hits an AI feature. Not a gate: closeUpgradeScreen()
+// always returns to the app underneath, since free-tier access is never blocked.
+function showUpgradeScreen() {
+  renderPaywallScreen(state.subscription);
+  $('#app').classList.add('hidden');
+  $('#paywallScreen').classList.remove('hidden');
+}
+
+function closeUpgradeScreen() {
+  $('#paywallScreen').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+}
+
+// Every signed-in user reaches the app — the free tier (manual logging,
+// Quick Add, dashboard) has no time limit or subscription requirement. Only
+// specific AI features check hasAccess()/showUpgradeScreen() themselves,
+// both client-side (for a fast prompt) and server-side in the AI functions
+// themselves (see hasPaidAccess() in _shared.js — never trust the client
+// alone for a paid gate).
 async function enterApp(session) {
   state.session = session;
   state.user = session.user;
@@ -1633,9 +1668,9 @@ async function enterApp(session) {
 
     if (checkoutResult === 'success') {
       // Stripe redirects back here immediately, but the webhook that actually
-      // grants access (customer.subscription.created) can take a moment to
-      // land — poll briefly instead of bouncing a paying user back to the
-      // paywall while it's in flight.
+      // grants AI access (customer.subscription.created) can take a moment to
+      // land — poll briefly so the upgrade screen doesn't flash "still free"
+      // right after a successful checkout, then drop into the app either way.
       $('#app').classList.add('hidden');
       $('#paywallScreen').classList.remove('hidden');
       renderPaywallProcessing();
@@ -1646,18 +1681,12 @@ async function enterApp(session) {
       }
     }
 
-    const sub = await fetchSubscription();
-    if (hasAccess(sub)) {
-      $('#paywallScreen').classList.add('hidden');
-      $('#app').classList.remove('hidden');
-      showAppLoading(true);
-      await bootstrapApp();
-      showAppLoading(false);
-    } else {
-      $('#app').classList.add('hidden');
-      renderPaywallScreen(sub);
-      $('#paywallScreen').classList.remove('hidden');
-    }
+    await fetchSubscription();
+    $('#paywallScreen').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    showAppLoading(true);
+    await bootstrapApp();
+    showAppLoading(false);
   } catch (err) {
     // Never leave the user staring at a blank screen — fall back to
     // somewhere interactive (auth screen) they can retry from, and make
@@ -1676,7 +1705,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals(), loadFriendships(), loadLeaderboard()]);
   renderAll();
 }
 
@@ -1842,6 +1871,35 @@ async function loadTrainingSplit() {
 async function loadReferrals() {
   const { data } = await supabase.from('referrals').select('status').eq('referrer_user_id', state.user.id);
   state.referrals = data || [];
+}
+
+async function loadFriendships() {
+  const { data } = await supabase.from('friendships').select('*')
+    .or(`requester_id.eq.${state.user.id},addressee_id.eq.${state.user.id}`);
+  state.friendships = data || [];
+}
+
+// Looks up the accepted friendship row id for a given other-party user id —
+// needed to remove a friend, since the leaderboard entries (from
+// get-leaderboard.js) carry stats, not the underlying friendship row.
+function friendshipIdFor(otherUserId) {
+  return state.friendships.find((f) => f.status === 'accepted'
+    && (f.requester_id === otherUserId || f.addressee_id === otherUserId))?.id;
+}
+
+// Best-effort — the leaderboard is a nice-to-have, never worth blocking or
+// erroring the rest of bootstrapApp() over.
+async function loadLeaderboard() {
+  try {
+    const result = await callFunction('get-leaderboard', {});
+    state.leaderboard = result.entries || [];
+    state.incomingFriendRequests = result.incomingRequests || [];
+    state.outgoingFriendRequestCount = result.outgoingCount || 0;
+  } catch {
+    state.leaderboard = [];
+    state.incomingFriendRequests = [];
+    state.outgoingFriendRequestCount = 0;
+  }
 }
 
 function renderAll() {
@@ -2682,6 +2740,7 @@ function renderLogSubPanel() {
       // Exact match against the common foods database costs nothing — skip the AI call entirely.
       const exact = COMMON_FOODS.find((f) => f.name.toLowerCase() === description.toLowerCase());
       if (exact) { useCommonMatch(exact); return; }
+      if (!requireAIAccess()) return;
       const btn = $('#aiEstimateBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span>Estimating…';
       $('#aiError').textContent = '';
       try {
@@ -2690,6 +2749,7 @@ function renderLogSubPanel() {
         $('#aiResultSlot').innerHTML = resultCardHtml(result);
         wireResultCard('ai_text');
       } catch (err) {
+        if (err.upgradeRequired) { showUpgradeScreen(); return; }
         reportError(err);
         $('#aiError').textContent = err.message;
       } finally {
@@ -2709,6 +2769,7 @@ function renderLogSubPanel() {
     $('#photoEstimateBtn').addEventListener('click', async () => {
       const file = $('#photoInput').files[0];
       if (!file) { $('#photoError').textContent = 'Choose a photo first.'; return; }
+      if (!requireAIAccess()) return;
       const btn = $('#photoEstimateBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span>Estimating…';
       $('#photoError').textContent = '';
       try {
@@ -2718,6 +2779,7 @@ function renderLogSubPanel() {
         $('#photoResultSlot').innerHTML = resultCardHtml(result);
         wireResultCard('ai_photo', file);
       } catch (err) {
+        if (err.upgradeRequired) { showUpgradeScreen(); return; }
         reportError(err);
         $('#photoError').textContent = err.message;
       } finally {
@@ -2811,7 +2873,11 @@ async function callFunction(name, body) {
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    if (data.upgradeRequired) err.upgradeRequired = true;
+    throw err;
+  }
   return data;
 }
 
@@ -3151,6 +3217,7 @@ async function handleAsk() {
   const input = $('#askInput');
   const question = input.value.trim();
   if (!question) return;
+  if (!requireAIAccess()) return;
   $('#askError').textContent = '';
   askMessages.push({ role: 'user', text: question });
   renderAsk();
@@ -3164,6 +3231,12 @@ async function handleAsk() {
     askMessages.push({ role: 'assistant', text: result.answer });
     renderAsk();
   } catch (err) {
+    if (err.upgradeRequired) {
+      const askBtn = $('#askBtn');
+      if (askBtn) { askBtn.disabled = false; askBtn.textContent = 'Ask'; }
+      showUpgradeScreen();
+      return;
+    }
     reportError(err);
     // renderAsk() isn't called on this path, so the button (rebuilt as
     // disabled/"Thinking…" above) would otherwise stay stuck that way
@@ -3225,6 +3298,8 @@ function calorieRangeForGoal(calorieGoal, goalMode, bmr) {
   if (goalMode === 'gain') return { low: 0, high: calorieGoal * 1.125 };
   return { low: calorieGoal * 0.9, high: calorieGoal * 1.1 };
 }
+
+let addFriendMessage = '';
 
 function renderProfile() {
   const panel = $('#panel-profile');
@@ -3291,8 +3366,11 @@ function renderProfile() {
 
     <div class="card">
       <h3>Subscription</h3>
-      <p class="muted">${subscriptionStatusLabel(state.subscription)}</p>
-      <button class="btn" id="manage_subscription_btn">Manage Subscription</button>
+      <span class="badge ${hasAccess(state.subscription) ? 'on' : ''}">${hasAccess(state.subscription) ? '⭐ Paid — AI unlocked' : '🔓 Free tier'}</span>
+      <p class="muted" style="margin-top:0.5rem;">${subscriptionStatusLabel(state.subscription)}</p>
+      ${hasAccess(state.subscription)
+        ? `<button class="btn" id="manage_subscription_btn">Manage Subscription</button>`
+        : `<button class="btn btn-primary" id="upgrade_tier_btn">Upgrade — Unlock AI Features</button>`}
       <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
     </div>
 
@@ -3318,6 +3396,41 @@ function renderProfile() {
       ` : `
         <button class="btn" id="generate_referral_code_btn">Generate My Referral Code</button>
       `}
+    </div>
+
+    <div class="card">
+      <h3>Friends</h3>
+      <p class="muted">Add a friend using their referral code above to see streaks and PRs on a shared leaderboard. No feed, no posts — just the numbers.</p>
+      <div class="field">
+        <div class="row" style="gap:0.5rem;">
+          <input class="input mono" id="add_friend_code_input" placeholder="Their code, e.g. ABC123" style="text-transform:uppercase;">
+          <button class="btn" id="add_friend_btn" style="flex:none;">Add</button>
+        </div>
+      </div>
+      <div id="addFriendMsg" class="muted small" style="min-height:1em;">${esc(addFriendMessage)}</div>
+      ${state.incomingFriendRequests.length ? `
+        <p class="muted small" style="margin-top:0.75rem;margin-bottom:0.25rem;">Requests</p>
+        ${state.incomingFriendRequests.map((r) => `
+          <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+            <span>${esc(r.displayName)}</span>
+            <div class="row" style="gap:0.4rem;flex:none;">
+              <button class="btn btn-sm btn-primary" data-friend-accept="${r.id}">Accept</button>
+              <button class="btn btn-sm btn-ghost" data-friend-decline="${r.id}">Decline</button>
+            </div>
+          </div>`).join('')}
+      ` : ''}
+      ${state.outgoingFriendRequestCount > 0 ? `<p class="muted small">${state.outgoingFriendRequestCount} request${state.outgoingFriendRequestCount === 1 ? '' : 's'} sent, waiting to be accepted.</p>` : ''}
+      ${state.leaderboard.filter((e) => !e.isSelf).length ? `
+        <p class="muted small" style="margin-top:0.75rem;margin-bottom:0.25rem;">Friends</p>
+        ${state.leaderboard.filter((e) => !e.isSelf).map((e) => `
+          <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
+            <span>${esc(e.displayName)}</span>
+            <div class="row" style="gap:0.5rem;flex:none;align-items:center;">
+              <span class="mono muted small">${e.streak}-day streak</span>
+              <button class="btn btn-sm btn-ghost" data-friend-remove="${esc(friendshipIdFor(e.userId) || '')}" aria-label="Remove ${esc(e.displayName)}">✕</button>
+            </div>
+          </div>`).join('')}
+      ` : `<p class="muted small">No friends yet — add one above.</p>`}
     </div>
 
     <div class="card">
@@ -3500,7 +3613,8 @@ function renderProfile() {
     });
   });
 
-  $('#manage_subscription_btn').addEventListener('click', async () => {
+  const manageSubBtn = $('#manage_subscription_btn');
+  if (manageSubBtn) manageSubBtn.addEventListener('click', async () => {
     const btn = $('#manage_subscription_btn');
     const originalLabel = btn.textContent;
     btn.disabled = true;
@@ -3515,6 +3629,9 @@ function renderProfile() {
       btn.textContent = originalLabel;
     }
   });
+
+  const upgradeTierBtn = $('#upgrade_tier_btn');
+  if (upgradeTierBtn) upgradeTierBtn.addEventListener('click', () => showUpgradeScreen());
 
   const generateBtn = $('#generate_referral_code_btn');
   if (generateBtn) {
@@ -3536,6 +3653,58 @@ function renderProfile() {
   if (copyCodeBtn) copyCodeBtn.addEventListener('click', () => copyToClipboard($('#referral_code_display').value, 'Referral code copied.'));
   const copyLinkBtn = $('#copy_referral_link');
   if (copyLinkBtn) copyLinkBtn.addEventListener('click', () => copyToClipboard($('#referral_link_display').value, 'Referral link copied.'));
+
+  $('#add_friend_btn').addEventListener('click', async () => {
+    const input = $('#add_friend_code_input');
+    const code = input.value.trim();
+    if (!code) return;
+    const btn = $('#add_friend_btn');
+    btn.disabled = true;
+    addFriendMessage = '';
+    $('#addFriendMsg').textContent = '';
+    try {
+      const result = await callFunction('add-friend', { code });
+      const messages = {
+        requested: `Friend request sent${result.friendName ? ' to ' + result.friendName : ''}.`,
+        accepted: `You're now friends${result.friendName ? ' with ' + result.friendName : ''}!`,
+        already_requested: 'You already sent this person a request.',
+        already_friends: "You're already friends.",
+      };
+      addFriendMessage = messages[result.status] || 'Done.';
+      await Promise.all([loadFriendships(), loadLeaderboard()]);
+      renderProfile();
+    } catch (err) {
+      reportError(err);
+      addFriendMessage = err.message || 'Could not add friend.';
+      renderProfile();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $$('[data-friend-accept]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    const { error } = await supabase.from('friendships')
+      .update({ status: 'accepted', responded_at: new Date().toISOString() })
+      .eq('id', btn.dataset.friendAccept);
+    if (error) return toast('Could not accept: ' + error.message);
+    await Promise.all([loadFriendships(), loadLeaderboard()]);
+    renderProfile();
+  }));
+
+  $$('[data-friend-decline]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    const { error } = await supabase.from('friendships').delete().eq('id', btn.dataset.friendDecline);
+    if (error) return toast('Could not decline: ' + error.message);
+    await Promise.all([loadFriendships(), loadLeaderboard()]);
+    renderProfile();
+  }));
+
+  $$('[data-friend-remove]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    if (!btn.dataset.friendRemove) return;
+    const { error } = await supabase.from('friendships').delete().eq('id', btn.dataset.friendRemove);
+    if (error) return toast('Could not remove friend: ' + error.message);
+    await Promise.all([loadFriendships(), loadLeaderboard()]);
+    renderProfile();
+  }));
 
   $('#email_reminders_check').addEventListener('change', async (e) => {
     const { error } = await supabase.from('profiles').upsert({ id: state.user.id, email_reminders_opt_out: !e.target.checked });
@@ -5860,6 +6029,19 @@ function correlationHtml() {
   `;
 }
 
+function friendsLeaderboardHtml() {
+  if (state.leaderboard.length <= 1) {
+    return `<p class="muted small">Add a friend from your Profile to see streaks and PRs side by side here.</p>`;
+  }
+  return `<div style="display:flex;flex-direction:column;gap:0.5rem;">
+    ${state.leaderboard.map((e, i) => `
+      <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border-radius:8px;background:${e.isSelf ? 'var(--surface-2)' : 'transparent'};">
+        <span>${i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}${esc(e.displayName)}${e.isSelf ? ' (you)' : ''}</span>
+        <span class="mono muted small">${e.streak}d streak · ${e.exercisesTracked} exercises · ${e.careerVolume.toLocaleString()} lb</span>
+      </div>`).join('')}
+  </div>`;
+}
+
 function renderInsightsTab() {
   const panel = $('#panel-insights');
   if (!panel) return;
@@ -5902,6 +6084,11 @@ function renderInsightsTab() {
       <h3>Nutrition × Training</h3>
       <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Weekly protein-goal consistency vs. lift volume — no AI, just your own logged data grouped by week.</p>
       ${correlationHtml()}
+    </div>
+    <div class="card">
+      <h3>Friends Leaderboard</h3>
+      <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Current streak, exercises tracked, and career volume — add friends from your Profile.</p>
+      ${friendsLeaderboardHtml()}
     </div>
     <div class="card">
       <h3>Goals Overview</h3>

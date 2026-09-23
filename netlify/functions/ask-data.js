@@ -10,7 +10,7 @@
 // query patterns for food_logs/goals/weight_log/supplement_logs in place for
 // the Dashboard/History tabs — reusing them here avoids a second, parallel
 // data-access path server-side.
-const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, captureError, withErrorReporting } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, captureError, withErrorReporting } = require('./_shared');
 
 const SYSTEM_PROMPT = (dataSummary) => `You are Krafft's data assistant. Answer the user's question about
 their own logged nutrition/supplement/weight history using ONLY the summary below — never invent numbers
@@ -28,6 +28,10 @@ exports.handler = withErrorReporting(async (event) => {
 
   const auth = await verifyUser(event);
   if (!auth) return jsonResponse(401, { error: 'Sign in required.' });
+
+  if (!(await hasPaidAccess(auth.user.id, auth.token))) {
+    return jsonResponse(402, { error: 'Ask AI is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
+  }
 
   let payload;
   try {
