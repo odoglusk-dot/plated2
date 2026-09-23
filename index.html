@@ -90,10 +90,17 @@
     border-radius: 50%; animation: spin 0.7s linear infinite; }
   .spinner-sm { width: 15px; height: 15px; border-width: 2px; display: inline-block; vertical-align: -3px; margin-right: 0.4rem; }
   #appLoadingOverlay { position: fixed; inset: 0; background: var(--bg); z-index: 50;
-    display: flex; align-items: center; justify-content: center; }
+    padding: 1.25rem; max-width: 880px; margin: 0 auto; overflow: hidden; }
   .skeleton-row { height: 1em; border-radius: 6px; background: var(--surface-2); margin-bottom: 0.5rem;
     animation: skeleton-pulse 1.2s ease-in-out infinite; }
+  .skeleton-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; }
   @keyframes skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  /* Shown from first paint until the initial auth check resolves — without
+     it, a returning signed-in user briefly sees the marketing landing page
+     (its default un-hidden state) before enterApp() swaps it out. */
+  #initialLoadingScreen { position: fixed; inset: 0; background: var(--bg); z-index: 60;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 0.75rem; }
+  #initialLoadingScreen .display { font-size: 2rem; color: var(--accent); }
 
   /* ── Buttons / inputs ─────────────────────────────────────────── */
   .btn { font-weight: 600; border-radius: 8px; padding: 0.65rem 1.1rem; border: 1px solid var(--border);
@@ -401,7 +408,12 @@
 </head>
 <body>
 
-<div id="landingScreen">
+<div id="initialLoadingScreen">
+  <div class="display">KRAFT</div>
+  <div class="skeleton-row" style="width:120px;"></div>
+</div>
+
+<div id="landingScreen" class="hidden">
   <nav class="landing-nav">
     <div class="logo">KRAFT</div>
     <button class="btn" id="landingLogInBtn">Log In</button>
@@ -612,7 +624,17 @@
 
 <div id="app" class="hidden">
   <div id="appLoadingOverlay" class="hidden">
-    <div class="spinner"></div>
+    <div class="skeleton-card">
+      <div class="skeleton-row" style="width:40%;height:1.4em;"></div>
+      <div class="skeleton-row" style="width:90%;"></div>
+      <div class="skeleton-row" style="width:75%;"></div>
+      <div class="skeleton-row" style="width:60%;"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skeleton-row" style="width:55%;height:1.2em;"></div>
+      <div class="skeleton-row" style="width:80%;"></div>
+      <div class="skeleton-row" style="width:45%;"></div>
+    </div>
   </div>
   <div class="topbar">
     <div class="logo">KRAFT</div>
@@ -1451,6 +1473,11 @@ $('#paywallSubscribeBtn').addEventListener('click', async () => {
 supabase.auth.onAuthStateChange((event, session) => {
   state.session = session;
   state.user = session?.user || null;
+  // Shown from first paint so a returning signed-in user doesn't flash the
+  // marketing landing page (now hidden by default) before enterApp() below
+  // takes over — every branch here is a final destination, so it's safe to
+  // hide unconditionally as the first thing each one does.
+  $('#initialLoadingScreen').classList.add('hidden');
   if (event === 'PASSWORD_RECOVERY') {
     // Supabase has already established a session from the emailed recovery
     // link — don't drop the user straight into the app, make them set a new
@@ -1467,8 +1494,8 @@ supabase.auth.onAuthStateChange((event, session) => {
     enterApp(session);
   } else if (event === 'INITIAL_SESSION') {
     // Fires once on page load for every anonymous visitor, session-less by
-    // definition — leave the landing page showing (its default state)
-    // instead of jumping straight to the auth screen.
+    // definition — show the landing page now that the auth check is done.
+    $('#landingScreen').classList.remove('hidden');
   } else {
     $('#app').classList.add('hidden');
     $('#paywallScreen').classList.add('hidden');
@@ -1553,6 +1580,7 @@ function renderPaywallScreen(sub) {
 async function enterApp(session) {
   state.session = session;
   state.user = session.user;
+  $('#initialLoadingScreen').classList.add('hidden');
   $('#landingScreen').classList.add('hidden');
   $('#authScreen').classList.add('hidden');
 
