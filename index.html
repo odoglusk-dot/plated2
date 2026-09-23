@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kraft — Macro &amp; Strength Tracker</title>
+<title>Krafft — Macro &amp; Strength Tracker</title>
 <meta name="description" content="Track macros, supplements, and weight with an app built for training days. AI-powered food logging, goal calculator, and progress tracking — 3-day free trial.">
 
 <!-- Open Graph / social preview -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Kraft — Macro &amp; Strength Tracker">
+<meta property="og:title" content="Krafft — Macro &amp; Strength Tracker">
 <meta property="og:description" content="Track macros, supplements, and weight with an app built for training days. AI-powered food logging, goal calculator, and progress tracking.">
 <meta property="og:image" content="og-image.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Kraft — Macro &amp; Strength Tracker">
+<meta name="twitter:title" content="Krafft — Macro &amp; Strength Tracker">
 <meta name="twitter:description" content="Track macros, supplements, and weight with an app built for training days.">
 <meta name="twitter:image" content="og-image.png">
 
@@ -23,7 +23,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Kraft">
+<meta name="apple-mobile-web-app-title" content="Krafft">
 <meta name="mobile-web-app-capable" content="yes">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -196,6 +196,10 @@
   .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
   .streak-pill { font-family: var(--font-mono); font-size: 0.85rem; background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 999px; padding: 0.3rem 0.8rem; }
+  .avatar-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2);
+    border: 1px solid var(--accent); color: var(--accent); font-family: var(--font-display);
+    font-size: 0.85rem; letter-spacing: 0.02em; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0; flex-shrink: 0; }
 
   .tab-nav { padding: 0.4rem 0.6rem; background: var(--nav-bg);
     border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 19; }
@@ -212,9 +216,20 @@
   .tab-btn.active { color: var(--accent); background: var(--surface-2); }
   .tab-btn.mode-hidden { display: none; }
 
-  main.tab-panels { padding: 1.25rem; max-width: 880px; margin: 0 auto; }
+  main.tab-panels { padding: 1.25rem; padding-bottom: calc(1.25rem + 64px + env(safe-area-inset-bottom, 0px)); max-width: 880px; margin: 0 auto; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
+
+  /* ── Bottom nav (primary) ─────────────────────────────────────── */
+  .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex;
+    background: var(--nav-bg); border-top: 1px solid var(--border);
+    padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom, 0px)); }
+  .bottom-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
+    background: transparent; border: none; color: var(--text-dim); cursor: pointer; padding: 0.35rem 0.2rem; }
+  .bottom-nav-icon { font-size: 1.15rem; line-height: 1; }
+  .bottom-nav-label { font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.04em;
+    font-size: 0.65rem; }
+  .bottom-nav-btn.active { color: var(--accent); }
 
   /* ── Plate scoreboard ─────────────────────────────────────────── */
   .scoreboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
@@ -418,18 +433,18 @@
 <body>
 
 <div id="initialLoadingScreen">
-  <div class="display">KRAFT</div>
+  <div class="display">KRAFFT</div>
   <div class="skeleton-row" style="width:120px;"></div>
 </div>
 
 <div id="landingScreen" class="hidden">
   <nav class="landing-nav">
-    <div class="logo">KRAFT</div>
+    <div class="logo">KRAFFT</div>
     <button class="btn" id="landingLogInBtn">Log In</button>
   </nav>
 
   <div class="landing-hero">
-    <div class="display">KRAFT</div>
+    <div class="display">KRAFFT</div>
     <p class="pitch">Macro tracking and strength training in one app — describe or snap a photo of what you ate and AI fills in the macros, then log your lifts right alongside it.</p>
     <p class="subpitch">A goal calculator that checks your pace is actually safe, daily progress rings, PRs and training insights, and a data assistant that answers questions about your own history.</p>
     <div class="landing-cta-row">
@@ -442,15 +457,15 @@
   <div class="landing-section">
     <div class="screenshot-row">
       <div class="screenshot-card">
-        <img src="screenshot-dashboard.png" alt="Kraft dashboard showing daily calorie, protein, carb, and fat progress rings" loading="lazy">
+        <img src="screenshot-dashboard.png" alt="Krafft dashboard showing daily calorie, protein, carb, and fat progress rings" loading="lazy">
         <p class="caption">Today's progress, at a glance</p>
       </div>
       <div class="screenshot-card">
-        <img src="screenshot-log.png" alt="Kraft AI food logging screen estimating macros from a text description" loading="lazy">
+        <img src="screenshot-log.png" alt="Krafft AI food logging screen estimating macros from a text description" loading="lazy">
         <p class="caption">Describe a meal — AI estimates the macros</p>
       </div>
       <div class="screenshot-card">
-        <img src="screenshot-calculator.png" alt="Kraft goal calculator with a target weight, target date, and calculated calorie and macro targets" loading="lazy">
+        <img src="screenshot-calculator.png" alt="Krafft goal calculator with a target weight, target date, and calculated calorie and macro targets" loading="lazy">
         <p class="caption">A calculator that checks your pace is safe</p>
       </div>
     </div>
@@ -505,15 +520,15 @@
   </div>
 
   <footer class="legal">
-    Kraft is not a medical device and does not provide medical advice.
+    Krafft is not a medical device and does not provide medical advice.
     <a href="TERMS_OF_SERVICE.md">Terms</a> · <a href="PRIVACY_POLICY.md">Privacy</a>
-    <p class="brand-story">Kraft — German/Scandinavian for "strength." Built by an athlete who got tired of tracking macros and lifts in two different apps.</p>
+    <p class="brand-story">Krafft — German/Scandinavian for "strength." Built by an athlete who got tired of tracking macros and lifts in two different apps.</p>
   </footer>
 </div>
 
 <div id="authScreen" class="hidden">
   <div class="auth-box">
-    <div class="auth-logo">KRAFT</div>
+    <div class="auth-logo">KRAFFT</div>
     <div class="auth-tagline">Macro tracking and strength training, together.</div>
     <div class="hazard-divider" style="margin-bottom:1.5rem;"></div>
 
@@ -553,7 +568,7 @@
         </div>
         <div id="parentalConsentNote" class="hidden" style="margin-top:0.6rem;">
           <p class="muted" style="margin-top:0;">Since you're under 18, a parent or guardian should be aware of
-            and approve your use of Kraft — including the $4.99/month subscription — before you continue.</p>
+            and approve your use of Krafft — including the $4.99/month subscription — before you continue.</p>
           <div class="consent-line" style="margin-top:0;">
             <input type="checkbox" id="parentalConsentCheck">
             <label style="margin:0;color:var(--text-dim);font-weight:400;" for="parentalConsentCheck">
@@ -610,7 +625,7 @@
 
 <div id="paywallScreen" class="hidden">
   <div class="auth-box">
-    <div class="auth-logo">KRAFT</div>
+    <div class="auth-logo">KRAFFT</div>
     <div class="auth-tagline">Macro tracking and strength training, together.</div>
     <div class="hazard-divider" style="margin-bottom:1.5rem;"></div>
 
@@ -646,10 +661,10 @@
     </div>
   </div>
   <div class="topbar">
-    <div class="logo">KRAFT</div>
+    <div class="logo">KRAFFT</div>
     <div class="topbar-right">
       <span class="streak-pill" id="streakPill" title="Current protein-goal streak">🔥 0 day streak</span>
-      <button class="btn btn-sm" id="signOutBtn">Sign Out</button>
+      <button class="avatar-btn" id="avatarBtn" aria-label="Profile" title="Profile"></button>
     </div>
   </div>
 
@@ -694,9 +709,28 @@
   </main>
 
   <footer class="legal">
-    Kraft is not a medical device and does not provide medical advice.
+    Krafft is not a medical device and does not provide medical advice.
     <a href="TERMS_OF_SERVICE.md">Terms</a> · <a href="PRIVACY_POLICY.md">Privacy</a>
   </footer>
+
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="bottom-nav-btn" data-bottom="home" aria-label="Home">
+      <span class="bottom-nav-icon">⌂</span>
+      <span class="bottom-nav-label">Home</span>
+    </button>
+    <button class="bottom-nav-btn" data-bottom="log" aria-label="Log">
+      <span class="bottom-nav-icon">+</span>
+      <span class="bottom-nav-label">Log</span>
+    </button>
+    <button class="bottom-nav-btn" data-bottom="lift" aria-label="Lift">
+      <span class="bottom-nav-icon">🏋</span>
+      <span class="bottom-nav-label">Lift</span>
+    </button>
+    <button class="bottom-nav-btn" data-bottom="profile" aria-label="Profile">
+      <span class="bottom-nav-icon">☺</span>
+      <span class="bottom-nav-label">Profile</span>
+    </button>
+  </nav>
 </div>
 
 <script type="module">
@@ -717,7 +751,7 @@ const SUPPORT_EMAIL = 'odoglusk+platedsupport@gmail.com';
 // so its mailto link is bound once here from SUPPORT_EMAIL rather than
 // duplicating the address as a second hardcoded literal that could drift
 // out of sync with the constant above.
-document.getElementById('paywallBillingHelpLink').href = `mailto:${SUPPORT_EMAIL}?subject=Kraft%20billing%20question`;
+document.getElementById('paywallBillingHelpLink').href = `mailto:${SUPPORT_EMAIL}?subject=Krafft%20billing%20question`;
 
 // ── Small DOM helpers ────────────────────────────────────────────────
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -1455,8 +1489,9 @@ $('#authForm').addEventListener('submit', async (e) => {
   }
 });
 
-$('#signOutBtn').addEventListener('click', async () => {
-  await supabase.auth.signOut();
+$('#avatarBtn').addEventListener('click', () => {
+  setAppMode('nutrition');
+  setActiveTab('profile');
 });
 
 $('#paywallSignOutBtn').addEventListener('click', async () => {
@@ -1568,13 +1603,13 @@ function renderPaywallProcessing() {
 
 function renderPaywallScreen(sub) {
   let heading = 'Start Your Free Trial';
-  let body = "Kraft is $4.99/month after a 3-day free trial — cancel anytime, you won't be charged until the trial ends.";
+  let body = "Krafft is $4.99/month after a 3-day free trial — cancel anytime, you won't be charged until the trial ends.";
   if (sub?.status === 'past_due') {
     heading = 'Payment Failed';
-    body = "We couldn't process your last payment. Update your card by subscribing again to keep using Kraft.";
+    body = "We couldn't process your last payment. Update your card by subscribing again to keep using Krafft.";
   } else if (sub?.status === 'canceled') {
     heading = 'Your Subscription Has Ended';
-    body = 'Resubscribe to get back into Kraft — $4.99/month after a 3-day free trial.';
+    body = 'Resubscribe to get back into Krafft — $4.99/month after a 3-day free trial.';
   }
   $('#paywallHeading').textContent = heading;
   $('#paywallBody').textContent = body;
@@ -1831,6 +1866,7 @@ function renderAll() {
   renderRecapsTab();
   renderInsightsTab();
   updateStreakPill();
+  updateBottomNav();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1838,6 +1874,26 @@ function renderAll() {
 // ══════════════════════════════════════════════════════════════════
 $$('.tab-btn').forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
 $$('.mode-switch-btn').forEach((btn) => btn.addEventListener('click', () => setAppMode(btn.dataset.mode)));
+
+// Bottom nav is the primary nav (Home/Log/Lift/Profile); the mode-switch +
+// tab-btn-row above it remains fully functional as secondary nav, scoped to
+// whichever primary section is active — it drives the same setAppMode()/
+// setActiveTab() calls, it's just not the first thing a thumb reaches for.
+const BOTTOM_NAV_ACTIONS = {
+  home: () => { setAppMode('nutrition'); setActiveTab('dashboard'); },
+  log: () => { setAppMode('nutrition'); setActiveTab('log'); },
+  lift: () => setAppMode('training'),
+  profile: () => { setAppMode('nutrition'); setActiveTab('profile'); },
+};
+$$('.bottom-nav-btn').forEach((btn) => btn.addEventListener('click', () => BOTTOM_NAV_ACTIONS[btn.dataset.bottom]()));
+
+function updateBottomNav() {
+  let active = 'home';
+  if (state.appMode === 'training') active = 'lift';
+  else if (state.activeTab === 'log') active = 'log';
+  else if (state.activeTab === 'profile') active = 'profile';
+  $$('.bottom-nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.bottom === active));
+}
 
 function setAppMode(mode) {
   state.appMode = mode;
@@ -1851,6 +1907,7 @@ function setActiveTab(tab) {
   state.lastTabByMode[state.appMode] = tab;
   $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
+  updateBottomNav();
   // The Days tab's heatmap is rendered (by renderAll()) while every tab is
   // still hidden, where scrollWidth reads 0 and scrollLeft is a no-op — so
   // re-apply it now that the panel is actually visible, same reasoning as
@@ -1973,6 +2030,8 @@ function weeklySummary() {
 function updateStreakPill() {
   const { current } = computeStreaks(state.historyLogs, state.goals.protein_g);
   $('#streakPill').textContent = `🔥 ${current} day streak`;
+  const name = state.profile?.display_name || state.user?.email || '?';
+  $('#avatarBtn').textContent = name.trim().charAt(0).toUpperCase();
 }
 
 // ── Shareable weekly recap image ────────────────────────────────────
@@ -2028,7 +2087,7 @@ async function generateWeeklyRecapCanvas(data) {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#C6A15B';
   ctx.font = '600 92px Oswald, sans-serif';
-  ctx.fillText('KRAFT', 540, 230);
+  ctx.fillText('KRAFFT', 540, 230);
 
   ctx.fillStyle = '#8F8C84';
   ctx.font = '400 34px Inter, sans-serif';
@@ -2071,7 +2130,7 @@ async function generateWeeklyRecapCanvas(data) {
 
   ctx.fillStyle = '#8F8C84';
   ctx.font = '400 30px Inter, sans-serif';
-  ctx.fillText('Tracked with Kraft', 540, 1860);
+  ctx.fillText('Tracked with Krafft', 540, 1860);
 
   return canvas;
 }
@@ -2090,20 +2149,6 @@ function ringSvg(pct, color) {
   </svg>`;
 }
 
-function plateHtml(label, value, goal, color) {
-  const pct = goal > 0 ? value / goal : 0;
-  return `<div class="plate">
-    <div class="ring-wrap">
-      ${ringSvg(pct, color)}
-      <div class="ring-inner">
-        <div class="ring-value">${round(value)}</div>
-        <div class="ring-goal">/ ${round(goal)}</div>
-      </div>
-    </div>
-    <div class="plate-label">${label}</div>
-  </div>`;
-}
-
 // Compact ring — just the current value, no goal line, smaller footprint.
 // Used above the Log tab's food-logging input so today's progress stays
 // visible without switching to Dashboard.
@@ -2117,24 +2162,6 @@ function miniPlateHtml(label, value, goal, color) {
       </div>
     </div>
     <div class="plate-label">${label}</div>
-  </div>`;
-}
-
-// Water isn't one of the four core macros, so it gets the compact ring
-// treatment (like the old sugar tracker did) rather than a full-size plate
-// — but unlike sugar, it has a real per-user editable goal (state.goals.water_oz),
-// not a fixed guideline, so the goal is shown as a note under the ring.
-function waterPlateHtml(value, goal) {
-  const pct = goal > 0 ? value / goal : 0;
-  return `<div class="mini-plate plate-secondary">
-    <div class="ring-wrap">
-      ${ringSvg(pct, 'var(--macro-water)')}
-      <div class="ring-inner">
-        <div class="ring-value">${round(value)}</div>
-      </div>
-    </div>
-    <div class="plate-label">WATER</div>
-    <div class="plate-note">goal ${round(goal)}oz</div>
   </div>`;
 }
 
@@ -2165,17 +2192,33 @@ function renderDashboard() {
 
   const panel = $('#panel-dashboard');
   panel.innerHTML = `
-    <div class="card">
-      <h3>Today's Plate</h3>
-      <div class="scoreboard">
-        ${plateHtml('CALORIES', totals.calories, g.calories, calorieColor)}
-        ${plateHtml('PROTEIN', totals.protein_g, g.protein_g, 'var(--macro-protein)')}
-        ${plateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--macro-carbs)')}
-        ${plateHtml('FAT', totals.fat_g, g.fat_g, 'var(--macro-fat)')}
-        ${waterPlateHtml(todayWaterOz, g.water_oz || 64)}
+    <div class="hero-stat-card">
+      <h3>Today's Protein</h3>
+      <div class="stat-num">${round(totals.protein_g)}<span style="font-size:1.15rem;color:var(--text-dim);"> / ${round(g.protein_g)}g</span></div>
+    </div>
+
+    <div class="stat-grid-2">
+      <div class="stat-card-sm">
+        <h3>Calories</h3>
+        <div class="stat-num" style="font-size:1.3rem;color:${calorieColor};">${round(totals.calories)}<span class="muted" style="font-size:0.72rem;"> / ${round(g.calories)}</span></div>
       </div>
-      <p class="muted" style="margin-top:0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
-      <div class="row" style="margin-top:0.5rem;">
+      <div class="stat-card-sm">
+        <h3>Carbs</h3>
+        <div class="stat-num" style="font-size:1.3rem;">${round(totals.carbs_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.carbs_g)}g</span></div>
+      </div>
+      <div class="stat-card-sm">
+        <h3>Fat</h3>
+        <div class="stat-num" style="font-size:1.3rem;">${round(totals.fat_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.fat_g)}g</span></div>
+      </div>
+      <div class="stat-card-sm">
+        <h3>Water</h3>
+        <div class="stat-num" style="font-size:1.3rem;">${round(todayWaterOz)}oz<span class="muted" style="font-size:0.72rem;"> / ${round(g.water_oz || 64)}oz</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="muted" style="margin:0 0 0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
+      <div class="row">
         <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
         <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
       </div>
@@ -2249,7 +2292,7 @@ function renderDashboard() {
       $('#recapPreviewSlot').innerHTML = `
         <div class="recap-preview">
           <img src="${dataUrl}" alt="Weekly recap">
-          <a class="btn btn-sm btn-primary" href="${dataUrl}" download="kraft-weekly-recap.png">Download image</a>
+          <a class="btn btn-sm btn-primary" href="${dataUrl}" download="krafft-weekly-recap.png">Download image</a>
         </div>`;
     } catch (err) {
       toast('Could not generate the recap image.');
@@ -3199,7 +3242,7 @@ function renderProfile() {
       <h3>Subscription</h3>
       <p class="muted">${subscriptionStatusLabel(state.subscription)}</p>
       <button class="btn" id="manage_subscription_btn">Manage Subscription</button>
-      <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Kraft%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
+      <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
     </div>
 
     <div class="card">
@@ -3239,12 +3282,13 @@ function renderProfile() {
     <div class="card">
       <h3>Support</h3>
       <p class="muted">Something broken, or just have a question?</p>
-      <a class="btn" href="mailto:${SUPPORT_EMAIL}?subject=Kraft%20support">Contact Support</a>
+      <a class="btn" href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20support">Contact Support</a>
     </div>
 
     <div class="card">
       <h3>Account</h3>
       <p class="muted">Signed in as ${esc(state.user.email)}</p>
+      <button class="btn btn-sm" id="signOutBtn" style="margin-bottom:0.75rem;">Sign Out</button>
       <button class="btn btn-danger" id="delete_account_btn">Delete My Account</button>
       <div id="delete_confirm" class="hidden" style="margin-top:0.75rem;">
         <p class="muted">This permanently deletes your account and all logged data. Type DELETE to confirm.</p>
@@ -3443,6 +3487,10 @@ function renderProfile() {
     if (error) { toast('Could not save preference: ' + error.message); return; }
     toast(e.target.checked ? 'Reminder emails on.' : 'Reminder emails off.');
     await loadProfile();
+  });
+
+  $('#signOutBtn').addEventListener('click', async () => {
+    await supabase.auth.signOut();
   });
 
   $('#delete_account_btn').addEventListener('click', () => $('#delete_confirm').classList.remove('hidden'));

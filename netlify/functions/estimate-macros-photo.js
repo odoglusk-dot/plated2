@@ -4,7 +4,7 @@
 // Checks food_cache first using a hash of image + note; if hit, returns immediately without using API budget.
 const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
 
-const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Kraft, a macro-and-strength-tracking app.
+const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Krafft, a macro-and-strength-tracking app.
 You will be shown a photo of a food or meal. Estimate its nutritional content from what's visible —
 portion sizes, visible ingredients, and typical preparation. If an optional text note accompanies the
 photo, use it to refine the estimate (e.g. it may state an ingredient or portion the photo doesn't show).

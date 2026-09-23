@@ -4,7 +4,7 @@
 // Checks food_cache first; if hit, returns immediately without using API budget.
 const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
 
-const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Kraft, a macro-and-strength-tracking app.
+const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Krafft, a macro-and-strength-tracking app.
 Given a short description of a food or meal, estimate its nutritional content.
 Respond with ONLY a JSON object, no markdown fences, no prose, in exactly this shape:
 {"food_name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "confidence": "high" | "medium" | "low"}

@@ -1,4 +1,4 @@
-// Shared helpers for Kraft's Netlify functions. No npm dependencies —
+// Shared helpers for Krafft's Netlify functions. No npm dependencies —
 // everything talks to Supabase over plain REST (Auth + PostgREST) using the
 // global `fetch` available in the Node 18+ Netlify Functions runtime, so
 // there's no bundling/dependency-install step to break.

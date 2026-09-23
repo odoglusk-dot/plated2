@@ -12,7 +12,7 @@
 // data-access path server-side.
 const { jsonResponse, verifyUser, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, captureError, withErrorReporting } = require('./_shared');
 
-const SYSTEM_PROMPT = (dataSummary) => `You are Kraft's data assistant. Answer the user's question about
+const SYSTEM_PROMPT = (dataSummary) => `You are Krafft's data assistant. Answer the user's question about
 their own logged nutrition/supplement/weight history using ONLY the summary below — never invent numbers
 that aren't in it. Be concise and encouraging. You are not a doctor: for anything that sounds like a
 medical question, suggest they talk to a doctor or registered dietitian instead of answering it yourself.
