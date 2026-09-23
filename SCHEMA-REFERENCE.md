@@ -75,11 +75,18 @@ protein_g   numeric         ← WITH _g suffix
 carbs_g     numeric         ← WITH _g suffix
 fat_g       numeric         ← WITH _g suffix
 source      text ('manual' | 'ai_text' | 'ai_photo' | 'favorite' | 'common')
+photo_path  text (optional — path within the food-photos bucket, "<user_id>/<file>.jpg")
 logged_at   timestamptz (indexed)
 created_at  timestamptz
 ```
 **Frontend reads:** `logged_at, (all other columns via select(*))`, ordered by `logged_at desc`  
-**Frontend writes:** `user_id, food_name, calories, protein_g, carbs_g, fat_g, source`
+**Frontend writes:** `user_id, food_name, calories, protein_g, carbs_g, fat_g, source, photo_path`
+
+`photo_path` (added in `supabase-schema-phase10-food-photos.sql`) is only
+ever set when a meal was logged from the "Snap a Photo" AI-estimate flow
+and the upload succeeded — every other logging path leaves it null. Same
+signed-URL display pattern as `photos.storage_path`: the image lives in
+the private `food-photos` bucket, this column just tracks the path.
 
 ---
 
@@ -474,3 +481,7 @@ fresh installs get it from `reset-schema.sql`.
 For training splits (the `training_splits` table): run
 **`supabase-schema-phase9-splits.sql`** against an existing live database;
 fresh installs get it from `reset-schema.sql`.
+
+For food-log photos (`food_logs.photo_path` and the `food-photos`
+bucket): run **`supabase-schema-phase10-food-photos.sql`** against an
+existing live database; fresh installs get it from `reset-schema.sql`.

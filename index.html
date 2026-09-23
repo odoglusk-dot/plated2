@@ -1735,7 +1735,22 @@ async function loadHistory() {
   since.setDate(since.getDate() - 90);
   const { data } = await supabase.from('food_logs').select('*').eq('user_id', state.user.id)
     .gte('logged_at', since.toISOString()).order('logged_at', { ascending: false });
-  state.historyLogs = data || [];
+  const rows = data || [];
+
+  // Same signed-URL pattern as loadPhotos() — food-photos is a private
+  // bucket, so a thumbnail needs a short-lived signed URL, not a stored
+  // public link. Most rows have no photo_path at all (only the "Snap a
+  // Photo" flow ever sets one), so this is a no-op batch call most of the time.
+  const withPhoto = rows.filter((r) => r.photo_path);
+  if (withPhoto.length) {
+    const paths = withPhoto.map((r) => r.photo_path);
+    const { data: signed } = await supabase.storage.from('food-photos').createSignedUrls(paths, 60 * 60);
+    const urlByPath = {};
+    paths.forEach((p, i) => { urlByPath[p] = signed?.[i]?.signedUrl || ''; });
+    for (const r of rows) if (r.photo_path) r.signedUrl = urlByPath[r.photo_path];
+  }
+
+  state.historyLogs = rows;
   const today = localDateStr();
   state.todayLogs = state.historyLogs.filter((l) => localDateStr(new Date(l.logged_at)) === today);
 }
@@ -2158,9 +2173,9 @@ async function deleteLog(id) {
   renderAll();
 }
 
-async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source }) {
+async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source, photo_path }) {
   const { error } = await supabase.from('food_logs').insert({
-    user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source,
+    user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source, photo_path: photo_path || null,
   });
   if (error) return toast('Could not log food: ' + error.message);
   toast(`Logged: ${food_name}`);
@@ -2311,7 +2326,11 @@ function resultCardHtml(result) {
     </div>`;
 }
 
-function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text')) {
+// photoFile: the File the estimate was made from, only passed by the
+// "Snap a Photo" sub-tab — Log It uploads it to the private food-photos
+// bucket at click time (not at estimate time, since the user may still be
+// editing the macro fields) and attaches the resulting path.
+function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text'), photoFile = null) {
   const readValues = () => ({
     food_name: $('#res_name').value.trim() || 'Food',
     calories: Number($('#res_cal').value) || 0,
@@ -2319,7 +2338,27 @@ function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text'
     carbs_g: Number($('#res_carb').value) || 0,
     fat_g: Number($('#res_fat').value) || 0,
   });
-  $('#logResultBtn')?.addEventListener('click', () => logFood({ ...readValues(), source }));
+  $('#logResultBtn')?.addEventListener('click', async () => {
+    if (!photoFile) return logFood({ ...readValues(), source });
+    const btn = $('#logResultBtn');
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner spinner-sm"></span>Uploading photo…';
+    let photo_path = null;
+    try {
+      const blob = await resizePhotoToBlob(photoFile, 500);
+      const path = `${state.user.id}/${crypto.randomUUID()}.jpg`;
+      const { error: uploadErr } = await supabase.storage.from('food-photos').upload(path, blob, { contentType: 'image/jpeg' });
+      if (uploadErr) throw uploadErr;
+      photo_path = path;
+    } catch (err) {
+      toast('Could not save the photo, logging without it.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
+    logFood({ ...readValues(), source, photo_path });
+  });
   $('#favResultBtn')?.addEventListener('click', () => saveFavorite(readValues()));
 }
 
@@ -2455,7 +2494,7 @@ function renderLogSubPanel() {
         const result = await callFunction('estimate-macros-photo', { imageBase64: base64, mediaType, note: $('#photoNote').value.trim() });
         state.aiRemaining = result.remaining;
         $('#photoResultSlot').innerHTML = resultCardHtml(result);
-        wireResultCard('ai_photo');
+        wireResultCard('ai_photo', file);
       } catch (err) {
         reportError(err);
         $('#photoError').textContent = err.message;
@@ -2562,12 +2601,11 @@ async function callFunction(name, body) {
 // with just today expanded, everything else collapsed.
 const expandedHistoryDays = new Set([localDateStr()]);
 
-// Photo logging never persists the image anywhere today (it's only sent to
-// the AI for a one-off estimate, then discarded) — food_logs has no image
-// column. This stays a no-op until that changes, but is ready to show a
-// thumbnail the moment a row actually has one.
+// A meal logged from the "Snap a Photo" flow has its image persisted to
+// the private food-photos bucket (see the photo sub-tab's Log It handler);
+// signedUrl is attached client-side in loadHistory(), not a DB column.
 function historyMealRowHtml(l) {
-  const thumb = l.photo_url ? `<img class="meal-thumb" src="${esc(l.photo_url)}" alt="">` : '';
+  const thumb = l.signedUrl ? `<img class="meal-thumb" src="${esc(l.signedUrl)}" alt="">` : '';
   return `<div class="log-row">
     ${thumb}
     <div style="flex:1;">

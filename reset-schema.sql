@@ -118,6 +118,7 @@ create table food_logs (
   source text not null default 'manual' check (
     source in ('manual', 'ai_text', 'ai_photo', 'favorite', 'common')
   ),
+  photo_path text,
   logged_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
@@ -446,6 +447,24 @@ create policy "photos_select_own" on photos for select using (auth.uid() = user_
 create policy "photos_insert_own" on photos for insert with check (auth.uid() = user_id);
 create policy "photos_update_own" on photos for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "photos_delete_own" on photos for delete using (auth.uid() = user_id);
+
+-- ── food-photos storage bucket (food_logs.photo_path) ───────────────────
+-- Same pattern as progress-photos: private, folder-scoped to auth.uid(),
+-- signed URLs generated client-side. food_logs.photo_path is added inline
+-- on the food_logs table above (a fresh install doesn't need the
+-- alter-table phase10 migration).
+insert into storage.buckets (id, name, public)
+values ('food-photos', 'food-photos', false)
+on conflict (id) do nothing;
+
+create policy "food_photos_select_own" on storage.objects for select
+  using (bucket_id = 'food-photos' and auth.uid()::text = (storage.foldername(name))[1]);
+
+create policy "food_photos_insert_own" on storage.objects for insert
+  with check (bucket_id = 'food-photos' and auth.uid()::text = (storage.foldername(name))[1]);
+
+create policy "food_photos_delete_own" on storage.objects for delete
+  using (bucket_id = 'food-photos' and auth.uid()::text = (storage.foldername(name))[1]);
 
 -- ── training_splits ──────────────────────────────────────────────────
 -- One active split per user — a preset or custom weekly rotation used to
