@@ -1,25 +1,25 @@
-# Terms of Service — Plated
+# Terms of Service — Krafft
 
-**Last updated:** 2026-07-29
+**Last updated:** 2026-09-23
 
 *This is a starting draft, not legal advice. Have a lawyer review it —
 especially the age-requirement section below — before you let strangers
 sign up.*
 
-## 1. What Plated is
+## 1. What Krafft is
 
-Plated is a personal nutrition and supplement tracking tool. It uses an AI
-model to estimate the macronutrient content of foods you describe or
-photograph, and to answer questions about your own logged history. Plated
+Krafft is a personal nutrition and strength-training tracking tool. It uses
+an AI model to estimate the macronutrient content of foods you describe or
+photograph, and to answer questions about your own logged history. Krafft
 is **not** a medical device, does not provide medical advice, and is not a
-substitute for guidance from a doctor, registered dietitian, or other
-qualified professional.
+substitute for guidance from a doctor, registered dietitian, personal
+trainer, or other qualified professional.
 
-## 2. Who can use Plated
+## 2. Who can use Krafft
 
 You must be at least 13 years old to create an account. If you are under
-18, you should have a parent or guardian's permission to use Plated,
-particularly before acting on anything in the Supplements guide. Plated is
+18, you should have a parent or guardian's permission to use Krafft,
+particularly before acting on anything in the Supplements guide. Krafft is
 not directed at children under 13, and accounts found to belong to users
 under 13 will be removed.
 
@@ -32,10 +32,10 @@ Policy for exactly what that includes).
 
 ## 4. AI-generated estimates
 
-Macro estimates from a text description or photo, and answers from Ask
-Your Data, are AI-generated approximations. They can be wrong — meaningfully
-wrong, especially for photos with unclear portions or unusual foods. Don't
-rely on them for a medical condition (e.g. diabetes carb-counting) without
+Macro estimates from a text description or photo, and answers from Ask AI,
+are AI-generated approximations. They can be wrong — meaningfully wrong,
+especially for photos with unclear portions or unusual foods. Don't rely on
+them for a medical condition (e.g. diabetes carb-counting) without
 independent verification.
 
 ## 5. Supplements content
@@ -44,32 +44,47 @@ The Supplements & Vitamins guide is educational information, not a
 recommendation to take any particular supplement. It intentionally
 presents both benefits and drawbacks, including cautions for some
 categories. Starting, stopping, or changing any supplement is a decision
-between you and a healthcare provider.
+between you and a healthcare provider. The same goes for any training
+split, exercise, or lift target you set up in Krafft — it's a personal
+record-keeping tool, not a program prescribed for you, and you're
+responsible for training within your own physical limits.
 
 ## 6. Acceptable use
 
-Don't use Plated to log or share content that is illegal, abusive, or
+Don't use Krafft to log or share content that is illegal, abusive, or
 infringes someone else's rights. Don't attempt to access another user's
 account or data — every account's data is private by design (see Privacy
-Policy), and attempting to bypass that is a violation of these Terms.
+Policy), and attempting to bypass that is a violation of these Terms. The
+friend leaderboard is opt-in on both sides (a request has to be sent and
+accepted) — don't use it to harass or repeatedly re-add someone who has
+removed you.
 
-## 7. Subscriptions & payment
+## 7. Free tier, subscriptions & payment
 
-### 7.1 Plan and billing
+### 7.1 What's free vs. paid
 
-Plated is a paid subscription ($4.99/month, with a 3-day free trial for new
-subscribers). Billing is handled by Stripe. You can cancel anytime from
-"Manage Subscription" in the Profile tab; canceling stops future charges,
-and you keep access through the end of the period you've already paid for.
+Krafft's core logging — manual food and lift entry, Quick Add, your
+dashboard, training splits — is free with no time limit and no credit card
+required. The AI features (photo/text macro estimation and Ask AI) require
+an active subscription. New subscribers get a 3-day free trial before the
+first charge.
 
-### 7.2 Authorization to charge
+### 7.2 Plan and billing
+
+The subscription is $4.99/month. Billing is handled by Stripe. You can
+cancel anytime from "Manage Subscription" in the Profile tab; canceling
+stops future charges and AI-feature access at the end of the period you've
+already paid for — your logged data and the free tier remain fully
+available either way.
+
+### 7.3 Authorization to charge
 
 By starting a subscription, you — or, if you are under 18, your parent or
-guardian — are authorizing Plated to charge the payment method on file on a
+guardian — are authorizing Krafft to charge the payment method on file on a
 recurring basis for the subscription amount, until the subscription is
 canceled.
 
-### 7.3 Minors and unauthorized subscriptions
+### 7.4 Minors and unauthorized subscriptions
 
 If a parent or guardian discovers that a minor subscribed without their
 knowledge or consent, contact odoglusk+platedsupport@gmail.com to request cancellation
@@ -80,7 +95,7 @@ amount, on top of a refund we'd have issued anyway if simply asked, so
 contacting us directly gets you the same outcome faster at no extra cost to
 anyone.
 
-### 7.4 Repeated disputes
+### 7.5 Repeated disputes
 
 Repeated unauthorized-signup disputes tied to the same account or payment
 method may result in requiring confirmation from a parent or guardian
@@ -88,10 +103,10 @@ before that account is permitted to resubscribe.
 
 ## 8. Disclaimers and limitation of liability
 
-Plated is provided "as is," without warranties of any kind. To the maximum
-extent permitted by law, Plated's operator is not liable for any damages
+Krafft is provided "as is," without warranties of any kind. To the maximum
+extent permitted by law, Krafft's operator is not liable for any damages
 arising from your use of the app, including decisions made based on
-AI-generated estimates or the Supplements guide.
+AI-generated estimates, the Supplements guide, or a training split you set up.
 
 ## 9. Changes to these terms
 

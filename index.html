@@ -181,7 +181,11 @@
   .feature-card h3 { font-size: 1.1rem; margin: 0 0 0.4rem; }
   .feature-card p { color: var(--text-dim); font-size: 0.88rem; margin: 0; line-height: 1.5; }
 
-  .landing-pricing-card { max-width: 420px; margin: 0 auto; text-align: center; }
+  .pricing-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; max-width: 700px; margin: 0 auto; }
+  .pricing-compare-card { text-align: center; }
+  .pricing-compare-featured { border-color: var(--accent); }
+  .pricing-list { list-style: none; padding: 0; margin: 1rem 0; text-align: left; font-size: 0.88rem; color: var(--text-dim); }
+  .pricing-list li { padding: 0.3rem 0; }
   .landing-footer-cta { text-align: center; padding: 1rem 1.5rem 3rem; }
 
   @media (max-width: 480px) {
@@ -453,28 +457,54 @@
 
   <div class="landing-hero">
     <div class="display">KRAFFT</div>
-    <p class="pitch">Macro tracking and strength training in one app — describe or snap a photo of what you ate and AI fills in the macros, then log your lifts right alongside it.</p>
-    <p class="subpitch">A goal calculator that checks your pace is actually safe, daily progress rings, PRs and training insights, and a data assistant that answers questions about your own history.</p>
+    <p class="pitch">Macro tracking and strength training in one app — describe or snap a photo of what you ate and AI fills in the macros, then log your lifts right alongside it, on one combined dashboard.</p>
+    <p class="subpitch">Manual logging is free, forever. AI photo/text macro estimation and Ask AI unlock with a 3-day free trial.</p>
     <div class="landing-cta-row">
-      <button class="btn btn-primary" id="landingStartTrialBtn">Start 3-Day Free Trial</button>
+      <button class="btn btn-primary" id="landingStartTrialBtn">Get Started Free</button>
       <button class="btn" id="landingLogInBtn2">Log In</button>
     </div>
-    <p class="landing-price-note">$4.99/month after your trial. Cancel anytime.</p>
+    <p class="landing-price-note">No card required for the free tier. AI features are $4.99/month after a 3-day trial.</p>
   </div>
 
   <div class="landing-section">
     <div class="screenshot-row">
       <div class="screenshot-card">
-        <img src="screenshot-dashboard.png" alt="Krafft dashboard showing daily calorie, protein, carb, and fat progress rings" loading="lazy">
-        <p class="caption">Today's progress, at a glance</p>
+        <img src="screenshot-dashboard.png" alt="Krafft's combined dashboard showing today's protein, today's training focus, and a unified stat grid" loading="lazy">
+        <p class="caption">Nutrition and training, one dashboard</p>
       </div>
       <div class="screenshot-card">
         <img src="screenshot-log.png" alt="Krafft AI food logging screen estimating macros from a text description" loading="lazy">
         <p class="caption">Describe a meal — AI estimates the macros</p>
       </div>
       <div class="screenshot-card">
-        <img src="screenshot-calculator.png" alt="Krafft goal calculator with a target weight, target date, and calculated calorie and macro targets" loading="lazy">
-        <p class="caption">A calculator that checks your pace is safe</p>
+        <img src="screenshot-training.png" alt="Krafft's muscle map showing which muscle groups have been trained recently" loading="lazy">
+        <p class="caption">Log lifts, see what you've trained</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="landing-section">
+    <h2>How it works</h2>
+    <div class="feature-grid">
+      <div class="card feature-card">
+        <div class="icon">📸</div>
+        <h3>1. Snap a photo</h3>
+        <p>Or just type what you ate. AI fills in calories, protein, carbs, and fat — no measuring cups, no manual math.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">🏋️</div>
+        <h3>2. Log your lifts</h3>
+        <p>Weight, sets, and reps for each exercise, with PR detection and a plate-math breakdown built in.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">📱</div>
+        <h3>3. One dashboard</h3>
+        <p>Today's protein and today's training focus side by side — no switching between a food app and a lifting app.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">📈</div>
+        <h3>4. See it add up</h3>
+        <p>Streaks, PRs, a muscle map of what you've trained, and how your nutrition and training actually line up week to week.</p>
       </div>
     </div>
   </div>
@@ -488,14 +518,19 @@
         <p>Type a description or snap a photo — AI estimates calories, protein, carbs, and fat in seconds.</p>
       </div>
       <div class="card feature-card">
+        <div class="icon">🏋️</div>
+        <h3>Lift Logging & PRs</h3>
+        <p>Log weight, sets, and reps per exercise — automatic PR detection, plate math, and an e1RM trend per lift.</p>
+      </div>
+      <div class="card feature-card">
         <div class="icon">🎯</div>
         <h3>Smart Goal Calculator</h3>
         <p>Set a target weight and date — get a personalized calorie and macro plan, checked against a safe rate of change.</p>
       </div>
       <div class="card feature-card">
-        <div class="icon">📊</div>
-        <h3>Daily Progress Rings</h3>
-        <p>Calories, protein, carbs, and fat at a glance, with a healthy-range indicator instead of a rigid number.</p>
+        <div class="icon">🗺️</div>
+        <h3>Muscle Map & Splits</h3>
+        <p>See which muscle groups you've trained recently, and set up a rotation so you always know today's focus.</p>
       </div>
       <div class="card feature-card">
         <div class="icon">💊</div>
@@ -503,28 +538,76 @@
         <p>Log your stack and reference dosage and timing notes for common vitamins, minerals, and supplements.</p>
       </div>
       <div class="card feature-card">
+        <div class="icon">💬</div>
+        <h3>Ask AI</h3>
+        <p>Ask plain-language questions about your own logged history — grounded only in what you've actually logged.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">🏆</div>
+        <h3>Friends Leaderboard</h3>
+        <p>Add friends to compare streaks, exercises tracked, and career volume. No feed, no posts — just the numbers.</p>
+      </div>
+      <div class="card feature-card">
         <div class="icon">📈</div>
         <h3>Weight Trend Chart</h3>
         <p>Log your weight and see the trend over time, not just day-to-day noise.</p>
-      </div>
-      <div class="card feature-card">
-        <div class="icon">💬</div>
-        <h3>Ask Your Data</h3>
-        <p>Ask plain-language questions about your own logged history — grounded only in what you've actually logged.</p>
       </div>
     </div>
   </div>
 
   <div class="landing-section">
-    <div class="card landing-pricing-card">
-      <h3 style="margin-top:0;">Simple pricing</h3>
-      <div class="paywall-price">$4.99<span class="unit"> / month</span></div>
-      <p class="muted">3-day free trial, cancel anytime from inside the app.</p>
+    <h2>Free vs. paid</h2>
+    <div class="pricing-compare">
+      <div class="card pricing-compare-card">
+        <h3 style="margin-top:0;">Free</h3>
+        <div class="paywall-price" style="font-size:1.8rem;">$0</div>
+        <ul class="pricing-list">
+          <li>✓ Manual food logging</li>
+          <li>✓ Manual lift logging</li>
+          <li>✓ Quick Add</li>
+          <li>✓ Combined dashboard</li>
+          <li>✓ Training splits & muscle map</li>
+          <li>✓ Friends leaderboard</li>
+          <li>✗ AI photo/text macro estimation</li>
+          <li>✗ Ask AI</li>
+        </ul>
+        <p class="muted small">No time limit. No card required.</p>
+      </div>
+      <div class="card pricing-compare-card pricing-compare-featured">
+        <h3 style="margin-top:0;">Paid</h3>
+        <div class="paywall-price" style="font-size:1.8rem;">$4.99<span class="unit"> / mo</span></div>
+        <ul class="pricing-list">
+          <li>✓ Everything in Free, plus:</li>
+          <li>✓ AI photo macro estimation</li>
+          <li>✓ AI text macro estimation</li>
+          <li>✓ Ask AI</li>
+        </ul>
+        <p class="muted small">3-day free trial, cancel anytime.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="landing-section">
+    <h2>What people are saying</h2>
+    <p class="muted small" style="text-align:center;margin-top:-1.5rem;margin-bottom:2rem;">Krafft is new — these are placeholder quotes until real ones come in.</p>
+    <div class="feature-grid">
+      <div class="card feature-card">
+        <p style="font-style:italic;">"I stopped switching between two apps to see if my protein was actually lining up with my lifting days."</p>
+        <p class="muted small" style="margin-top:0.75rem;">— Early user</p>
+      </div>
+      <div class="card feature-card">
+        <p style="font-style:italic;">"The photo macro estimate is scary accurate for how little effort it takes."</p>
+        <p class="muted small" style="margin-top:0.75rem;">— Early user</p>
+      </div>
+      <div class="card feature-card">
+        <p style="font-style:italic;">"Free tier is genuinely usable — I logged manually for weeks before subscribing."</p>
+        <p class="muted small" style="margin-top:0.75rem;">— Early user</p>
+      </div>
     </div>
   </div>
 
   <div class="landing-footer-cta">
-    <button class="btn btn-primary" id="landingStartTrialBtn2">Start 3-Day Free Trial</button>
+    <button class="btn btn-primary" id="landingStartTrialBtn2">Get Started Free</button>
   </div>
 
   <footer class="legal">
@@ -576,11 +659,12 @@
         </div>
         <div id="parentalConsentNote" class="hidden" style="margin-top:0.6rem;">
           <p class="muted" style="margin-top:0;">Since you're under 18, a parent or guardian should be aware of
-            and approve your use of Krafft — including the $4.99/month subscription — before you continue.</p>
+            and approve your use of Krafft — including if you later choose to subscribe for the $4.99/month AI
+            features — before you continue.</p>
           <div class="consent-line" style="margin-top:0;">
             <input type="checkbox" id="parentalConsentCheck">
             <label style="margin:0;color:var(--text-dim);font-weight:400;" for="parentalConsentCheck">
-              A parent or guardian is aware of and approves my use of this app, including the paid subscription.
+              A parent or guardian is aware of and approves my use of this app, including any future paid subscription.
             </label>
           </div>
         </div>
