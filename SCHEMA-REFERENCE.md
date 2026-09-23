@@ -491,3 +491,7 @@ For the friend-based leaderboard (the `friendships` table): run
 fresh installs get it from `reset-schema.sql`. Free vs. paid tier reuses the
 existing `subscriptions.status` field (trialing/active = paid) — no schema
 change needed for that part.
+
+For the first-time onboarding flow (`profiles.onboarded_at`): run
+**`supabase-schema-phase12-onboarding.sql`** against an existing live
+database; fresh installs get it from `reset-schema.sql`.

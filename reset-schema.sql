@@ -47,6 +47,9 @@ create table profiles (
   referral_code text unique,
   -- Daily "haven't logged yet" reminder email opt-out (see send-reminder-emails.js).
   email_reminders_opt_out boolean not null default false,
+  -- Set once the first-time onboarding overlay is completed/skipped; null
+  -- means "show it" (see supabase-schema-phase12-onboarding.sql).
+  onboarded_at timestamptz,
   created_at timestamptz not null default now()
 );
 

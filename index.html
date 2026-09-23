@@ -135,7 +135,14 @@
   .badge.on { color: var(--nav-bg); background: var(--accent); }
 
   /* ── Auth screen ──────────────────────────────────────────────── */
-  #authScreen, #paywallScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  #authScreen, #paywallScreen, #onboardingScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  .onboarding-step-label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+  .onboarding-tier-list { list-style: none; padding: 0; margin: 0.75rem 0; font-size: 0.9rem; }
+  .onboarding-tier-list li { padding: 0.3rem 0; color: var(--text-dim); }
+  .onboarding-tour-row { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+  .onboarding-tour-row:last-child { border-bottom: none; }
+  .onboarding-tour-icon { flex: none; width: 22px; height: 22px; color: var(--accent); }
+  .onboarding-tour-icon svg { width: 100%; height: 100%; }
   .auth-box { width: 100%; max-width: 380px; }
   .paywall-price { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; text-align: center; margin: 1rem 0; }
   .paywall-price .unit { font-size: 0.85rem; font-weight: 400; color: var(--text-dim); }
@@ -736,6 +743,14 @@
       <p class="muted" style="font-size:0.8rem;text-align:center;margin-top:0.75rem;">Questions about a charge? <a id="paywallBillingHelpLink" href="#">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
       <button type="button" class="btn btn-ghost btn-block" id="paywallSignOutBtn" style="margin-top:0.5rem;">Sign Out</button>
     </div>
+  </div>
+</div>
+
+<div id="onboardingScreen" class="hidden">
+  <div class="auth-box">
+    <div class="auth-logo">KRAFFT</div>
+    <div class="hazard-divider" style="margin-bottom:1.5rem;"></div>
+    <div id="onboardingContent"></div>
   </div>
 </div>
 
@@ -1729,6 +1744,98 @@ function closeUpgradeScreen() {
   $('#app').classList.remove('hidden');
 }
 
+// ── First-time onboarding (3 steps: tier explainer, quick goals, tour) ──
+// Shown once per account (profiles.onboarded_at), never blocking — every
+// step can be skipped, and finishing/skipping either way marks it done so
+// it never shows again for that account.
+let onboardingStep = 0;
+
+const ONBOARDING_TOUR_ICONS = {
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9"/></svg>',
+  log: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
+  lift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><rect x="1.5" y="9" width="3" height="6" rx="1"/><rect x="19.5" y="9" width="3" height="6" rx="1"/><rect x="6" y="7" width="2.4" height="10" rx="1"/><rect x="15.6" y="7" width="2.4" height="10" rx="1"/></svg>',
+  profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg>',
+};
+
+function showOnboarding() {
+  onboardingStep = 0;
+  $('#app').classList.add('hidden');
+  $('#onboardingScreen').classList.remove('hidden');
+  renderOnboarding();
+}
+
+async function finishOnboarding() {
+  $('#onboardingScreen').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  const { error } = await supabase.from('profiles').update({ onboarded_at: new Date().toISOString() }).eq('id', state.user.id);
+  if (!error) state.profile = { ...state.profile, onboarded_at: new Date().toISOString() };
+}
+
+function renderOnboarding() {
+  const el = $('#onboardingContent');
+  if (onboardingStep === 0) {
+    el.innerHTML = `
+      <div class="onboarding-step-label">Step 1 of 3</div>
+      <h2 style="margin:0 0 0.5rem;">Welcome to Krafft</h2>
+      <p class="muted" style="margin-top:0;">Macro tracking and strength training in one app. Here's what's free and what's paid:</p>
+      <ul class="onboarding-tier-list">
+        <li>🔓 <strong style="color:var(--text);">Free, forever:</strong> manual food &amp; lift logging, Quick Add, your dashboard, training splits, friends leaderboard.</li>
+        <li>⭐ <strong style="color:var(--text);">Paid ($4.99/mo, 3-day trial):</strong> AI photo/text macro estimation, Ask AI.</li>
+      </ul>
+      <button type="button" class="btn btn-primary btn-block" id="onboardingNext0">Next</button>
+    `;
+    $('#onboardingNext0').addEventListener('click', () => { onboardingStep = 1; renderOnboarding(); });
+  } else if (onboardingStep === 1) {
+    const g = state.goals;
+    el.innerHTML = `
+      <div class="onboarding-step-label">Step 2 of 3</div>
+      <h2 style="margin:0 0 0.5rem;">Set your daily targets</h2>
+      <p class="muted" style="margin-top:0;">A starting point — fine-tune anytime from Profile → Goal Calculator.</p>
+      <div class="row">
+        <div class="field"><label>Calories</label><input class="input mono" id="ob_cal" type="number" value="${round(g.calories)}"></div>
+        <div class="field"><label>Protein (g)</label><input class="input mono" id="ob_pro" type="number" value="${round(g.protein_g)}"></div>
+      </div>
+      <button type="button" class="btn btn-primary btn-block" id="onboardingSave1">Save &amp; Continue</button>
+      <button type="button" class="btn btn-ghost btn-block" id="onboardingSkip1" style="margin-top:0.5rem;">Skip for now</button>
+    `;
+    $('#onboardingSave1').addEventListener('click', async () => {
+      const calories = Number($('#ob_cal').value) || g.calories;
+      const protein_g = Number($('#ob_pro').value) || g.protein_g;
+      const btn = $('#onboardingSave1');
+      btn.disabled = true;
+      const { error } = await supabase.from('goals').upsert({ user_id: state.user.id, calories, protein_g, carbs_g: g.carbs_g, fat_g: g.fat_g, water_oz: g.water_oz || 64, updated_at: new Date().toISOString() });
+      if (error) { toast('Could not save: ' + error.message); btn.disabled = false; return; }
+      await loadGoals();
+      onboardingStep = 2;
+      renderOnboarding();
+    });
+    $('#onboardingSkip1').addEventListener('click', () => { onboardingStep = 2; renderOnboarding(); });
+  } else {
+    el.innerHTML = `
+      <div class="onboarding-step-label">Step 3 of 3</div>
+      <h2 style="margin:0 0 0.75rem;">Get around Krafft</h2>
+      <div class="onboarding-tour-row">
+        <span class="onboarding-tour-icon">${ONBOARDING_TOUR_ICONS.home}</span>
+        <div><strong>Home</strong><div class="muted small">Today's protein and today's training focus, at a glance.</div></div>
+      </div>
+      <div class="onboarding-tour-row">
+        <span class="onboarding-tour-icon">${ONBOARDING_TOUR_ICONS.log}</span>
+        <div><strong>Log</strong><div class="muted small">Log food — describe it, snap a photo (paid), or pick from Common Foods/Favorites.</div></div>
+      </div>
+      <div class="onboarding-tour-row">
+        <span class="onboarding-tour-icon">${ONBOARDING_TOUR_ICONS.lift}</span>
+        <div><strong>Lift</strong><div class="muted small">Log a lift, see PRs, your muscle map, and set up a training split.</div></div>
+      </div>
+      <div class="onboarding-tour-row">
+        <span class="onboarding-tour-icon">${ONBOARDING_TOUR_ICONS.profile}</span>
+        <div><strong>Profile</strong><div class="muted small">Goals, subscription, friends, and account settings.</div></div>
+      </div>
+      <button type="button" class="btn btn-primary btn-block" id="onboardingFinish" style="margin-top:1rem;">Let's Go</button>
+    `;
+    $('#onboardingFinish').addEventListener('click', finishOnboarding);
+  }
+}
+
 // Every signed-in user reaches the app — the free tier (manual logging,
 // Quick Add, dashboard) has no time limit or subscription requirement. Only
 // specific AI features check hasAccess()/showUpgradeScreen() themselves,
@@ -1771,6 +1878,7 @@ async function enterApp(session) {
     showAppLoading(true);
     await bootstrapApp();
     showAppLoading(false);
+    if (!state.profile?.onboarded_at) showOnboarding();
   } catch (err) {
     // Never leave the user staring at a blank screen — fall back to
     // somewhere interactive (auth screen) they can retry from, and make
