@@ -209,7 +209,6 @@
     font-size: 0.72rem; padding: 0.45rem 0.85rem; border-radius: 999px; background: var(--surface-2);
     border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; white-space: nowrap; }
   .tab-btn.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
-  .tab-btn.mode-hidden { display: none; }
 
   main.tab-panels { padding: 1.25rem; padding-bottom: calc(1.25rem + 64px + env(safe-area-inset-bottom, 0px)); max-width: 880px; margin: 0 auto; }
   .tab-panel { display: none; }
@@ -276,6 +275,11 @@
     border-radius: 0; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
   .hero-stat-card h3 { margin: 0 0 0.4rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 500; }
   .hero-stat-card .stat-num { font-size: 2.2rem; color: var(--accent); }
+  /* Two hero cards side by side (combined nutrition+training dashboard) —
+     same treatment, smaller number so both fit at half width. */
+  .hero-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
+  .hero-row .hero-stat-card { margin-bottom: 0; }
+  .hero-row .hero-stat-card .stat-num { font-size: 1.5rem; }
   /* Secondary stat cards: small uppercase label, mono value, laid out 2-up */
   .stat-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   .stat-card-sm { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 0; }
@@ -672,20 +676,18 @@
     </div>
   </div>
 
-  <nav class="tab-nav" id="tabNav">
+  <nav class="tab-nav hidden" id="tabNav">
     <div class="tab-btn-row">
-      <button class="tab-btn active" data-tab="dashboard" data-mode="nutrition">Dashboard</button>
-      <button class="tab-btn" data-tab="history" data-mode="nutrition">History</button>
-      <button class="tab-btn" data-tab="weight" data-mode="nutrition">Weight</button>
-      <button class="tab-btn" data-tab="supplements" data-mode="nutrition">Supplements</button>
-      <button class="tab-btn" data-tab="meals" data-mode="nutrition">Meals</button>
-      <button class="tab-btn" data-tab="ask" data-mode="nutrition">Ask AI</button>
-      <button class="tab-btn mode-hidden" data-tab="training-dashboard" data-mode="training">Dashboard</button>
-      <button class="tab-btn mode-hidden" data-tab="lifts" data-mode="training">Lifts</button>
-      <button class="tab-btn mode-hidden" data-tab="days" data-mode="training">Days</button>
-      <button class="tab-btn mode-hidden" data-tab="photos" data-mode="training">Photos</button>
-      <button class="tab-btn mode-hidden" data-tab="recaps" data-mode="training">Recaps</button>
-      <button class="tab-btn mode-hidden" data-tab="insights" data-mode="training">Insights</button>
+      <button class="tab-btn" data-tab="history">History</button>
+      <button class="tab-btn" data-tab="weight">Weight</button>
+      <button class="tab-btn" data-tab="supplements">Supplements</button>
+      <button class="tab-btn" data-tab="meals">Meals</button>
+      <button class="tab-btn" data-tab="ask">Ask AI</button>
+      <button class="tab-btn" data-tab="lifts">Lifts</button>
+      <button class="tab-btn" data-tab="days">Days</button>
+      <button class="tab-btn" data-tab="photos">Photos</button>
+      <button class="tab-btn" data-tab="recaps">Recaps</button>
+      <button class="tab-btn" data-tab="insights">Insights</button>
     </div>
   </nav>
 
@@ -698,7 +700,6 @@
     <section class="tab-panel" data-tab="meals" id="panel-meals"></section>
     <section class="tab-panel" data-tab="ask" id="panel-ask"></section>
     <section class="tab-panel" data-tab="profile" id="panel-profile"></section>
-    <section class="tab-panel" data-tab="training-dashboard" id="panel-training-dashboard"></section>
     <section class="tab-panel" data-tab="lifts" id="panel-lifts"></section>
     <section class="tab-panel" data-tab="days" id="panel-days"></section>
     <section class="tab-panel" data-tab="photos" id="panel-photos"></section>
@@ -813,8 +814,6 @@ const state = {
   photos: [], // {id, storage_path, note, date, signedUrl} — signedUrl attached client-side after load, not a DB column
   trainingSplit: null, // {id, name, days, start_date} | null — one active split, see loadTrainingSplit()
   activeTab: 'dashboard',
-  appMode: 'nutrition', // 'nutrition' | 'training'
-  lastTabByMode: { nutrition: 'dashboard', training: 'training-dashboard' },
   aiRemaining: null,
   subscription: null,
   referrals: [],
@@ -1487,10 +1486,7 @@ $('#authForm').addEventListener('submit', async (e) => {
   }
 });
 
-$('#avatarBtn').addEventListener('click', () => {
-  setAppMode('nutrition');
-  setActiveTab('profile');
-});
+$('#avatarBtn').addEventListener('click', () => setActiveTab('profile'));
 
 $('#paywallSignOutBtn').addEventListener('click', async () => {
   await supabase.auth.signOut();
@@ -1857,7 +1853,6 @@ function renderAll() {
   renderMeals();
   renderAsk();
   renderProfile();
-  renderTrainingDashboard();
   renderLiftsTab();
   renderDaysTab();
   renderPhotosTab();
@@ -1872,40 +1867,45 @@ function renderAll() {
 // ══════════════════════════════════════════════════════════════════
 $$('.tab-btn').forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
 
-// Bottom nav is the only primary nav (Home/Log/Lift/Profile). The tab-btn-row
-// above it is section-specific secondary nav for the destinations that don't
-// have their own bottom-nav slot (History/Weight/Supplements/Meals/Ask AI
-// under Home, Lifts/Days/Photos/Recaps/Insights under Lift) — Log and Profile
-// are single-purpose screens with nothing to sub-navigate to, so they're not
-// duplicated in this row. It still drives the same setAppMode()/setActiveTab()
-// calls the bottom nav uses.
+// Bottom nav is the only primary nav (Home/Log/Lift/Profile) — there's no
+// more separate nutrition/training "mode" to switch between now that the
+// dashboard is combined, so Lift is just a shortcut into the Lifts tab, same
+// as Log is a shortcut into the Log tab. The tab-btn-row above it is
+// secondary nav for the destinations that don't have their own bottom-nav
+// slot; Home, Log, and Profile aren't duplicated in it.
 const BOTTOM_NAV_ACTIONS = {
-  home: () => { setAppMode('nutrition'); setActiveTab('dashboard'); },
-  log: () => { setAppMode('nutrition'); setActiveTab('log'); },
-  lift: () => setAppMode('training'),
-  profile: () => { setAppMode('nutrition'); setActiveTab('profile'); },
+  home: () => setActiveTab('dashboard'),
+  log: () => setActiveTab('log'),
+  lift: () => setActiveTab('lifts'),
+  profile: () => setActiveTab('profile'),
 };
 $$('.bottom-nav-btn').forEach((btn) => btn.addEventListener('click', () => BOTTOM_NAV_ACTIONS[btn.dataset.bottom]()));
 
+// Screens reachable from the tab-btn-row loosely group under whichever
+// bottom-nav icon they're conceptually part of, purely for the bottom nav's
+// own active-state highlight — Days/Photos/Recaps/Insights are training
+// sub-screens, so viewing one still shows Lift as the active bottom-nav tab.
+const TRAINING_SUB_TABS = new Set(['lifts', 'days', 'photos', 'recaps', 'insights']);
+
 function updateBottomNav() {
   let active = 'home';
-  if (state.appMode === 'training') active = 'lift';
-  else if (state.activeTab === 'log') active = 'log';
+  if (state.activeTab === 'log') active = 'log';
+  else if (TRAINING_SUB_TABS.has(state.activeTab)) active = 'lift';
   else if (state.activeTab === 'profile') active = 'profile';
   $$('.bottom-nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.bottom === active));
 }
 
-function setAppMode(mode) {
-  state.appMode = mode;
-  $$('.tab-btn').forEach((b) => b.classList.toggle('mode-hidden', b.dataset.mode !== mode));
-  setActiveTab(state.lastTabByMode[mode]);
-}
+// Home and Profile are endpoint screens — nothing to jump laterally to from
+// either one — so they rely on the bottom nav alone; every other screen
+// (History, Weight, Lifts, Days, etc.) genuinely benefits from the secondary
+// row's quick lateral movement, so it stays for those.
+const TABS_WITHOUT_SECONDARY_NAV = new Set(['dashboard', 'profile']);
 
 function setActiveTab(tab) {
   state.activeTab = tab;
-  state.lastTabByMode[state.appMode] = tab;
   $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
+  $('#tabNav').classList.toggle('hidden', TABS_WITHOUT_SECONDARY_NAV.has(tab));
   updateBottomNav();
   // The Days tab's heatmap is rendered (by renderAll()) while every tab is
   // still hidden, where scrollWidth reads 0 and scrollLeft is a no-op — so
@@ -2173,6 +2173,28 @@ function miniPlateHtml(label, value, goal, color) {
 // ══════════════════════════════════════════════════════════════════
 let quickAddConfirmDeleteId = null;
 
+// Compact, read-only version of today's split focus for the combined
+// dashboard's hero row — no "change split" affordance here, since picking/
+// editing a split is setup, not a daily glance stat. The full picker lives
+// in the Lifts tab (see todaysFocusHtml()).
+function todaysFocusHeroHtml() {
+  const split = state.trainingSplit;
+  if (!split) {
+    return `<div class="hero-stat-card">
+      <h3>Today's Focus</h3>
+      <div class="stat-num">No split set</div>
+      <div class="muted small">Set one up in the Lifts tab</div>
+    </div>`;
+  }
+  const idx = computeSplitDayIndex(split, localDateStr());
+  const today = split.days[idx];
+  return `<div class="hero-stat-card">
+    <h3>${esc(split.name)} — Day ${idx + 1}/${split.days.length}</h3>
+    <div class="stat-num">${esc(today.label)}</div>
+    ${today.muscle_groups?.length ? `<div class="muted small">${today.muscle_groups.join(', ')}</div>` : ''}
+  </div>`;
+}
+
 function renderDashboard() {
   const totals = sumMacros(state.todayLogs);
   const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
@@ -2190,15 +2212,28 @@ function renderDashboard() {
   const todayWaterOz = state.waterLog
     .filter((w) => localDateStr(new Date(w.logged_at)) === today)
     .reduce((sum, w) => sum + (Number(w.amount_oz) || 0), 0);
+  const todaysLiftVolume = state.lifts.filter((l) => l.date === today).reduce((sum, l) => sum + l.weight * totalReps(l), 0);
+  const trainingStreak = computeTrainingStreak(state.lifts);
+
+  const volumeSpike = computeVolumeSpike(state.lifts, getWeekStart(today));
+  const showSpikeWarning = volumeSpike && volumeSpike.weekStart !== dismissedSpikeWeek;
 
   const ws = weeklySummary();
 
   const panel = $('#panel-dashboard');
   panel.innerHTML = `
-    <div class="hero-stat-card">
-      <h3>Today's Protein</h3>
-      <div class="stat-num">${round(totals.protein_g)}<span style="font-size:1.15rem;color:var(--text-dim);"> / ${round(g.protein_g)}g</span></div>
+    <div class="hero-row">
+      <div class="hero-stat-card">
+        <h3>Today's Protein</h3>
+        <div class="stat-num">${round(totals.protein_g)}<span style="font-size:0.95rem;color:var(--text-dim);"> / ${round(g.protein_g)}g</span></div>
+      </div>
+      ${todaysFocusHeroHtml()}
     </div>
+    ${showSpikeWarning ? `
+    <div class="card pr-banner">
+      <div class="small">⚠️ This week's lift volume is <strong style="color:var(--accent);">${volumeSpike.pctAbove}%</strong> above your recent 4-week average — consider whether that's intentional, or if you should ease off to avoid overuse injury.</div>
+      <button class="btn btn-sm btn-ghost" id="spikeDismiss">✕</button>
+    </div>` : ''}
 
     <div class="stat-grid-2">
       <div class="stat-card-sm">
@@ -2206,8 +2241,16 @@ function renderDashboard() {
         <div class="stat-num" style="font-size:1.3rem;color:${calorieColor};">${round(totals.calories)}<span class="muted" style="font-size:0.72rem;"> / ${round(g.calories)}</span></div>
       </div>
       <div class="stat-card-sm">
+        <h3>Today's Volume</h3>
+        <div class="stat-num" style="font-size:1.3rem;">${Math.round(todaysLiftVolume).toLocaleString()}<span class="muted" style="font-size:0.72rem;"> lb</span></div>
+      </div>
+      <div class="stat-card-sm">
         <h3>Carbs</h3>
         <div class="stat-num" style="font-size:1.3rem;">${round(totals.carbs_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.carbs_g)}g</span></div>
+      </div>
+      <div class="stat-card-sm">
+        <h3>Current Streak</h3>
+        <div class="stat-num" style="font-size:1.3rem;">${trainingStreak}<span class="muted" style="font-size:0.72rem;"> day${trainingStreak === 1 ? '' : 's'} training</span></div>
       </div>
       <div class="stat-card-sm">
         <h3>Fat</h3>
@@ -2284,6 +2327,9 @@ function renderDashboard() {
       </div>
     </div>` : ''}
   `;
+
+  const spikeDismiss = $('#spikeDismiss');
+  if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderDashboard(); });
 
   $('#shareRecapBtn').addEventListener('click', async () => {
     const btn = $('#shareRecapBtn');
@@ -3232,7 +3278,7 @@ function renderProfile() {
             <option value="very_active" ${p.activity_level === 'very_active' ? 'selected' : ''}>Very Active (2x/day training)</option>
           </select>
         </div>
-        <div class="field"><label>Target Weight (lb)</label><input class="input mono" id="calc_goal_weight" type="number" placeholder="e.g. 185"></div>
+        <div class="field"><label>Target Weight (lb) <span class="muted">(optional)</span></label><input class="input mono" id="calc_goal_weight" type="number" placeholder="Leave blank to maintain current weight"></div>
       </div>
       <div class="field">
         <label>Target Date <span class="muted">(optional)</span></label>
@@ -3338,12 +3384,16 @@ function renderProfile() {
     const heightIn = Number($('#calc_height_in').value) || 0;
     const totalHeightIn = heightFt * 12 + heightIn;
     const weightLb = Number($('#calc_weight').value);
-    const targetWeightLb = Number($('#calc_goal_weight').value);
+    // Target weight only matters for deriving a pace from a target date — a
+    // maintenance estimate needs no target at all, so it's no longer forced.
+    // Defaulting to current weight makes weightDiffLb 0 if someone leaves it
+    // blank, which is exactly "no change" for the pace math below.
+    const targetWeightLb = Number($('#calc_goal_weight').value) || weightLb;
     const targetDateStr = $('#calc_target_date').value;
     const activity = $('#calc_activity').value;
 
-    if (!age || totalHeightIn <= 0 || !weightLb || !targetWeightLb) {
-      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Fill in age, height, weight, and target weight first.</p>`;
+    if (!age || totalHeightIn <= 0 || !weightLb) {
+      $('#calc_result').innerHTML = `<p class="muted" style="color:var(--danger);">Fill in age, height, and weight first.</p>`;
       return;
     }
 
@@ -3727,14 +3777,14 @@ function wireMuscleMapEvents(panel) {
   $$('[data-mm-window]', panel).forEach((btn) => btn.addEventListener('click', () => {
     muscleMapWindow = btn.dataset.mmWindow === 'all' ? null : Number(btn.dataset.mmWindow);
     muscleMapSelectedRegion = null;
-    renderTrainingDashboard();
+    renderLiftsTab();
   }));
   $$('.body-map-region', panel).forEach((el) => el.addEventListener('click', () => {
     muscleMapSelectedRegion = el.dataset.region;
-    renderTrainingDashboard();
+    renderLiftsTab();
   }));
   const closeBtn = $('#mmCloseRegion', panel);
-  if (closeBtn) closeBtn.addEventListener('click', () => { muscleMapSelectedRegion = null; renderTrainingDashboard(); });
+  if (closeBtn) closeBtn.addEventListener('click', () => { muscleMapSelectedRegion = null; renderLiftsTab(); });
 }
 
 // Epley formula estimated 1-rep max
@@ -4308,9 +4358,78 @@ function renderLiftLog(panel) {
         </div>`).join('');
       })()}
     </div>` : ''}
+
+    ${todaysFocusHtml()}
+    ${muscleMapHtml(lifts)}
+
+    <div class="stat-grid-2">
+      <div class="stat-card-sm">
+        <h3>Bodyweight</h3>
+        <div class="stat-num">${latestBodyweightEntry(state.weightLog) ? round(latestBodyweightEntry(state.weightLog).weight_lb, 1) : '—'} <span class="muted small">lb</span></div>
+        <div class="muted small">${latestBodyweightEntry(state.weightLog) ? latestBodyweightEntry(state.weightLog).logged_date : 'no entries yet'}</div>
+      </div>
+      <div class="stat-card-sm">
+        <h3>Lifts Logged</h3>
+        <div class="stat-num">${lifts.length}</div>
+        <div class="muted small">${Object.keys(prs).length} exercises tracked</div>
+      </div>
+      <div class="stat-card-sm">
+        <h3>Career Volume</h3>
+        <div class="stat-num">${Math.round(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)).toLocaleString()} <span class="muted small">lb</span></div>
+        ${volumeFunFact(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)) ? `<div class="muted small" style="color:var(--accent);">${esc(volumeFunFact(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)))}</div>` : ''}
+      </div>
+    </div>
+
+    ${(() => {
+      const prList = Object.values(prs).sort((a, b) => b.date.localeCompare(a.date));
+      if (!prList.length) return '';
+      return `
+    <div>
+      <h3 style="margin:0 0 0.5rem;">Personal records</h3>
+      <div style="display:flex;gap:0.75rem;overflow-x:auto;padding-bottom:0.4rem;">
+        ${prList.map((pr) => {
+          const history = lifts.filter((l) => l.exercise === pr.exercise).sort((a, b) => a.date.localeCompare(b.date));
+          return `
+          <div class="card" style="min-width:150px;flex-shrink:0;margin-bottom:0;cursor:pointer;" data-pr-open="${esc(pr.exercise)}">
+            <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin-bottom:0.25rem;">${esc(pr.exercise)}</div>
+            <div class="stat-num" style="font-size:1.2rem;">${pr.weight} <span class="muted small">lb</span></div>
+            <div class="muted small">${pr.date}</div>
+            ${history.length > 1 ? `<div style="margin-top:0.35rem;">${miniLineSvg(history.map((l) => l.weight), 130, 32)}</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+    })()}
+    ${(() => {
+      const recent = [...lifts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+      if (!recent.length) return '';
+      return `
+    <div>
+      <h3 style="margin:0 0 0.5rem;">Recent sessions</h3>
+      <div class="card" style="padding:0;">
+        ${recent.map((l) => `
+          <div class="log-row">
+            <span>${esc(l.exercise)}</span>
+            <span class="mono muted">${l.weight}lb · ${repsDisplay(l)} · ${l.date}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+    })()}
+    ${lifts.length === 0 ? `
+    <div class="card">
+      <p class="muted" style="text-align:center;">No lifts logged yet — log your first one above to start tracking PRs, volume, and your muscle map.</p>
+    </div>` : ''}
   `;
 
   renderLiftExerciseField(panel, allExerciseOptions);
+  wireMuscleMapEvents(panel);
+  wireSplitEvents(panel);
+  $$('[data-pr-open]', panel).forEach((card) => card.addEventListener('click', () => {
+    liftsSelectedExercise = card.dataset.prOpen;
+    liftHistoryEditingId = null;
+    goalCardEditing = false;
+    renderLiftsTab();
+  }));
   const mgSel = $('#lift_muscleGroup');
   if (mgSel) mgSel.addEventListener('change', (e) => { liftForm.muscleGroup = e.target.value; });
   const brSel = $('#lift_bodyRegion');
@@ -4654,7 +4773,7 @@ function wireSplitEvents(panel) {
         splitStartDate = localDateStr();
       }
     }
-    renderTrainingDashboard();
+    renderLiftsTab();
   });
 
   $$('[data-split-preset]', panel).forEach((btn) => btn.addEventListener('click', () => {
@@ -4665,7 +4784,7 @@ function wireSplitEvents(panel) {
     } else {
       splitCustomDays = JSON.parse(JSON.stringify(SPLIT_PRESETS.find((p) => p.name === name).days));
     }
-    renderTrainingDashboard();
+    renderLiftsTab();
   }));
 
   const startDateInput = $('#splitStartDate', panel);
@@ -4679,16 +4798,16 @@ function wireSplitEvents(panel) {
     const day = splitCustomDays[Number(i)];
     const idx = day.muscle_groups.indexOf(mg);
     if (idx >= 0) day.muscle_groups.splice(idx, 1); else day.muscle_groups.push(mg);
-    renderTrainingDashboard();
+    renderLiftsTab();
   }));
   $$('[data-split-day-remove]', panel).forEach((btn) => btn.addEventListener('click', () => {
     splitCustomDays.splice(Number(btn.dataset.splitDayRemove), 1);
-    renderTrainingDashboard();
+    renderLiftsTab();
   }));
   const addDayBtn = $('#splitDayAddBtn', panel);
   if (addDayBtn) addDayBtn.addEventListener('click', () => {
     splitCustomDays.push({ label: `Day ${splitCustomDays.length + 1}`, muscle_groups: [] });
-    renderTrainingDashboard();
+    renderLiftsTab();
   });
 
   const saveBtn = $('#splitSaveBtn', panel);
@@ -4715,98 +4834,6 @@ function wireSplitEvents(panel) {
     await loadTrainingSplit();
     renderAll();
   });
-}
-
-// ── Training Dashboard ──────────────────────────────────────────────
-function renderTrainingDashboard() {
-  const panel = $('#panel-training-dashboard');
-  if (!panel) return;
-  const lifts = state.lifts;
-  const prs = computeLiftPRs(lifts);
-  const prList = Object.values(prs).sort((a, b) => b.date.localeCompare(a.date));
-  const recent = [...lifts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-  const careerVolume = lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
-  const funFact = volumeFunFact(careerVolume);
-  const latestBW = latestBodyweightEntry(state.weightLog);
-  const streak = computeTrainingStreak(lifts);
-  const volumeSpike = computeVolumeSpike(lifts, getWeekStart(localDateStr()));
-  const showSpikeWarning = volumeSpike && volumeSpike.weekStart !== dismissedSpikeWeek;
-
-  panel.innerHTML = `
-    ${todaysFocusHtml()}
-    ${showSpikeWarning ? `
-    <div class="card pr-banner">
-      <div class="small">⚠️ This week's volume is <strong style="color:var(--accent);">${volumeSpike.pctAbove}%</strong> above your recent 4-week average — consider whether that's intentional, or if you should ease off to avoid overuse injury.</div>
-      <button class="btn btn-sm btn-ghost" id="spikeDismiss">✕</button>
-    </div>` : ''}
-    <div class="stat-grid-2">
-      <div class="stat-card-sm">
-        <h3>Current Streak</h3>
-        <div class="stat-num">${streak} <span class="muted small">day${streak === 1 ? '' : 's'}</span></div>
-      </div>
-      <div class="stat-card-sm">
-        <h3>Bodyweight</h3>
-        <div class="stat-num">${latestBW ? round(latestBW.weight_lb, 1) : '—'} <span class="muted small">lb</span></div>
-        <div class="muted small">${latestBW ? latestBW.logged_date : 'no entries yet'}</div>
-      </div>
-      <div class="stat-card-sm">
-        <h3>Lifts Logged</h3>
-        <div class="stat-num">${lifts.length}</div>
-        <div class="muted small">${Object.keys(prs).length} exercises tracked</div>
-      </div>
-      <div class="stat-card-sm">
-        <h3>Career Volume</h3>
-        <div class="stat-num">${Math.round(careerVolume).toLocaleString()} <span class="muted small">lb</span></div>
-        ${funFact ? `<div class="muted small" style="color:var(--accent);">${esc(funFact)}</div>` : ''}
-      </div>
-    </div>
-    ${muscleMapHtml(lifts)}
-    ${prList.length ? `
-    <div>
-      <h3 style="margin:0 0 0.5rem;">Personal records</h3>
-      <div style="display:flex;gap:0.75rem;overflow-x:auto;padding-bottom:0.4rem;">
-        ${prList.map((pr) => {
-          const history = lifts.filter((l) => l.exercise === pr.exercise).sort((a, b) => a.date.localeCompare(b.date));
-          return `
-          <div class="card" style="min-width:150px;flex-shrink:0;margin-bottom:0;cursor:pointer;" data-pr-open="${esc(pr.exercise)}">
-            <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin-bottom:0.25rem;">${esc(pr.exercise)}</div>
-            <div class="stat-num" style="font-size:1.2rem;">${pr.weight} <span class="muted small">lb</span></div>
-            <div class="muted small">${pr.date}</div>
-            ${history.length > 1 ? `<div style="margin-top:0.35rem;">${miniLineSvg(history.map((l) => l.weight), 130, 32)}</div>` : ''}
-          </div>`;
-        }).join('')}
-      </div>
-    </div>` : ''}
-    ${recent.length ? `
-    <div>
-      <h3 style="margin:0 0 0.5rem;">Recent sessions</h3>
-      <div class="card" style="padding:0;">
-        ${recent.map((l) => `
-          <div class="log-row">
-            <span>${esc(l.exercise)}</span>
-            <span class="mono muted">${l.weight}lb · ${repsDisplay(l)} · ${l.date}</span>
-          </div>`).join('')}
-      </div>
-    </div>` : ''}
-    ${lifts.length === 0 ? `
-    <div class="card">
-      <p class="muted" style="text-align:center;">No lifts logged yet. Head to the Lifts tab to record your first session.</p>
-    </div>` : ''}
-  `;
-
-  const spikeDismiss = $('#spikeDismiss');
-  if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderTrainingDashboard(); });
-
-  wireMuscleMapEvents(panel);
-  wireSplitEvents(panel);
-
-  $$('[data-pr-open]', panel).forEach((card) => card.addEventListener('click', () => {
-    liftsSelectedExercise = card.dataset.prOpen;
-    liftHistoryEditingId = null;
-    goalCardEditing = false;
-    setActiveTab('lifts');
-    renderLiftsTab();
-  }));
 }
 
 // ── Photos tab (progress photos, uploaded to the progress-photos bucket) ──
