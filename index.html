@@ -77,7 +77,7 @@
   }
   h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0.03em; font-weight: 500; }
   .mono { font-family: var(--font-mono); }
-  label, .tab-btn, .mode-switch-btn { text-transform: uppercase; }
+  label, .tab-btn { text-transform: uppercase; }
   a { color: var(--accent); }
   button { font-family: inherit; }
   .hidden { display: none !important; }
@@ -197,23 +197,18 @@
   .streak-pill { font-family: var(--font-mono); font-size: 0.85rem; background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 999px; padding: 0.3rem 0.8rem; }
   .avatar-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2);
-    border: 1px solid var(--accent); color: var(--accent); font-family: var(--font-display);
-    font-size: 0.85rem; letter-spacing: 0.02em; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--accent); color: var(--accent); display: flex; align-items: center; justify-content: center;
     cursor: pointer; padding: 0; flex-shrink: 0; }
+  .avatar-btn svg { width: 18px; height: 18px; display: block; }
 
-  .tab-nav { padding: 0.4rem 0.6rem; background: var(--nav-bg);
+  .tab-nav { padding: 0.5rem 0.6rem; background: var(--nav-bg);
     border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 19; }
-  .mode-switch { display: flex; gap: 0.4rem; padding-bottom: 0.4rem; margin-bottom: 0.4rem;
-    border-bottom: 1px solid var(--border); }
-  .mode-switch-btn { flex: 1; font-family: var(--font-display); letter-spacing: 0.02em; font-size: 0.78rem;
-    padding: 0.45rem 0.5rem; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border);
-    color: var(--text-dim); cursor: pointer; text-align: center; }
-  .mode-switch-btn.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
-  .tab-btn-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.15rem; }
-  .tab-btn { font-family: var(--font-display); letter-spacing: 0.01em; font-size: 0.82rem; padding: 0.5rem 0.1rem;
-    border-radius: 8px; background: transparent; border: none; color: var(--text-dim); cursor: pointer;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
-  .tab-btn.active { color: var(--accent); background: var(--surface-2); }
+  .tab-btn-row { display: flex; gap: 0.35rem; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+  .tab-btn-row::-webkit-scrollbar { display: none; }
+  .tab-btn { flex: none; font-family: var(--font-display); letter-spacing: 0.02em; text-transform: uppercase;
+    font-size: 0.72rem; padding: 0.45rem 0.85rem; border-radius: 999px; background: var(--surface-2);
+    border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; white-space: nowrap; }
+  .tab-btn.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
   .tab-btn.mode-hidden { display: none; }
 
   main.tab-panels { padding: 1.25rem; padding-bottom: calc(1.25rem + 64px + env(safe-area-inset-bottom, 0px)); max-width: 880px; margin: 0 auto; }
@@ -226,7 +221,8 @@
     padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom, 0px)); }
   .bottom-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
     background: transparent; border: none; color: var(--text-dim); cursor: pointer; padding: 0.35rem 0.2rem; }
-  .bottom-nav-icon { font-size: 1.15rem; line-height: 1; }
+  .bottom-nav-icon { display: block; line-height: 0; }
+  .bottom-nav-icon svg { display: block; width: 21px; height: 21px; }
   .bottom-nav-label { font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.04em;
     font-size: 0.65rem; }
   .bottom-nav-btn.active { color: var(--accent); }
@@ -364,14 +360,22 @@
   .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0.4rem 0.8rem;
     cursor: pointer; font-size: 0.85rem; }
   .chip:hover { border-color: var(--accent); }
-  .chip-wrap { display: inline-flex; align-items: stretch; border-radius: 999px; overflow: hidden; }
-  .chip-wrap .chip { border-radius: 999px 0 0 999px; border-right: none; }
-  .chip-del { background: var(--surface-2); border: 1px solid var(--border); border-left: none;
-    border-radius: 0 999px 999px 0; padding: 0.4rem 0.55rem; cursor: pointer; color: var(--text-dim); font-size: 0.75rem; line-height: 1; }
-  .chip-del:hover { color: var(--danger); border-color: var(--danger); }
-  .chip-confirm { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--surface-2);
-    border: 1px solid var(--danger); border-radius: 999px; padding: 0.3rem 0.3rem 0.3rem 0.8rem; font-size: 0.8rem; }
   .chip.chip-active { background: var(--accent); color: var(--nav-bg); border-color: var(--accent); font-weight: 600; }
+
+  /* ── Quick Add grid ────────────────────────────────────────────── */
+  .quick-add-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+  .quick-add-card { position: relative; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+  .quick-add-main { display: block; width: 100%; min-height: 3.4rem; background: transparent; border: none;
+    color: var(--text); padding: 0.65rem 1.9rem 0.65rem 0.8rem; text-align: left; cursor: pointer; font-size: 0.85rem; }
+  .quick-add-main .name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .quick-add-main:hover { color: var(--accent); }
+  .quick-add-del { position: absolute; top: 0.35rem; right: 0.35rem; width: 20px; height: 20px; border-radius: 50%;
+    background: transparent; border: none; color: var(--text-dim); font-size: 0.7rem; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; }
+  .quick-add-del:hover { color: var(--danger); background: var(--surface-3); }
+  .quick-add-confirm { grid-column: span 2; background: var(--surface-2); border: 1px solid var(--danger);
+    border-radius: 8px; padding: 0.7rem 0.8rem; }
+  .quick-add-confirm .row { display: flex; gap: 0.5rem; margin-top: 0.55rem; }
 
   /* ── Training splits ──────────────────────────────────────────── */
   .split-preset-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -669,19 +673,13 @@
   </div>
 
   <nav class="tab-nav" id="tabNav">
-    <div class="mode-switch">
-      <button class="mode-switch-btn active" data-mode="nutrition">🥗 Nutrition</button>
-      <button class="mode-switch-btn" data-mode="training">🏋️ Training</button>
-    </div>
     <div class="tab-btn-row">
       <button class="tab-btn active" data-tab="dashboard" data-mode="nutrition">Dashboard</button>
-      <button class="tab-btn" data-tab="log" data-mode="nutrition">Log Food</button>
       <button class="tab-btn" data-tab="history" data-mode="nutrition">History</button>
       <button class="tab-btn" data-tab="weight" data-mode="nutrition">Weight</button>
       <button class="tab-btn" data-tab="supplements" data-mode="nutrition">Supplements</button>
       <button class="tab-btn" data-tab="meals" data-mode="nutrition">Meals</button>
       <button class="tab-btn" data-tab="ask" data-mode="nutrition">Ask AI</button>
-      <button class="tab-btn" data-tab="profile" data-mode="nutrition">Profile</button>
       <button class="tab-btn mode-hidden" data-tab="training-dashboard" data-mode="training">Dashboard</button>
       <button class="tab-btn mode-hidden" data-tab="lifts" data-mode="training">Lifts</button>
       <button class="tab-btn mode-hidden" data-tab="days" data-mode="training">Days</button>
@@ -715,19 +713,19 @@
 
   <nav class="bottom-nav" id="bottomNav">
     <button class="bottom-nav-btn" data-bottom="home" aria-label="Home">
-      <span class="bottom-nav-icon">⌂</span>
+      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9"/></svg></span>
       <span class="bottom-nav-label">Home</span>
     </button>
     <button class="bottom-nav-btn" data-bottom="log" aria-label="Log">
-      <span class="bottom-nav-icon">+</span>
+      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>
       <span class="bottom-nav-label">Log</span>
     </button>
     <button class="bottom-nav-btn" data-bottom="lift" aria-label="Lift">
-      <span class="bottom-nav-icon">🏋</span>
+      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><rect x="1.5" y="9" width="3" height="6" rx="1"/><rect x="19.5" y="9" width="3" height="6" rx="1"/><rect x="6" y="7" width="2.4" height="10" rx="1"/><rect x="15.6" y="7" width="2.4" height="10" rx="1"/></svg></span>
       <span class="bottom-nav-label">Lift</span>
     </button>
     <button class="bottom-nav-btn" data-bottom="profile" aria-label="Profile">
-      <span class="bottom-nav-icon">☺</span>
+      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg></span>
       <span class="bottom-nav-label">Profile</span>
     </button>
   </nav>
@@ -1873,12 +1871,14 @@ function renderAll() {
 // TAB NAVIGATION
 // ══════════════════════════════════════════════════════════════════
 $$('.tab-btn').forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
-$$('.mode-switch-btn').forEach((btn) => btn.addEventListener('click', () => setAppMode(btn.dataset.mode)));
 
-// Bottom nav is the primary nav (Home/Log/Lift/Profile); the mode-switch +
-// tab-btn-row above it remains fully functional as secondary nav, scoped to
-// whichever primary section is active — it drives the same setAppMode()/
-// setActiveTab() calls, it's just not the first thing a thumb reaches for.
+// Bottom nav is the only primary nav (Home/Log/Lift/Profile). The tab-btn-row
+// above it is section-specific secondary nav for the destinations that don't
+// have their own bottom-nav slot (History/Weight/Supplements/Meals/Ask AI
+// under Home, Lifts/Days/Photos/Recaps/Insights under Lift) — Log and Profile
+// are single-purpose screens with nothing to sub-navigate to, so they're not
+// duplicated in this row. It still drives the same setAppMode()/setActiveTab()
+// calls the bottom nav uses.
 const BOTTOM_NAV_ACTIONS = {
   home: () => { setAppMode('nutrition'); setActiveTab('dashboard'); },
   log: () => { setAppMode('nutrition'); setActiveTab('log'); },
@@ -1897,7 +1897,6 @@ function updateBottomNav() {
 
 function setAppMode(mode) {
   state.appMode = mode;
-  $$('.mode-switch-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   $$('.tab-btn').forEach((b) => b.classList.toggle('mode-hidden', b.dataset.mode !== mode));
   setActiveTab(state.lastTabByMode[mode]);
 }
@@ -2027,11 +2026,15 @@ function weeklySummary() {
   };
 }
 
+// The avatar shows a plain profile icon rather than an initial letter — a
+// single letter like "O" reads as a "0" at this size and font, which looked
+// like an unlabeled counter badge rather than a way into Profile.
+const PROFILE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg>';
+
 function updateStreakPill() {
   const { current } = computeStreaks(state.historyLogs, state.goals.protein_g);
   $('#streakPill').textContent = `🔥 ${current} day streak`;
-  const name = state.profile?.display_name || state.user?.email || '?';
-  $('#avatarBtn').textContent = name.trim().charAt(0).toUpperCase();
+  $('#avatarBtn').innerHTML = PROFILE_ICON_SVG;
 }
 
 // ── Shareable weekly recap image ────────────────────────────────────
@@ -2265,17 +2268,19 @@ function renderDashboard() {
     ${state.favorites.length ? `
     <div class="card">
       <h3>Quick Add</h3>
-      <div class="chip-row">
+      <div class="quick-add-grid">
         ${state.favorites.slice(0, 8).map((f) => quickAddConfirmDeleteId === f.id ? `
-          <span class="chip-confirm">
-            Delete "${esc(f.food_name)}"?
-            <button class="btn btn-sm" data-qa-confirm="${f.id}" style="background:var(--danger);color:#FFFFFF;">Delete</button>
-            <button class="btn btn-sm btn-ghost" data-qa-cancel="${f.id}">Cancel</button>
-          </span>` : `
-          <span class="chip-wrap">
-            <button class="chip" data-quicklog-fav="${f.id}">${esc(f.food_name)}</button>
-            <button class="chip-del" data-qa-del="${f.id}" aria-label="Remove ${esc(f.food_name)} from Quick Add">✕</button>
-          </span>`).join('')}
+          <div class="quick-add-confirm">
+            <span class="muted">Delete "${esc(f.food_name)}"?</span>
+            <div class="row">
+              <button class="btn btn-sm" data-qa-confirm="${f.id}" style="background:var(--danger);color:#FFFFFF;">Delete</button>
+              <button class="btn btn-sm btn-ghost" data-qa-cancel="${f.id}">Cancel</button>
+            </div>
+          </div>` : `
+          <div class="quick-add-card">
+            <button class="quick-add-main" data-quicklog-fav="${f.id}"><span class="name">${esc(f.food_name)}</span></button>
+            <button class="quick-add-del" data-qa-del="${f.id}" aria-label="Remove ${esc(f.food_name)} from Quick Add">✕</button>
+          </div>`).join('')}
       </div>
     </div>` : ''}
   `;
@@ -4723,6 +4728,7 @@ function renderTrainingDashboard() {
   const careerVolume = lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
   const funFact = volumeFunFact(careerVolume);
   const latestBW = latestBodyweightEntry(state.weightLog);
+  const streak = computeTrainingStreak(lifts);
   const volumeSpike = computeVolumeSpike(lifts, getWeekStart(localDateStr()));
   const showSpikeWarning = volumeSpike && volumeSpike.weekStart !== dismissedSpikeWeek;
 
@@ -4735,6 +4741,10 @@ function renderTrainingDashboard() {
     </div>` : ''}
     <div class="stat-grid-2">
       <div class="stat-card-sm">
+        <h3>Current Streak</h3>
+        <div class="stat-num">${streak} <span class="muted small">day${streak === 1 ? '' : 's'}</span></div>
+      </div>
+      <div class="stat-card-sm">
         <h3>Bodyweight</h3>
         <div class="stat-num">${latestBW ? round(latestBW.weight_lb, 1) : '—'} <span class="muted small">lb</span></div>
         <div class="muted small">${latestBW ? latestBW.logged_date : 'no entries yet'}</div>
@@ -4744,14 +4754,13 @@ function renderTrainingDashboard() {
         <div class="stat-num">${lifts.length}</div>
         <div class="muted small">${Object.keys(prs).length} exercises tracked</div>
       </div>
+      <div class="stat-card-sm">
+        <h3>Career Volume</h3>
+        <div class="stat-num">${Math.round(careerVolume).toLocaleString()} <span class="muted small">lb</span></div>
+        ${funFact ? `<div class="muted small" style="color:var(--accent);">${esc(funFact)}</div>` : ''}
+      </div>
     </div>
     ${muscleMapHtml(lifts)}
-    ${careerVolume > 0 ? `
-    <div class="hero-stat-card">
-      <h3>Career volume moved</h3>
-      <div class="stat-num">${Math.round(careerVolume).toLocaleString()} <span class="muted small">lb, all-time</span></div>
-      ${funFact ? `<div class="small" style="color:var(--accent);margin-top:0.25rem;">${esc(funFact)}</div>` : ''}
-    </div>` : ''}
     ${prList.length ? `
     <div>
       <h3 style="margin:0 0 0.5rem;">Personal records</h3>
