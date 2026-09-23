@@ -82,7 +82,17 @@ exports.handler = withErrorReporting(async () => {
           text: "Just a friendly nudge — you haven't logged any food in Kraft today. A quick log now keeps your streak alive.\n\nTurn this off anytime: Kraft -> Profile -> Email Reminders.",
         }),
       });
-      if (emailRes.ok) sent++;
+      if (emailRes.ok) {
+        sent++;
+      } else {
+        // Previously silent — a bad API key or an unverified sending
+        // domain would fail every send here with nothing to show for it
+        // beyond a lower `sent` count. Surface the actual Resend response
+        // (rejection reason, e.g. domain not verified) so that's visible
+        // in Sentry instead of only in Resend's own dashboard.
+        const detail = await emailRes.text().catch(() => '');
+        await captureError(new Error(`Resend send failed (${emailRes.status}): ${detail}`), { function: 'send-reminder-emails', userId: user.id });
+      }
     }
 
     return { statusCode: 200, body: JSON.stringify({ checked: users.length, sent }) };

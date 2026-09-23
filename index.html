@@ -336,6 +336,13 @@
   .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0.4rem 0.8rem;
     cursor: pointer; font-size: 0.85rem; }
   .chip:hover { border-color: var(--accent); }
+  .chip-wrap { display: inline-flex; align-items: stretch; border-radius: 999px; overflow: hidden; }
+  .chip-wrap .chip { border-radius: 999px 0 0 999px; border-right: none; }
+  .chip-del { background: var(--surface-2); border: 1px solid var(--border); border-left: none;
+    border-radius: 0 999px 999px 0; padding: 0.4rem 0.55rem; cursor: pointer; color: var(--text-dim); font-size: 0.75rem; line-height: 1; }
+  .chip-del:hover { color: var(--danger); border-color: var(--danger); }
+  .chip-confirm { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--surface-2);
+    border: 1px solid var(--danger); border-radius: 999px; padding: 0.3rem 0.3rem 0.3rem 0.8rem; font-size: 0.8rem; }
 
   /* ── History: collapsible day cards ──────────────────────────── */
   .history-day { border-bottom: 1px solid var(--border); padding: 0.75rem 0; }
@@ -1972,6 +1979,8 @@ function waterPlateHtml(value, goal) {
 // ══════════════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════════════
+let quickAddConfirmDeleteId = null;
+
 function renderDashboard() {
   const totals = sumMacros(state.todayLogs);
   const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
@@ -2050,7 +2059,16 @@ function renderDashboard() {
     <div class="card">
       <h3>Quick Add</h3>
       <div class="chip-row">
-        ${state.favorites.slice(0, 8).map((f) => `<button class="chip" data-quicklog-fav="${f.id}">${esc(f.food_name)}</button>`).join('')}
+        ${state.favorites.slice(0, 8).map((f) => quickAddConfirmDeleteId === f.id ? `
+          <span class="chip-confirm">
+            Delete "${esc(f.food_name)}"?
+            <button class="btn btn-sm" data-qa-confirm="${f.id}" style="background:var(--danger);color:#FFFFFF;">Delete</button>
+            <button class="btn btn-sm btn-ghost" data-qa-cancel="${f.id}">Cancel</button>
+          </span>` : `
+          <span class="chip-wrap">
+            <button class="chip" data-quicklog-fav="${f.id}">${esc(f.food_name)}</button>
+            <button class="chip-del" data-qa-del="${f.id}" aria-label="Remove ${esc(f.food_name)} from Quick Add">✕</button>
+          </span>`).join('')}
       </div>
     </div>` : ''}
   `;
@@ -2068,6 +2086,25 @@ function renderDashboard() {
   $$('[data-quicklog-fav]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const fav = state.favorites.find((f) => f.id === btn.dataset.quicklogFav);
     if (fav) logFood({ food_name: fav.food_name, calories: fav.calories, protein_g: fav.protein_g, carbs_g: fav.carbs_g, fat_g: fav.fat_g, source: 'favorite' });
+  }));
+  $$('[data-qa-del]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    quickAddConfirmDeleteId = btn.dataset.qaDel;
+    renderDashboard();
+  }));
+  $$('[data-qa-cancel]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    quickAddConfirmDeleteId = null;
+    renderDashboard();
+  }));
+  $$('[data-qa-confirm]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    const id = btn.dataset.qaConfirm;
+    // Deletes the saved Quick Add template only — food_logs rows from past
+    // uses of it are independent rows with their own copied macro values,
+    // not a reference to this favorites row, so they're untouched.
+    const { error } = await supabase.from('favorites').delete().eq('id', id);
+    quickAddConfirmDeleteId = null;
+    if (error) return toast('Could not delete: ' + error.message);
+    await loadFavorites();
+    renderAll();
   }));
 }
 

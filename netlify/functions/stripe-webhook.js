@@ -189,10 +189,21 @@ exports.handler = withErrorReporting(async (event) => {
   });
 
   if (!upsertRes.ok) {
-    const detail = await upsertRes.text();
-    await captureError(new Error('Could not upsert subscription: ' + detail), { function: 'stripe-webhook', userId, eventType: stripeEvent.type });
+    const detailText = await upsertRes.text();
+    let detail;
+    try { detail = JSON.parse(detailText); } catch { detail = null; }
+    // Postgres error 23503 = foreign key violation. Here that means
+    // auth.users no longer has this user_id — the account was deleted
+    // (delete-account.js cancels the Stripe side when it can, but this
+    // covers a subscription that predates that fix, or any other way the
+    // user row ended up gone). Nothing to record, and there's no future
+    // delivery where this would succeed, so ack instead of retrying forever.
+    if (detail?.code === '23503') {
+      return jsonResponse(200, { received: true, skipped: 'user no longer exists' });
+    }
+    await captureError(new Error('Could not upsert subscription: ' + detailText), { function: 'stripe-webhook', userId, eventType: stripeEvent.type });
     // Non-2xx tells Stripe to retry this delivery later.
-    return jsonResponse(500, { error: 'Could not record subscription update.', detail });
+    return jsonResponse(500, { error: 'Could not record subscription update.', detail: detailText });
   }
 
   await rewardReferrerIfConverted(stripeEvent, subscription, userId);
