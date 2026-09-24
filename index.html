@@ -2558,9 +2558,9 @@ function renderDashboard() {
           </div>`).join('')}
     </div>
 
-    ${state.favorites.length ? `
     <div class="card">
       <h3>Quick Add</h3>
+      ${state.favorites.length ? `
       <div class="quick-add-grid">
         ${state.favorites.slice(0, 8).map((f) => quickAddConfirmDeleteId === f.id ? `
           <div class="quick-add-confirm">
@@ -2574,8 +2574,8 @@ function renderDashboard() {
             <button class="quick-add-main" data-quicklog-fav="${f.id}"><span class="name">${esc(f.food_name)}</span></button>
             <button class="quick-add-del" data-qa-del="${f.id}" aria-label="Remove ${esc(f.food_name)} from Quick Add">✕</button>
           </div>`).join('')}
-      </div>
-    </div>` : ''}
+      </div>` : `<p class="muted small">Log a meal, then tap "Save as Favorite" to see it here for one-tap logging next time.</p>`}
+    </div>
   `;
 
   const spikeDismiss = $('#spikeDismiss');
