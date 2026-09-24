@@ -123,6 +123,11 @@
   .field { margin-bottom: 0.9rem; }
   .row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
   .row > * { flex: 1; min-width: 120px; }
+  /* For a tight cluster of buttons/inputs that should size to their own
+     content (e.g. Log/delete actions beside a .log-row name) — .row's
+     "> *" rule forces every child to a 120px minimum, which blows up a
+     two-icon-button pair to 240px+ and starves the sibling text column. */
+  .btn-group { display: flex; align-items: center; gap: 0.4rem; flex: none; min-width: 0; }
 
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; }
   .card h3 { margin: 0 0 0.75rem; font-size: 1.3rem; }
@@ -370,7 +375,12 @@
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
   .log-row:last-child { border-bottom: none; }
-  .log-row .name { font-weight: 600; }
+  /* The text block (name + macros) needs to actually claim the row's
+     remaining space instead of shrinking to its narrowest word — without
+     this, a long name next to a fixed-width button pair wraps one word
+     per line down a squeezed column instead of filling the row. */
+  .log-row > div:first-child { flex: 1; min-width: 0; }
+  .log-row .name { font-weight: 600; overflow-wrap: break-word; }
   .log-row .macros { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim); }
   .chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0.4rem 0.8rem;
@@ -427,6 +437,7 @@
   .autocomplete-item .macros { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
   .autocomplete-hint { padding: 0.4rem 0.8rem; font-size: 0.72rem; color: var(--text-dim); border-bottom: 1px solid var(--border); }
 
+  .table-scroll { overflow-x: auto; margin: 0 -0.1rem; }
   table.plain { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   table.plain th, table.plain td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
   table.plain th { color: var(--text-dim); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -2541,7 +2552,7 @@ function renderDashboard() {
           <button class="chip" data-water="16">+16oz</button>
           <button class="chip" data-water="24">+24oz</button>
         </div>
-        <div class="row" style="flex:none;gap:0.4rem;align-items:center;">
+        <div class="btn-group">
           <input class="input mono" id="water_custom_oz" type="number" min="1" placeholder="oz" style="width:64px;padding:0.4rem 0.5rem;">
           <button class="btn btn-sm" id="water_custom_log">Log</button>
         </div>
@@ -2666,7 +2677,6 @@ async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source,
     user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source, photo_path: photo_path || null,
   });
   if (error) return toast('Could not log food: ' + error.message);
-  toast(`Logged: ${food_name}`);
   await loadHistory();
   renderAll();
 }
@@ -2674,7 +2684,6 @@ async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source,
 async function logWater(amountOz) {
   const { error } = await supabase.from('water_logs').insert({ user_id: state.user.id, amount_oz: amountOz });
   if (error) return toast('Could not log water: ' + error.message);
-  toast(`+${amountOz}oz water logged`);
   await loadWaterLog();
   renderAll();
 }
@@ -2727,7 +2736,7 @@ function renderCommonFoodsList() {
         return `
         <div class="log-row">
           <div><div class="name">${esc(f.name)}</div><div class="macros">${f.calories} kcal · P${f.protein_g} C${f.carbs_g} F${f.fat_g}</div></div>
-          <div class="row" style="flex:none;gap:0.4rem;align-items:center;">
+          <div class="btn-group">
             ${inputHtml}
             <button class="btn btn-sm btn-ghost" data-common-fav="${i}" title="Save as favorite">☆</button>
             <button class="btn btn-sm btn-primary" data-common="${i}">Log</button>
@@ -3041,7 +3050,7 @@ function renderLogSubPanel() {
           state.favorites.map((f) => `
             <div class="log-row">
               <div><div class="name">${esc(f.food_name)}</div><div class="macros">${round(f.calories)} kcal · P${round(f.protein_g)} C${round(f.carbs_g)} F${round(f.fat_g)}</div></div>
-              <div class="row" style="flex:none;gap:0.4rem;">
+              <div class="btn-group">
                 <button class="btn btn-sm btn-primary" data-fav-log="${f.id}">Log</button>
                 <button class="btn btn-sm btn-ghost" data-fav-del="${f.id}">✕</button>
               </div>
@@ -3355,18 +3364,20 @@ function renderMeals() {
     <div class="card">
       <h3>Budget-Optimized Protein</h3>
       <p class="muted">Sorted by cost per gram of protein — best value first. Prices are rough grocery approximations, not live pricing.</p>
-      <table class="plain">
-        <thead><tr><th>Food</th><th>Cost</th><th>Protein</th><th>Calories</th><th>$ / g protein</th></tr></thead>
-        <tbody>
-          ${ranked.map((m) => `<tr>
-            <td>${esc(m.name)}</td>
-            <td class="mono">$${m.cost.toFixed(2)}</td>
-            <td class="mono">${m.protein_g}g</td>
-            <td class="mono">${m.calories}</td>
-            <td class="mono">$${m.costPerGProtein.toFixed(3)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="plain">
+          <thead><tr><th>Food</th><th>Cost</th><th>Protein</th><th>Calories</th><th>$ / g protein</th></tr></thead>
+          <tbody>
+            ${ranked.map((m) => `<tr>
+              <td>${esc(m.name)}</td>
+              <td class="mono">$${m.cost.toFixed(2)}</td>
+              <td class="mono">${m.protein_g}g</td>
+              <td class="mono">${m.calories}</td>
+              <td class="mono">$${m.costPerGProtein.toFixed(3)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 }
@@ -3621,7 +3632,7 @@ function renderProfile() {
         ${state.incomingFriendRequests.map((r) => `
           <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
             <span>${esc(r.displayName)}</span>
-            <div class="row" style="gap:0.4rem;flex:none;">
+            <div class="btn-group">
               <button class="btn btn-sm btn-primary" data-friend-accept="${r.id}">Accept</button>
               <button class="btn btn-sm btn-ghost" data-friend-decline="${r.id}">Decline</button>
             </div>
@@ -3633,7 +3644,7 @@ function renderProfile() {
         ${state.leaderboard.filter((e) => !e.isSelf).map((e) => `
           <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
             <span>${esc(e.displayName)}</span>
-            <div class="row" style="gap:0.5rem;flex:none;align-items:center;">
+            <div class="btn-group">
               <span class="mono muted small">${e.streak}-day streak</span>
               <button class="btn btn-sm btn-ghost" data-friend-remove="${esc(friendshipIdFor(e.userId) || '')}" aria-label="Remove ${esc(e.displayName)}">✕</button>
             </div>
@@ -4543,7 +4554,7 @@ function liftHistoryRowHtml(lift, isLast) {
   if (liftHistoryEditingId !== lift.id) {
     return `<div class="log-row"${isLast ? ' style="border-bottom:none;"' : ''}>
       <span class="muted">${fmtLiftDate(lift.date)}</span>
-      <div class="row" style="align-items:center;gap:0.6rem;flex:none;">
+      <div class="btn-group">
         <span class="mono">${lift.weight}lb · ${repsDisplay(lift)}</span>
         <button class="btn btn-sm btn-ghost" data-lift-edit="${lift.id}">Edit</button>
       </div>
@@ -5573,7 +5584,7 @@ function renderDaysTab() {
               <div class="name">${fmtLiftDate(d.date)}</div>
               <div class="muted small">${d.exerciseCount > 0 ? `${d.exerciseCount} exercise${d.exerciseCount === 1 ? '' : 's'}` : 'no lifts'}${d.bodyweight ? ` · ${d.bodyweight.weight_lb}lb bodyweight` : ''}${d.photos.length ? ` · ${d.photos.length} photo${d.photos.length === 1 ? '' : 's'}` : ''}</div>
             </div>
-            <div class="row" style="align-items:center;flex:none;gap:0.6rem;">
+            <div class="btn-group">
               ${d.volume > 0 ? `<span class="mono" style="color:var(--accent);">${d.volume.toLocaleString()} vol</span>` : ''}
               <span class="muted">${isOpen ? '▲' : '▼'}</span>
             </div>
