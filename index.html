@@ -5515,25 +5515,26 @@ function renderLiftExerciseField(panel, allExerciseOptions) {
   const wrap = $('#liftExerciseWrap', panel);
   if (!wrap) return;
 
-  const draw = () => {
-    wrap.innerHTML = `
-      <label>Exercise</label>
-      <input class="input" id="lift_exercise" value="${esc(liftForm.exercise)}" placeholder="Search or type a new exercise…" autocomplete="off">
-      ${liftAutocompleteOpen ? autocompleteDropdownHtml(liftForm.exercise, allExerciseOptions) : ''}
-    `;
-    const input = $('#lift_exercise', wrap);
-    input.addEventListener('focus', () => { liftAutocompleteOpen = true; draw(); focusEnd(input); });
-    input.addEventListener('input', (e) => {
-      liftForm.exercise = e.target.value;
-      liftAutocompleteOpen = true;
-      draw();
-    });
-    input.addEventListener('blur', () => {
-      // delayed so a dropdown item's mousedown (which fires first) can
-      // still register a selection before the dropdown disappears
-      setTimeout(() => { liftAutocompleteOpen = false; renderLiftsTab(); }, 150);
-    });
-    $$('[data-ac-select]', wrap).forEach((item) => item.addEventListener('mousedown', (e) => {
+  // The <input> is created exactly once here and never touched again while
+  // the user types — only the dropdown div below it re-renders per
+  // keystroke. An earlier version rebuilt the whole wrap (input included)
+  // on every keystroke; destroying the focused node like that has no way
+  // to carry focus over to its replacement, so typing past the first
+  // character silently went nowhere. (A later fix that explicitly called
+  // .focus() on the new node made it worse — that synchronously re-fires
+  // this same 'focus' listener, which redraws and calls .focus() again,
+  // infinitely.) Leaving the input itself alone sidesteps both problems.
+  wrap.innerHTML = `
+    <label>Exercise</label>
+    <input class="input" id="lift_exercise" value="${esc(liftForm.exercise)}" placeholder="Search or type a new exercise…" autocomplete="off">
+    <div id="liftAutocompleteDropdown"></div>
+  `;
+  const input = $('#lift_exercise', wrap);
+  const dropdownEl = $('#liftAutocompleteDropdown', wrap);
+
+  const drawDropdown = () => {
+    dropdownEl.innerHTML = liftAutocompleteOpen ? autocompleteDropdownHtml(liftForm.exercise, allExerciseOptions) : '';
+    $$('[data-ac-select]', dropdownEl).forEach((item) => item.addEventListener('mousedown', (e) => {
       e.preventDefault(); // keeps focus on the input instead of the item, avoiding the blur race entirely
       const val = item.dataset.acSelect;
       liftForm.exercise = val;
@@ -5544,9 +5545,21 @@ function renderLiftExerciseField(panel, allExerciseOptions) {
       renderLiftsTab();
     }));
   };
-  const focusEnd = (input) => { const v = input.value; input.setSelectionRange(v.length, v.length); };
-  draw();
-  if (liftAutocompleteOpen) $('#lift_exercise', wrap).focus();
+
+  input.addEventListener('focus', () => { liftAutocompleteOpen = true; drawDropdown(); });
+  input.addEventListener('input', (e) => {
+    liftForm.exercise = e.target.value;
+    liftAutocompleteOpen = true;
+    drawDropdown();
+  });
+  input.addEventListener('blur', () => {
+    // delayed so a dropdown item's mousedown (which fires first) can
+    // still register a selection before the dropdown disappears
+    setTimeout(() => { liftAutocompleteOpen = false; renderLiftsTab(); }, 150);
+  });
+
+  drawDropdown();
+  if (liftAutocompleteOpen) input.focus();
 }
 
 // ── End Workout flow + post-session AI analysis ─────────────────────
