@@ -282,6 +282,13 @@
   .goal-progress-bar { background: var(--surface-2); border-radius: 6px; height: 10px; overflow: hidden; margin-bottom: 0.4rem; }
   .goal-progress-fill { height: 100%; }
   .pr-banner { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; border-color: var(--accent); }
+  .tips-card { padding: 1rem 1.25rem; }
+  .tip-row { padding: 0.5rem 0; }
+  .tip-row + .tip-row { border-top: 1px solid var(--border); margin-top: 0.25rem; padding-top: 0.75rem; }
+  .tip-sentence { font-size: 0.92rem; line-height: 1.4; }
+  .btn-link { background: none; border: none; padding: 0; color: var(--accent); font-size: 0.78rem;
+    font-weight: 600; cursor: pointer; text-transform: uppercase; letter-spacing: 0.02em; }
+  .btn-link:hover { text-decoration: underline; }
   .checkbox-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); font-weight: normal; margin-bottom: 0.9rem; }
   .checkbox-row input { width: auto; }
   .stat-num { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 500; }
@@ -2528,6 +2535,207 @@ function miniPlateHtml(label, value, goal, color) {
 // ══════════════════════════════════════════════════════════════════
 let quickAddConfirmDeleteId = null;
 
+// ── Science-based tips (Layer 1: rules-based, not AI) ───────────────
+// A fixed library of trigger conditions + pre-written copy, evaluated
+// against already-loaded state — no per-request AI cost, no per-view
+// generation. Each tip is one short sentence with an optional "learn more"
+// expansion. Goal-adaptive nudges extend this same list with triggers tied
+// to a changed goal, rather than being a separate system.
+let dismissedTipIds = new Set();
+let expandedTipIds = new Set();
+
+// Walks backward day-by-day from fromDay (inclusive), counting consecutive
+// days present in byDay where predicate(dayItems) holds, stopping at the
+// first day with no logged data or that fails the predicate. Shared shape
+// for "N days under protein target," "N days under hydration target," etc.
+function walkConsecutiveDays(byDay, fromDay, predicate) {
+  let count = 0;
+  const cursor = new Date(`${fromDay}T00:00:00`);
+  while (true) {
+    const dayStr = localDateStr(cursor);
+    const dayItems = byDay.get(dayStr);
+    if (!dayItems || dayItems.length === 0) break;
+    if (!predicate(dayItems)) break;
+    count++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return count;
+}
+
+const TIP_LIBRARY = [
+  {
+    id: 'plateau',
+    category: 'training',
+    check(ctx) {
+      const byExercise = {};
+      for (const l of ctx.lifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
+      const plateaued = Object.keys(byExercise).filter((ex) => byExercise[ex].length >= 4 && detectPlateau(byExercise[ex]));
+      if (!plateaued.length) return null;
+      const exercise = plateaued[0];
+      return {
+        sentence: `${exercise} hasn't beaten its best estimated 1-rep max in your last 3 sessions — try cutting volume or intensity by 40–50% for a week instead of pushing harder.`,
+        learnMore: `A plateau is frequently a sign of accumulated fatigue, not a genuine strength ceiling. A short deload — lighter loads or fewer sets for 5–7 days — lets you recover from that fatigue so the next block of training actually converts into visible progress, rather than grinding through more of the same stimulus that produced the plateau.`,
+      };
+    },
+  },
+  {
+    id: 'stagnant_weight',
+    category: 'training',
+    check(ctx) {
+      const byExercise = {};
+      for (const l of ctx.lifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
+      for (const exercise of Object.keys(byExercise)) {
+        const sorted = [...byExercise[exercise]].sort((a, b) => new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`));
+        if (sorted.length < 3) continue;
+        const last3 = sorted.slice(-3);
+        const weight = last3[0].weight;
+        if (last3.every((l) => l.weight === weight)) {
+          return {
+            sentence: `You've logged ${weight}lb on ${exercise} for 3 sessions straight — try adding 5lb next time you're fresh.`,
+            learnMore: `Progressive overload — a small, steady increase in weight, reps, or volume over time — is the core driver of ongoing strength and muscle gains. Repeating the exact same weight for several sessions in a row usually means there's room to push a little further, even if it's just a few pounds or one extra rep.`,
+          };
+        }
+      }
+      return null;
+    },
+  },
+  {
+    id: 'training_gap',
+    category: 'training',
+    check(ctx) {
+      if (ctx.lifts.length < 5) return null;
+      const lastDate = ctx.lifts.reduce((max, l) => (l.date > max ? l.date : max), ctx.lifts[0].date);
+      const daysSince = Math.round((new Date(`${ctx.today}T00:00:00`) - new Date(`${lastDate}T00:00:00`)) / 86400000);
+      if (daysSince < 5) return null;
+      return {
+        sentence: `It's been ${daysSince} days since your last logged session — consistency compounds more than any single workout.`,
+        learnMore: `Strength and muscle adaptations come from repeated stimulus over weeks and months, not any individual session. Getting back into training sooner matters more than trying to "make up for" the time off in one hard workout — that usually just adds unnecessary soreness and injury risk.`,
+      };
+    },
+  },
+  {
+    id: 'protein_under_streak',
+    category: 'nutrition',
+    check(ctx) {
+      const byDay = groupByDay(ctx.historyLogs);
+      const n = walkConsecutiveDays(byDay, ctx.yesterday, (dayLogs) => sumMacros(dayLogs).protein_g < ctx.goals.protein_g);
+      if (n < 3) return null;
+      return {
+        sentence: `You've been under your protein target for ${n} days straight — protein's usually the easiest lever to move first.`,
+        learnMore: `Protein supports muscle repair and growth and tends to be the macro people fall short on by default, since it requires more deliberate food choices than calories or carbs. Closing even part of the gap — an extra shake or a bigger portion of meat/dairy at one meal — often has an outsized effect on recovery and training results.`,
+      };
+    },
+  },
+  {
+    id: 'protein_hit_streak',
+    category: 'nutrition',
+    check(ctx) {
+      const { current } = computeStreaks(ctx.historyLogs, ctx.goals.protein_g);
+      if (current < 5) return null;
+      return {
+        sentence: `${current}-day protein streak — that week-over-week consistency is what actually drives results, more than any single "perfect" day.`,
+        learnMore: `Body composition and strength changes are driven by averages over weeks, not any individual day. A long streak of hitting target — even with normal day-to-day variation in food choices — is a stronger predictor of progress than occasional exact-perfect days surrounded by big misses.`,
+      };
+    },
+  },
+  {
+    id: 'hydration_under_streak',
+    category: 'recovery',
+    check(ctx) {
+      const byDay = groupByDay(ctx.waterLog);
+      const goal = ctx.goals.water_oz || 64;
+      const n = walkConsecutiveDays(byDay, ctx.yesterday, (dayItems) => dayItems.reduce((sum, w) => sum + (Number(w.amount_oz) || 0), 0) < goal);
+      if (n < 3) return null;
+      return {
+        sentence: `Water intake's been under target for ${n} days — even mild dehydration can blunt strength output and focus during training.`,
+        learnMore: `Losing as little as 2% of body weight in fluid has been shown to reduce strength, power, and endurance performance, along with impairing focus and reaction time. Hydration is one of the cheapest, lowest-effort levers available for training quality.`,
+      };
+    },
+  },
+  {
+    id: 'logging_gap',
+    category: 'consistency',
+    check(ctx) {
+      if (ctx.historyLogs.length < 5) return null; // don't nag brand-new users
+      const byDay = groupByDay(ctx.historyLogs);
+      if (byDay.has(ctx.today) || byDay.has(ctx.yesterday)) return null;
+      const days = Array.from(byDay.keys()).sort();
+      const lastLogged = days[days.length - 1];
+      if (!lastLogged) return null;
+      const daysSince = Math.round((new Date(`${ctx.today}T00:00:00`) - new Date(`${lastLogged}T00:00:00`)) / 86400000);
+      if (daysSince < 2) return null;
+      return {
+        sentence: `Nothing logged the last ${daysSince} days — a quick log today keeps your trends accurate, even if it's not a "perfect" day.`,
+        learnMore: `Gaps in logging don't just lose that day's data — they make streaks, weekly averages, and trend charts less reliable for every day around the gap too. Logging something imperfect is almost always more useful than logging nothing.`,
+      };
+    },
+  },
+  {
+    id: 'bodyweight_stalled',
+    category: 'nutrition',
+    check(ctx) {
+      const goalMode = ctx.goals.goal_mode;
+      if (goalMode !== 'lose' && goalMode !== 'gain') return null;
+      const sorted = [...ctx.weightLog].sort((a, b) => new Date(a.logged_date) - new Date(b.logged_date));
+      if (sorted.length < 3) return null;
+      const last3 = sorted.slice(-3);
+      const spanDays = Math.round((new Date(last3[2].logged_date) - new Date(last3[0].logged_date)) / 86400000);
+      if (spanDays < 10) return null;
+      const weights = last3.map((w) => w.weight_lb);
+      const flat = Math.max(...weights) - Math.min(...weights) <= 0.5;
+      if (!flat) return null;
+      const goalLabel = goalMode === 'lose' ? 'lose weight' : 'gain weight';
+      return {
+        sentence: `Your weight's held steady over your last few check-ins even though you're set to ${goalLabel} — worth double-checking your calorie target still matches that goal.`,
+        learnMore: `Metabolism and daily calorie burn shift as body weight changes and as logging accuracy drifts over time, so a target calculated weeks ago can quietly stop matching what a "cut" or "bulk" actually requires. Re-running the Goal Calculator with your current weight is a quick way to check whether the target's still right.`,
+      };
+    },
+  },
+];
+
+// Runs the full library against current state, most-actionable first, and
+// caps at 3 so the dashboard stays a few short sentences, not a wall of
+// insights.
+function computeActiveTips() {
+  const today = localDateStr();
+  const yesterdayDate = new Date(`${today}T00:00:00`);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const ctx = {
+    today,
+    yesterday: localDateStr(yesterdayDate),
+    lifts: state.lifts,
+    historyLogs: state.historyLogs,
+    waterLog: state.waterLog,
+    weightLog: state.weightLog,
+    goals: state.goals,
+    profile: state.profile,
+  };
+  const active = [];
+  for (const tip of TIP_LIBRARY) {
+    if (dismissedTipIds.has(tip.id)) continue;
+    const result = tip.check(ctx);
+    if (result) active.push({ id: tip.id, category: tip.category, ...result });
+  }
+  return active.slice(0, 3);
+}
+
+function tipsHtml(tips) {
+  if (!tips.length) return '';
+  return `
+    <div class="card tips-card">
+      ${tips.map((t) => `
+        <div class="tip-row">
+          <div class="tip-sentence">💡 ${esc(t.sentence)}</div>
+          <div class="row" style="margin-top:0.35rem;gap:0.9rem;flex:none;">
+            <button class="btn-link" data-tip-learnmore="${t.id}">${expandedTipIds.has(t.id) ? 'Hide details' : 'Learn more'}</button>
+            <button class="btn-link" data-tip-dismiss="${t.id}">Dismiss</button>
+          </div>
+          ${expandedTipIds.has(t.id) ? `<p class="muted small" style="margin-top:0.5rem;">${esc(t.learnMore)}</p>` : ''}
+        </div>`).join('')}
+    </div>
+  `;
+}
+
 // Compact, read-only version of today's split focus for the combined
 // dashboard's hero row — no "change split" affordance here, since picking/
 // editing a split is setup, not a daily glance stat. The full picker lives
@@ -2574,6 +2782,7 @@ function renderDashboard() {
   const showSpikeWarning = volumeSpike && volumeSpike.weekStart !== dismissedSpikeWeek;
 
   const ws = weeklySummary();
+  const activeTips = computeActiveTips();
 
   const panel = $('#panel-dashboard');
   panel.innerHTML = `
@@ -2589,6 +2798,7 @@ function renderDashboard() {
       <div class="small">⚠️ This week's lift volume is <strong style="color:var(--accent);">${volumeSpike.pctAbove}%</strong> above your recent 4-week average — consider whether that's intentional, or if you should ease off to avoid overuse injury.</div>
       <button class="btn btn-sm btn-ghost" id="spikeDismiss">✕</button>
     </div>` : ''}
+    ${tipsHtml(activeTips)}
 
     <div class="stat-grid-2">
       <div class="stat-card-sm">
@@ -2685,6 +2895,16 @@ function renderDashboard() {
 
   const spikeDismiss = $('#spikeDismiss');
   if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderDashboard(); });
+
+  $$('[data-tip-learnmore]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const id = btn.dataset.tipLearnmore;
+    if (expandedTipIds.has(id)) expandedTipIds.delete(id); else expandedTipIds.add(id);
+    renderDashboard();
+  }));
+  $$('[data-tip-dismiss]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    dismissedTipIds.add(btn.dataset.tipDismiss);
+    renderDashboard();
+  }));
 
   $('#shareRecapBtn').addEventListener('click', async () => {
     const btn = $('#shareRecapBtn');
