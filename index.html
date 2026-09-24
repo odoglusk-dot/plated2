@@ -295,6 +295,18 @@
   .cue-list li strong { color: var(--text); }
   .cue-list li:last-child { margin-bottom: 0; }
   .glossary-row + .glossary-row { border-top: 1px solid var(--border); }
+  .achievement-banner { border-color: var(--accent); }
+  .achievement-medallion { font-size: 1.6rem; line-height: 1; flex: none; }
+  .achievement-category { margin-bottom: 1rem; }
+  .achievement-category:last-child { margin-bottom: 0; }
+  .achievement-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; }
+  .achievement-tile { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.75rem; text-align: center; }
+  .achievement-tile.unlocked { border-color: var(--accent); }
+  .achievement-tile.locked { opacity: 0.5; }
+  .achievement-tile-title { font-family: var(--font-display); font-size: 0.8rem; font-weight: 600;
+    margin-top: 0.3rem; letter-spacing: 0.01em; }
+  .achievement-tile-desc { font-size: 0.72rem; margin-top: 0.25rem; line-height: 1.35; }
   .checkbox-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); font-weight: normal; margin-bottom: 0.9rem; }
   .checkbox-row input { width: auto; }
   .stat-num { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 500; }
@@ -939,6 +951,7 @@ const state = {
   photos: [], // {id, storage_path, note, date, signedUrl} — signedUrl attached client-side after load, not a DB column
   trainingSplit: null, // {id, name, days, start_date} | null — one active split, see loadTrainingSplit()
   exercises: [], // reference data, same rows for every account — see loadExercises()
+  achievements: [], // unlocked rows: {achievement_id, unlocked_at} — see loadAchievements()
   activeTab: 'dashboard',
   aiRemaining: null,
   subscription: null,
@@ -2010,7 +2023,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadExercises()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadExercises(), loadAchievements()]);
   renderAll();
 }
 
@@ -2179,6 +2192,11 @@ async function loadExercises() {
   state.exercises = data || [];
 }
 
+async function loadAchievements() {
+  const { data } = await supabase.from('user_achievements').select('*').eq('user_id', state.user.id);
+  state.achievements = data || [];
+}
+
 async function loadReferrals() {
   const { data } = await supabase.from('referrals').select('status').eq('referrer_user_id', state.user.id);
   state.referrals = data || [];
@@ -2229,6 +2247,7 @@ function renderAll() {
   renderInsightsTab();
   updateStreakPill();
   updateBottomNav();
+  checkAndUnlockAchievements();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2797,6 +2816,350 @@ function tipsHtml(tips) {
   `;
 }
 
+// ── Achievements / milestones ───────────────────────────────────────
+// Definitions are static, same pattern as TIP_LIBRARY and the exercises
+// table — only the *unlock record* (which id, when) is persisted, in
+// user_achievements. Once earned, an achievement stays earned even if the
+// underlying data later changes (e.g. a PR-setting lift gets edited).
+const ACHIEVEMENT_CATEGORY_LABELS = { strength: 'Strength', consistency: 'Consistency', training: 'Training', nutrition: 'Nutrition', learning: 'Learning' };
+const GLOSSARY_EXPLORER_THRESHOLD = 5;
+
+function hasEverHadPR(exerciseName, lifts) {
+  const history = lifts.filter((l) => l.exercise === exerciseName)
+    .sort((a, b) => new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`));
+  if (history.length < 2) return false;
+  let runningBest = history[0].weight;
+  for (let i = 1; i < history.length; i++) {
+    if (history[i].weight > runningBest) return true;
+    runningBest = Math.max(runningBest, history[i].weight);
+  }
+  return false;
+}
+
+// Walks every calendar day from startDateStr to endDateStr (inclusive),
+// not just days that have a log entry — a gap day correctly breaks the
+// streak instead of two non-adjacent logged days being treated as
+// consecutive. Mirrors computeStreaks()'s "best" logic, generalized to any
+// predicate over a day string.
+function bestConsecutiveDayStreak(startDateStr, endDateStr, predicate) {
+  let best = 0, run = 0;
+  const cursor = new Date(`${startDateStr}T00:00:00`);
+  const end = new Date(`${endDateStr}T00:00:00`);
+  while (cursor <= end) {
+    const dayStr = localDateStr(cursor);
+    if (predicate(dayStr)) { run += 1; best = Math.max(best, run); } else { run = 0; }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return best;
+}
+
+const ACHIEVEMENT_LIBRARY = [
+  {
+    id: 'first_pr_bench', category: 'strength', title: 'First Bench Press PR',
+    description: 'Beat your own best Bench Press weight for the first time.',
+    check: (ctx) => hasEverHadPR('Bench Press', ctx.lifts),
+  },
+  {
+    id: 'first_pr_squat', category: 'strength', title: 'First Back Squat PR',
+    description: 'Beat your own best Back Squat weight for the first time.',
+    check: (ctx) => hasEverHadPR('Back Squat', ctx.lifts),
+  },
+  {
+    id: 'first_pr_deadlift', category: 'strength', title: 'First Deadlift PR',
+    description: 'Beat your own best Deadlift weight for the first time.',
+    check: (ctx) => hasEverHadPR('Deadlift', ctx.lifts),
+  },
+  {
+    id: 'bodyweight_bench', category: 'strength', title: 'Bodyweight Bench Press',
+    description: 'Bench pressed at least your own bodyweight for a rep.',
+    check(ctx) {
+      const bw = latestBodyweightEntry(ctx.weightLog);
+      if (!bw) return false;
+      const best = ctx.lifts.filter((l) => l.exercise === 'Bench Press').reduce((max, l) => Math.max(max, l.weight), 0);
+      return best >= bw.weight_lb;
+    },
+  },
+  {
+    id: 'squat_1_5x_bodyweight', category: 'strength', title: '1.5x Bodyweight Back Squat',
+    description: 'Squatted 1.5 times your own bodyweight for a rep.',
+    check(ctx) {
+      const bw = latestBodyweightEntry(ctx.weightLog);
+      if (!bw) return false;
+      const best = ctx.lifts.filter((l) => l.exercise === 'Back Squat').reduce((max, l) => Math.max(max, l.weight), 0);
+      return best >= bw.weight_lb * 1.5;
+    },
+  },
+  {
+    id: 'full_macro_week', category: 'consistency', title: 'First Full Week On Target',
+    description: 'Hit both your calorie and protein targets seven days in a row.',
+    check(ctx) {
+      if (ctx.historyLogs.length === 0) return false;
+      const byDay = groupByDay(ctx.historyLogs);
+      const dates = Array.from(byDay.keys()).sort();
+      const best = bestConsecutiveDayStreak(dates[0], localDateStr(), (day) => {
+        const logs = byDay.get(day);
+        if (!logs) return false;
+        const totals = sumMacros(logs);
+        return totals.protein_g >= ctx.goals.protein_g && totals.calories >= ctx.goals.calories * 0.9 && totals.calories <= ctx.goals.calories * 1.1;
+      });
+      return best >= 7;
+    },
+  },
+  {
+    id: 'training_block', category: 'consistency', title: 'First Training Block Completed',
+    description: 'Trained at least twice a week for four weeks straight.',
+    check(ctx) {
+      if (ctx.lifts.length === 0) return false;
+      const weekSessionDays = {};
+      for (const l of ctx.lifts) {
+        const wk = getWeekStart(l.date);
+        weekSessionDays[wk] = weekSessionDays[wk] || new Set();
+        weekSessionDays[wk].add(l.date);
+      }
+      const weeks = Object.keys(weekSessionDays).sort();
+      let run = 0, best = 0, prevWeek = null;
+      for (const wk of weeks) {
+        if (prevWeek) {
+          const gapDays = Math.round((new Date(`${wk}T00:00:00`) - new Date(`${prevWeek}T00:00:00`)) / 86400000);
+          if (gapDays !== 7) run = 0;
+        }
+        if (weekSessionDays[wk].size >= 2) { run += 1; best = Math.max(best, run); } else { run = 0; }
+        prevWeek = wk;
+      }
+      return best >= 4;
+    },
+  },
+  {
+    id: 'month_of_logging', category: 'consistency', title: 'First Month Of Consistent Logging',
+    description: 'Logged food on at least 20 days within a 30-day stretch.',
+    check(ctx) {
+      const today = localDateStr();
+      const cutoff = subtractDays(today, 29);
+      const byDay = groupByDay(ctx.historyLogs);
+      let count = 0;
+      for (const day of byDay.keys()) if (day >= cutoff && day <= today) count++;
+      return count >= 20;
+    },
+  },
+  {
+    id: 'first_split', category: 'training', title: 'First Training Split Set Up',
+    description: 'Set up your first weekly training split.',
+    check: (ctx) => !!ctx.trainingSplit,
+  },
+  {
+    id: 'protein_week', category: 'nutrition', title: 'First Full Protein Week',
+    description: 'Hit your protein target seven days in a row.',
+    check: (ctx) => computeStreaks(ctx.historyLogs, ctx.goals.protein_g).best >= 7,
+  },
+  {
+    id: 'hydration_week', category: 'nutrition', title: 'First Full Hydration Week',
+    description: 'Hit your hydration target seven days in a row.',
+    check(ctx) {
+      if (ctx.waterLog.length === 0) return false;
+      const byDay = groupByDay(ctx.waterLog);
+      const dates = Array.from(byDay.keys()).sort();
+      const goal = ctx.goals.water_oz || 64;
+      const best = bestConsecutiveDayStreak(dates[0], localDateStr(), (day) => {
+        const entries = byDay.get(day);
+        if (!entries) return false;
+        return entries.reduce((sum, w) => sum + (Number(w.amount_oz) || 0), 0) >= goal;
+      });
+      return best >= 7;
+    },
+  },
+  {
+    id: 'glossary_explorer', category: 'learning', title: 'Exercise Glossary Explorer',
+    description: `Looked up the cues for ${GLOSSARY_EXPLORER_THRESHOLD} different exercises in the glossary.`,
+    check: (ctx) => (ctx.profile?.glossary_exercises_viewed || []).length >= GLOSSARY_EXPLORER_THRESHOLD,
+  },
+];
+
+let newlyUnlockedAchievementId = null; // most recent unlock this session — dismissible banner
+let achievementCheckInFlight = false;
+
+// Fire-and-forget from renderAll() — runs the library against already-
+// loaded state, persists anything newly satisfied, and re-renders once if
+// something unlocked. The re-render's own renderAll() call re-enters this
+// function, but state.achievements already includes the new row by then,
+// so that second pass finds nothing new and terminates.
+async function checkAndUnlockAchievements() {
+  if (!state.user || achievementCheckInFlight) return;
+  achievementCheckInFlight = true;
+  try {
+    const ctx = {
+      lifts: state.lifts, historyLogs: state.historyLogs, waterLog: state.waterLog,
+      weightLog: state.weightLog, goals: state.goals, profile: state.profile,
+      trainingSplit: state.trainingSplit,
+    };
+    const unlockedIds = new Set(state.achievements.map((a) => a.achievement_id));
+    let anyNew = false;
+    for (const ach of ACHIEVEMENT_LIBRARY) {
+      if (unlockedIds.has(ach.id)) continue;
+      let satisfied = false;
+      try { satisfied = !!ach.check(ctx); } catch { satisfied = false; }
+      if (!satisfied) continue;
+      const { error } = await supabase.from('user_achievements').insert({ user_id: state.user.id, achievement_id: ach.id });
+      if (!error) {
+        state.achievements.push({ achievement_id: ach.id, unlocked_at: new Date().toISOString() });
+        newlyUnlockedAchievementId = ach.id;
+        anyNew = true;
+      }
+    }
+    if (anyNew) renderAll();
+  } catch (err) {
+    reportError(err);
+  } finally {
+    achievementCheckInFlight = false;
+  }
+}
+
+function achievementUnlockBannerHtml() {
+  if (!newlyUnlockedAchievementId) return '';
+  const ach = ACHIEVEMENT_LIBRARY.find((a) => a.id === newlyUnlockedAchievementId);
+  if (!ach) return '';
+  return `
+    <div class="card achievement-banner">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;">
+        <div class="row" style="align-items:center;gap:0.75rem;">
+          <span class="achievement-medallion">🏅</span>
+          <div>
+            <div class="small" style="text-transform:uppercase;letter-spacing:0.04em;color:var(--accent);">Achievement unlocked</div>
+            <h3 style="margin:0.15rem 0 0;">${esc(ach.title)}</h3>
+            <div class="muted small">${esc(ach.description)}</div>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-ghost" id="achievementBannerDismiss" style="flex:none;">✕</button>
+      </div>
+      <button class="btn btn-sm" id="achievementBannerShare" style="margin-top:0.75rem;">Share this achievement</button>
+    </div>
+  `;
+}
+
+function wireAchievementBanner(panel) {
+  const dismiss = $('#achievementBannerDismiss', panel);
+  if (dismiss) dismiss.addEventListener('click', () => { newlyUnlockedAchievementId = null; renderAll(); });
+  const shareBtn = $('#achievementBannerShare', panel);
+  if (shareBtn) shareBtn.addEventListener('click', () => shareAchievement(newlyUnlockedAchievementId));
+}
+
+// Same canvas-based downloadable-PNG approach as generateWeeklyRecapCanvas —
+// a simple brass-accented medallion on the Graphite & Brass palette, not a
+// separate colorful "achievement unlocked" visual system.
+async function generateAchievementShareCanvas(achievement) {
+  if (document.fonts?.ready) await document.fonts.ready;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1920;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#16181A';
+  ctx.fillRect(0, 0, 1080, 1920);
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 2;
+  for (let x = -1920; x < 1080; x += 26) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + 1920, 1920);
+    ctx.stroke();
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#C6A15B';
+  ctx.font = '600 64px Oswald, sans-serif';
+  ctx.fillText('KRAFFT', 540, 200);
+
+  // Medallion: a plain brass ring, not a badge illustration.
+  const cx = 540, cy = 720, r = 220;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = '#C6A15B';
+  ctx.lineWidth = 10;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 26, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(198,161,91,0.4)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.fillStyle = '#C6A15B';
+  ctx.font = '600 140px Oswald, sans-serif';
+  ctx.fillText('★', cx, cy + 50);
+
+  ctx.fillStyle = '#8F8C84';
+  ctx.font = '500 32px Oswald, sans-serif';
+  ctx.fillText('ACHIEVEMENT UNLOCKED', 540, 1030);
+
+  ctx.fillStyle = '#EDECE8';
+  ctx.font = '600 62px Oswald, sans-serif';
+  wrapCanvasText(ctx, achievement.title, 540, 1130, 920, 74);
+
+  ctx.fillStyle = '#8F8C84';
+  ctx.font = '400 36px Inter, sans-serif';
+  wrapCanvasText(ctx, achievement.description, 540, 1300, 820, 50);
+
+  ctx.fillStyle = '#8F8C84';
+  ctx.font = '400 30px Inter, sans-serif';
+  ctx.fillText('Tracked with Krafft', 540, 1860);
+
+  return canvas;
+}
+
+// Simple centered word-wrap for canvas text — canvas has no native wrapping.
+function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '', lineY = y;
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      ctx.fillText(line, x, lineY);
+      line = word;
+      lineY += lineHeight;
+    } else {
+      line = test;
+    }
+  }
+  if (line) ctx.fillText(line, x, lineY);
+  return lineY;
+}
+
+async function shareAchievement(achievementId) {
+  const ach = ACHIEVEMENT_LIBRARY.find((a) => a.id === achievementId);
+  if (!ach) return;
+  try {
+    const canvas = await generateAchievementShareCanvas(ach);
+    const dataUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `krafft-achievement-${ach.id}.png`;
+    a.click();
+  } catch (err) {
+    reportError(err);
+    toast('Could not generate the share image.');
+  }
+}
+
+function achievementsGridHtml() {
+  const unlockedIds = new Set(state.achievements.map((a) => a.achievement_id));
+  const byCategory = {};
+  for (const ach of ACHIEVEMENT_LIBRARY) (byCategory[ach.category] = byCategory[ach.category] || []).push(ach);
+  return Object.keys(ACHIEVEMENT_CATEGORY_LABELS).filter((cat) => byCategory[cat]).map((cat) => `
+    <div class="achievement-category">
+      <div class="muted small" style="text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.4rem;">${ACHIEVEMENT_CATEGORY_LABELS[cat]}</div>
+      <div class="achievement-grid">
+        ${byCategory[cat].map((ach) => {
+          const unlocked = unlockedIds.has(ach.id);
+          return `
+          <div class="achievement-tile ${unlocked ? 'unlocked' : 'locked'}">
+            <span class="achievement-medallion">${unlocked ? '🏅' : '🔒'}</span>
+            <div class="achievement-tile-title">${esc(ach.title)}</div>
+            <div class="achievement-tile-desc muted small">${esc(ach.description)}</div>
+            ${unlocked ? `<button class="btn-link" data-achievement-share="${ach.id}" style="margin-top:0.4rem;">Share</button>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
 // Compact, read-only version of today's split focus for the combined
 // dashboard's hero row — no "change split" affordance here, since picking/
 // editing a split is setup, not a daily glance stat. The full picker lives
@@ -2854,6 +3217,7 @@ function renderDashboard() {
       </div>
       ${todaysFocusHeroHtml()}
     </div>
+    ${achievementUnlockBannerHtml()}
     ${showSpikeWarning ? `
     <div class="card pr-banner">
       <div class="small">⚠️ This week's lift volume is <strong style="color:var(--accent);">${volumeSpike.pctAbove}%</strong> above your recent 4-week average — consider whether that's intentional, or if you should ease off to avoid overuse injury.</div>
@@ -2956,6 +3320,8 @@ function renderDashboard() {
 
   const spikeDismiss = $('#spikeDismiss');
   if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderDashboard(); });
+
+  wireAchievementBanner(panel);
 
   $$('[data-tip-learnmore]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const id = btn.dataset.tipLearnmore;
@@ -3940,6 +4306,12 @@ function renderProfile() {
     </div>
 
     <div class="card">
+      <h3>Achievements</h3>
+      <p class="muted">${state.achievements.length} of ${ACHIEVEMENT_LIBRARY.length} unlocked.</p>
+      ${achievementsGridHtml()}
+    </div>
+
+    <div class="card">
       <h3>Goal Calculator</h3>
       <p class="muted">Mifflin-St Jeor based estimate. Pick a target weight and date — the pace that implies is checked
         against a safe range, and calorie target is never recommended below your resting metabolic rate or 1500 kcal,
@@ -4084,6 +4456,8 @@ function renderProfile() {
     toast('Profile saved');
     await loadProfile();
   });
+
+  $$('[data-achievement-share]', panel).forEach((btn) => btn.addEventListener('click', () => shareAchievement(btn.dataset.achievementShare)));
 
   $('#goal_save').addEventListener('click', async () => {
     const goals = {
@@ -5090,9 +5464,22 @@ function renderExerciseGlossary(panel) {
   }));
   $$('[data-glossary-toggle]', panel).forEach((row) => row.addEventListener('click', () => {
     const name = row.dataset.glossaryToggle;
-    glossaryExpandedName = glossaryExpandedName === name ? null : name;
+    const expanding = glossaryExpandedName !== name;
+    glossaryExpandedName = expanding ? name : null;
+    if (expanding) recordGlossaryView(name);
     renderExerciseGlossary(panel);
   }));
+}
+
+// Feeds the Learning-category achievement — dedup, only writes when a
+// name is actually new, not on every card expand/collapse.
+async function recordGlossaryView(exerciseName) {
+  const viewed = state.profile?.glossary_exercises_viewed || [];
+  if (viewed.includes(exerciseName)) return;
+  const updated = [...viewed, exerciseName];
+  state.profile = { ...state.profile, glossary_exercises_viewed: updated };
+  const { error } = await supabase.from('profiles').update({ glossary_exercises_viewed: updated }).eq('id', state.user.id);
+  if (!error) checkAndUnlockAchievements();
 }
 
 let liftAutocompleteOpen = false;

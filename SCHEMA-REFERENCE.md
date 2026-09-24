@@ -20,9 +20,11 @@ age_gate_shown_at     timestamptz
 parental_consent_at   timestamptz
 referral_code         text unique
 email_reminders_opt_out boolean (default: false)
+onboarded_at          timestamptz — set once the first-time onboarding overlay finishes/is skipped
+glossary_exercises_viewed text[] (default: '{}') — distinct Exercise Glossary cue cards expanded
 created_at            timestamptz
 ```
-**Frontend reads/writes:** `id, display_name, age, sex, height_cm, activity_level, age_over_18, age_gate_shown_at, parental_consent_at, referral_code, email_reminders_opt_out`
+**Frontend reads/writes:** `id, display_name, age, sex, height_cm, activity_level, age_over_18, age_gate_shown_at, parental_consent_at, referral_code, email_reminders_opt_out, onboarded_at, glossary_exercises_viewed`
 
 `age_over_18`/`age_gate_shown_at`/`parental_consent_at` are set once at
 signup (see the `#authForm` submit handler and `ensureProfileAndGoals()` in
@@ -414,6 +416,33 @@ lifts; not user-editable.
 
 ---
 
+### `user_achievements` — Milestone system unlocks
+```sql
+id                                 uuid primary key
+user_id                            uuid
+achievement_id                     text (matches an id in ACHIEVEMENT_LIBRARY, index.html)
+unlocked_at                        timestamptz
+```
+unique constraint on `(user_id, achievement_id)`.
+
+**Frontend reads/writes:** select + insert own only — no update/delete
+policy, since an unlock is meant to be permanent once earned, even if the
+logged data that originally satisfied the condition changes later (e.g. a
+PR-setting lift entry gets edited or deleted afterward).
+
+Achievement *definitions* (coach-voice title/description, unlock
+condition as a `check(ctx)` function) live in `ACHIEVEMENT_LIBRARY` in
+`index.html`, not the database — same static-content pattern as the
+Layer 1 tips library and the `exercises` table. `checkAndUnlockAchievements()`
+runs the library against already-loaded state after every `renderAll()`
+data refresh; anything newly satisfied that isn't already in
+`state.achievements` gets inserted here and surfaces an unlock banner.
+Each unlocked achievement is shareable as a downloadable image via
+`generateAchievementShareCanvas()`, the same canvas-based approach as the
+weekly recap card.
+
+---
+
 ## Naming Rules — CONSISTENT across ALL tables
 
 | Type | Naming | Example | Notes |
@@ -551,4 +580,9 @@ database; fresh installs get it from `reset-schema.sql`.
 
 For goal-adaptive coaching nudges (`goals.goal_mode_changed_at`): run
 **`supabase-schema-phase14-goal-nudges.sql`** against an existing live
+database; fresh installs get it from `reset-schema.sql`.
+
+For the achievement/milestone system (the `user_achievements` table and
+`profiles.glossary_exercises_viewed`): run
+**`supabase-schema-phase15-achievements.sql`** against an existing live
 database; fresh installs get it from `reset-schema.sql`.

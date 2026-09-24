@@ -5,6 +5,7 @@
 -- ============================================================
 
 -- Drop all tables in correct dependency order (reverse of creation)
+drop table if exists user_achievements cascade;
 drop table if exists exercises cascade;
 drop table if exists training_splits cascade;
 drop table if exists photos cascade;
@@ -51,6 +52,10 @@ create table profiles (
   -- Set once the first-time onboarding overlay is completed/skipped; null
   -- means "show it" (see supabase-schema-phase12-onboarding.sql).
   onboarded_at timestamptz,
+  -- Distinct exercise names whose cue cards have been expanded in the
+  -- Exercise Glossary — input to the Learning-category achievement.
+  -- See supabase-schema-phase15-achievements.sql.
+  glossary_exercises_viewed text[] not null default '{}',
   created_at timestamptz not null default now()
 );
 
@@ -707,6 +712,26 @@ insert into exercises (name, muscle_group, body_region, secondary_regions, equip
   'Pull the bar explosively from the floor, extending through the hips as it passes your thighs, then drop under it to catch it on your front delts.',
   'Muscling the bar up with your arms early instead of using an explosive hip extension — the arms should stay relatively passive until the very end of the pull.',
   'Brace hard off the floor just like a deadlift, then reset that brace quickly to catch the bar in the front-rack position.');
+
+-- ── user_achievements (milestone system) ─────────────────────────────────
+-- Definitions (title, coach-voice description, unlock condition) live in
+-- ACHIEVEMENT_LIBRARY in index.html, not this table — this only records
+-- when a given account unlocked a given achievement id, permanently, once.
+-- See supabase-schema-phase15-achievements.sql.
+create table user_achievements (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  achievement_id text not null,
+  unlocked_at timestamptz not null default now(),
+  unique (user_id, achievement_id)
+);
+
+alter table user_achievements enable row level security;
+
+create policy "user_achievements_select_own" on user_achievements for select
+  using (auth.uid() = user_id);
+create policy "user_achievements_insert_own" on user_achievements for insert
+  with check (auth.uid() = user_id);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE
