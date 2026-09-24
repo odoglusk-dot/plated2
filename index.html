@@ -220,6 +220,7 @@
     font-size: 0.72rem; padding: 0.45rem 0.85rem; border-radius: 999px; background: var(--surface-2);
     border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; white-space: nowrap; }
   .tab-btn.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+  .tab-btn.scope-hidden { display: none; }
 
   main.tab-panels { padding: 1.25rem; padding-bottom: calc(1.25rem + 64px + env(safe-area-inset-bottom, 0px)); max-width: 880px; margin: 0 auto; }
   .tab-panel { display: none; }
@@ -1768,7 +1769,16 @@ async function finishOnboarding() {
   $('#onboardingScreen').classList.add('hidden');
   $('#app').classList.remove('hidden');
   const { error } = await supabase.from('profiles').update({ onboarded_at: new Date().toISOString() }).eq('id', state.user.id);
-  if (!error) state.profile = { ...state.profile, onboarded_at: new Date().toISOString() };
+  if (error) {
+    // Never leave this silent — if the write fails (e.g. the
+    // onboarded_at column is missing because phase12 hasn't been run
+    // against this database yet), onboarding would otherwise show again
+    // on every single login with no way to tell why.
+    reportError(error);
+    toast("Couldn't save onboarding status — you may see this again next time. (" + error.message + ')');
+    return;
+  }
+  state.profile = { ...state.profile, onboarded_at: new Date().toISOString() };
 }
 
 function renderOnboarding() {
@@ -2156,6 +2166,12 @@ function setActiveTab(tab) {
   $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
   $('#tabNav').classList.toggle('hidden', TABS_WITHOUT_SECONDARY_NAV.has(tab));
+  // Scope the secondary row to whichever subject the current tab belongs to
+  // — Log counts as nutrition even though it's not in the row itself, so
+  // viewing it still shows History/Weight/Supplements/Meals/Ask AI, not the
+  // training tabs bleeding in alongside them.
+  const trainingContext = TRAINING_SUB_TABS.has(tab);
+  $$('.tab-btn').forEach((b) => b.classList.toggle('scope-hidden', TRAINING_SUB_TABS.has(b.dataset.tab) !== trainingContext));
   updateBottomNav();
   // The Days tab's heatmap is rendered (by renderAll()) while every tab is
   // still hidden, where scrollWidth reads 0 and scrollLeft is a no-op — so
