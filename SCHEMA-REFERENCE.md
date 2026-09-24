@@ -366,6 +366,43 @@ a hint only, never restricts logging.
 
 ---
 
+### `exercises` — Exercise database (reference data, not user-scoped)
+```sql
+id                                 uuid primary key
+name                               text (unique — e.g. "Bench Press")
+muscle_group                       text (one of MUSCLE_GROUPS: Legs/Push/Pull/Core/Full Body/Other)
+body_region                        text (one of BODY_REGIONS, nullable for Full Body lifts like Power Clean)
+secondary_regions                  text[] (BODY_REGIONS values, not muscle groups — more informative)
+equipment                          text (e.g. "Barbell", "Dumbbell", "Bodyweight", "Cable", "Machine")
+cue_setup                          text
+cue_execution                      text
+cue_mistake                        text
+cue_bracing                        text
+created_at                         timestamptz
+```
+**Frontend reads:** select-only for every account (`exercises_select_all`
+RLS policy, no insert/update/delete policy) — this is shared reference
+content, not per-user data. Seeded once by
+`supabase-schema-phase13-exercises.sql` with ~30 common compound/accessory
+lifts; not user-editable.
+
+**Build once, reuse across features** — this single table powers:
+- **Cue cards**: the first time a user logs an exercise (or after a long
+  gap), the app shows its 4 cue bullets (setup/execution/common mistake/
+  bracing) — static copy, not AI-generated, same spirit as the Layer 1
+  tips library.
+- **Muscle Map**: `body_region` is the same taxonomy the muscle map
+  already visualizes from `lifts.body_region` — a lift logged against a
+  name found here can default its `body_region`/`muscle_group` from this
+  table instead of the small hardcoded `DEFAULT_MUSCLE_GROUP`/
+  `DEFAULT_BODY_REGION` maps.
+- **Split builder**: exercise selection in the training-split builder
+  reads from here instead of a separate hardcoded list.
+- **Glossary**: a standalone browsable list, filterable by muscle group/
+  equipment, reusing the same rows.
+
+---
+
 ## Naming Rules — CONSISTENT across ALL tables
 
 | Type | Naming | Example | Notes |
@@ -494,4 +531,9 @@ change needed for that part.
 
 For the first-time onboarding flow (`profiles.onboarded_at`): run
 **`supabase-schema-phase12-onboarding.sql`** against an existing live
+database; fresh installs get it from `reset-schema.sql`.
+
+For the exercise database (cue cards, muscle map defaults, split builder,
+glossary — the `exercises` table, seeded with ~30 common lifts): run
+**`supabase-schema-phase13-exercises.sql`** against an existing live
 database; fresh installs get it from `reset-schema.sql`.
