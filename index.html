@@ -307,6 +307,9 @@
   .achievement-tile-title { font-family: var(--font-display); font-size: 0.8rem; font-weight: 600;
     margin-top: 0.3rem; letter-spacing: 0.01em; }
   .achievement-tile-desc { font-size: 0.72rem; margin-top: 0.25rem; line-height: 1.35; }
+  .session-callouts { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+  .session-callout { background: var(--surface-2); border-radius: 8px; padding: 0.6rem 0.75rem; font-size: 0.85rem; line-height: 1.4; }
+  #sessionTrendChart, #sessionNutritionChart { max-width: 100%; }
   .checkbox-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); font-weight: normal; margin-bottom: 0.9rem; }
   .checkbox-row input { width: auto; }
   .stat-num { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 500; }
@@ -952,6 +955,7 @@ const state = {
   trainingSplit: null, // {id, name, days, start_date} | null — one active split, see loadTrainingSplit()
   exercises: [], // reference data, same rows for every account — see loadExercises()
   achievements: [], // unlocked rows: {achievement_id, unlocked_at} — see loadAchievements()
+  workoutSession: null, // today's row: {date, ended_at, analysis, analysis_generated_at} | null — see loadWorkoutSession()
   activeTab: 'dashboard',
   aiRemaining: null,
   subscription: null,
@@ -2023,7 +2027,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadExercises(), loadAchievements()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadExercises(), loadAchievements(), loadWorkoutSession()]);
   renderAll();
 }
 
@@ -2195,6 +2199,12 @@ async function loadExercises() {
 async function loadAchievements() {
   const { data } = await supabase.from('user_achievements').select('*').eq('user_id', state.user.id);
   state.achievements = data || [];
+}
+
+async function loadWorkoutSession() {
+  const { data } = await supabase.from('workout_sessions').select('*')
+    .eq('user_id', state.user.id).eq('date', localDateStr()).maybeSingle();
+  state.workoutSession = data || null;
 }
 
 async function loadReferrals() {
@@ -5362,6 +5372,7 @@ function renderLiftsTab() {
   if (!panel) return;
   if (showExerciseGlossary) renderExerciseGlossary(panel);
   else if (liftsSelectedExercise) renderLiftDetail(panel);
+  else if (isSessionEndedToday()) renderSessionSummary(panel);
   else renderLiftLog(panel);
 }
 
@@ -5538,6 +5549,342 @@ function renderLiftExerciseField(panel, allExerciseOptions) {
   if (liftAutocompleteOpen) $('#lift_exercise', wrap).focus();
 }
 
+// ── End Workout flow + post-session AI analysis ─────────────────────
+// A "session" is one calendar day of lifts, matching every other
+// "today's session" concept already in this file. ended_at null on
+// state.workoutSession means active (or reopened); set means ended.
+const MIN_SESSION_HISTORY_DAYS = 3; // prior days sharing an exercise with today, before the full comparative analysis runs
+const STALE_SESSION_HOURS = 3; // no new set logged this long into an active session -> "still training?" prompt
+
+let analysisLoading = false;
+let analysisError = null;
+let staleSessionPromptDismissed = false;
+
+function todaysLifts() {
+  const today = localDateStr();
+  return state.lifts.filter((l) => l.date === today);
+}
+
+function isSessionActiveToday() {
+  return todaysLifts().length > 0 && !(state.workoutSession && state.workoutSession.ended_at);
+}
+
+function isSessionEndedToday() {
+  const today = localDateStr();
+  return !!(state.workoutSession && state.workoutSession.date === today && state.workoutSession.ended_at);
+}
+
+// Hours since the most recently logged set today, or null if nothing's
+// been logged yet — reads lifts.created_at directly rather than a
+// separate "last activity" column on workout_sessions.
+function hoursSinceLastLiftActivity() {
+  const today = todaysLifts();
+  if (!today.length) return null;
+  const latest = today.reduce((max, l) => {
+    const t = l.created_at ? new Date(l.created_at).getTime() : 0;
+    return Math.max(max, t);
+  }, 0);
+  if (!latest) return null;
+  return (Date.now() - latest) / (1000 * 60 * 60);
+}
+
+// "Baseline" per the spec: enough prior sessions for the *same lifts* to
+// make a comparison meaningful, not just a raw session count.
+function sessionHistoryBaselineMet() {
+  const today = localDateStr();
+  const todayExercises = new Set(todaysLifts().map((l) => l.exercise));
+  if (!todayExercises.size) return false;
+  const priorDays = new Set();
+  for (const l of state.lifts) {
+    if (l.date < today && todayExercises.has(l.exercise)) priorDays.add(l.date);
+  }
+  return priorDays.size >= MIN_SESSION_HISTORY_DAYS;
+}
+
+function showUndoToast(message, onUndo, ms = 6000) {
+  let t = $('#undoToastEl');
+  if (t) t.remove();
+  t = document.createElement('div');
+  t.id = 'undoToastEl';
+  t.className = 'toast';
+  t.innerHTML = `<span>${esc(message)}</span> <button class="btn-link" id="undoToastBtn" style="margin-left:0.75rem;">Undo</button>`;
+  document.body.appendChild(t);
+  const timeoutId = setTimeout(() => t.remove(), ms);
+  $('#undoToastBtn', t).addEventListener('click', () => {
+    clearTimeout(timeoutId);
+    t.remove();
+    onUndo();
+  });
+}
+
+async function endWorkoutSession() {
+  const today = localDateStr();
+  const { error } = await supabase.from('workout_sessions')
+    .upsert({ user_id: state.user.id, date: today, ended_at: new Date().toISOString() });
+  if (error) { toast('Could not end workout: ' + error.message); return; }
+  analysisError = null;
+  await loadWorkoutSession();
+  showUndoToast('Workout ended', () => reopenWorkoutSession());
+  renderLiftsTab();
+  if (sessionHistoryBaselineMet() && hasAccess(state.subscription) && !state.workoutSession?.analysis) {
+    generateSessionAnalysis();
+  }
+}
+
+async function reopenWorkoutSession() {
+  const today = localDateStr();
+  const { error } = await supabase.from('workout_sessions')
+    .upsert({ user_id: state.user.id, date: today, ended_at: null });
+  if (error) { toast('Could not reopen: ' + error.message); return; }
+  analysisError = null;
+  staleSessionPromptDismissed = false;
+  await loadWorkoutSession();
+  renderLiftsTab();
+}
+
+// Client builds the summary text (today's session + recent per-exercise
+// history + light nutrition context), same design as buildDataSummary()
+// for Ask AI — the function itself never queries Supabase directly.
+function buildSessionAnalysisDataSummary() {
+  const today = localDateStr();
+  const today_lifts = todaysLifts();
+  const lines = [`Session date: ${today}`, '', "Today's session:"];
+
+  const byExercise = {};
+  for (const l of today_lifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
+
+  const priorLifts = state.lifts.filter((l) => l.date < today);
+  const priorPRs = computeLiftPRs(priorLifts);
+
+  for (const [exercise, sets] of Object.entries(byExercise)) {
+    const best = sets.reduce((max, l) => Math.max(max, l.weight), 0);
+    const volume = sets.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
+    lines.push(`- ${exercise}: ${sets.length} set(s), best weight ${best}lb, session volume ${Math.round(volume)}lb`);
+    sets.forEach((l) => lines.push(`    ${l.weight}lb x ${repsDisplay(l)}`));
+
+    const history = priorLifts.filter((l) => l.exercise === exercise).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+    if (history.length) {
+      lines.push(`  Recent history for ${exercise} (most recent first):`);
+      history.forEach((l) => lines.push(`    ${l.date}: ${l.weight}lb x ${repsDisplay(l)}, estimated 1RM ~${e1RM(l.weight, l.reps)}lb`));
+      const combined = [...history, ...sets].sort((a, b) => a.date.localeCompare(b.date));
+      lines.push(`  Plateau flag: ${detectPlateau(combined) ? 'yes — best estimated 1RM in the last 3 sessions has not beaten the prior best' : 'no'}`);
+    } else {
+      lines.push(`  No prior logged history for ${exercise}.`);
+    }
+    const prior = priorPRs[exercise];
+    lines.push(`  PR flag: ${!prior ? 'first time this exercise has been logged' : best > prior.weight ? `yes — new best, prior best was ${prior.weight}lb` : 'no'}`);
+  }
+
+  const yesterday = subtractDays(today, 1);
+  const byDay = groupByDay(state.historyLogs);
+  lines.push('', 'Nutrition context (the day before this session):');
+  if (byDay.has(yesterday)) {
+    const t = sumMacros(byDay.get(yesterday));
+    lines.push(`${yesterday}: ${Math.round(t.calories)} kcal (goal ${Math.round(state.goals.calories)}), protein ${Math.round(t.protein_g)}g (goal ${Math.round(state.goals.protein_g)}g)`);
+  } else {
+    lines.push('No food logged the day before this session.');
+  }
+
+  return lines.join('\n').slice(0, 7000);
+}
+
+async function generateSessionAnalysis() {
+  analysisLoading = true;
+  analysisError = null;
+  renderLiftsTab();
+  try {
+    const dataSummary = buildSessionAnalysisDataSummary();
+    const result = await callFunction('analyze-session', { dataSummary });
+    state.aiRemaining = result.remaining;
+    const { error } = await supabase.from('workout_sessions').upsert({
+      user_id: state.user.id, date: localDateStr(),
+      analysis: result.analysis, analysis_generated_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+    await loadWorkoutSession();
+  } catch (err) {
+    reportError(err);
+    analysisError = err.upgradeRequired
+      ? 'This is a paid feature — upgrade to unlock session analysis.'
+      : (err.message || 'Could not generate the analysis.');
+  } finally {
+    analysisLoading = false;
+    renderLiftsTab();
+  }
+}
+
+function sessionCalloutIcon(type) {
+  return { pr: '🏆', plateau: '⚠️', strong: '💪', weak: '📉', nutrition: '🍽️' }[type] || '💡';
+}
+
+function sessionAnalysisHtml() {
+  const analysis = state.workoutSession?.analysis;
+  if (analysis) {
+    const hasNutritionCallout = (analysis.callouts || []).some((c) => c.type === 'nutrition');
+    return `
+      <div class="card">
+        <h3>Session Analysis</h3>
+        <p>${esc(analysis.summary)}</p>
+        ${(analysis.callouts || []).length ? `
+        <div class="session-callouts">
+          ${analysis.callouts.map((c) => `<div class="session-callout">${sessionCalloutIcon(c.type)} ${esc(c.text)}</div>`).join('')}
+        </div>` : ''}
+      </div>
+      ${analysis.highlightExercise ? `<div class="card"><h3>${esc(analysis.highlightExercise)} Trend</h3><canvas id="sessionTrendChart" height="220"></canvas></div>` : ''}
+      ${hasNutritionCallout ? `<div class="card"><h3>Protein, Last 7 Days</h3><canvas id="sessionNutritionChart" height="180"></canvas></div>` : ''}
+    `;
+  }
+  if (analysisLoading) {
+    return `<div class="card"><h3>Session Analysis</h3><p class="muted"><span class="spinner spinner-sm"></span> Analyzing your session…</p></div>`;
+  }
+  if (analysisError) {
+    return `<div class="card"><h3>Session Analysis</h3><p class="muted" style="color:var(--danger);">${esc(analysisError)}</p><button class="btn btn-sm" id="retryAnalysisBtn">Try again</button></div>`;
+  }
+  if (!sessionHistoryBaselineMet()) {
+    return `<div class="card"><h3>Session Analysis</h3><p class="muted">Analysis unlocks after a few more sessions, once there's enough history to compare against.</p></div>`;
+  }
+  if (!hasAccess(state.subscription)) {
+    return `<div class="card"><h3>Session Analysis</h3><p class="muted">Unlock AI-written session analysis — comparing today against your recent history, with PR and plateau callouts — on the paid tier.</p><button class="btn btn-primary" id="unlockAnalysisBtn">Upgrade — Unlock AI Features</button></div>`;
+  }
+  return `<div class="card"><h3>Session Analysis</h3><button class="btn btn-primary" id="generateAnalysisBtn">Generate Analysis</button></div>`;
+}
+
+function wireSessionAnalysisEvents(panel) {
+  const retryBtn = $('#retryAnalysisBtn', panel);
+  if (retryBtn) retryBtn.addEventListener('click', generateSessionAnalysis);
+  const genBtn = $('#generateAnalysisBtn', panel);
+  if (genBtn) genBtn.addEventListener('click', generateSessionAnalysis);
+  const unlockBtn = $('#unlockAnalysisBtn', panel);
+  if (unlockBtn) unlockBtn.addEventListener('click', () => showUpgradeScreen());
+
+  const analysis = state.workoutSession?.analysis;
+  if (analysis?.highlightExercise) renderSessionTrendChart(analysis.highlightExercise);
+  if ((analysis?.callouts || []).some((c) => c.type === 'nutrition')) renderSessionNutritionChart();
+}
+
+function renderSessionSummary(panel) {
+  const todayLifts = todaysLifts();
+  const summary = {
+    exerciseCount: new Set(todayLifts.map((l) => l.exercise)).size,
+    sets: todayLifts.reduce((sum, l) => sum + (l.reps_per_set?.length || l.sets || 0), 0),
+    volume: todayLifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0),
+  };
+  const byExercise = {};
+  for (const l of todayLifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
+
+  panel.innerHTML = `
+    <div class="card">
+      <h3>Workout Complete</h3>
+      <div class="today-summary-row">
+        <div><div class="stat-num">${summary.exerciseCount}</div><div class="muted small">exercise${summary.exerciseCount === 1 ? '' : 's'}</div></div>
+        <div><div class="stat-num">${summary.sets}</div><div class="muted small">set${summary.sets === 1 ? '' : 's'}</div></div>
+        <div><div class="stat-num">${Math.round(summary.volume).toLocaleString()}</div><div class="muted small">volume</div></div>
+      </div>
+      <div class="muted small" style="margin-top:0.5rem;">${Object.entries(byExercise).map(([ex, sets]) => `${esc(ex)} (${sets.length}x)`).join(' · ')}</div>
+      <button class="btn" id="reopenSessionBtn" style="margin-top:0.75rem;">Reopen Session</button>
+    </div>
+    ${sessionAnalysisHtml()}
+  `;
+  $('#reopenSessionBtn').addEventListener('click', reopenWorkoutSession);
+  wireSessionAnalysisEvents(panel);
+}
+
+// Loaded lazily from a CDN only when the analysis screen actually renders
+// a chart — the one deliberate exception to the rest of this app's
+// hand-rolled-SVG chart convention, per the product spec for this feature.
+let chartJsLoadPromise = null;
+function ensureChartJs() {
+  if (window.Chart) return Promise.resolve();
+  if (chartJsLoadPromise) return chartJsLoadPromise;
+  chartJsLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return chartJsLoadPromise;
+}
+
+let sessionTrendChartInstance = null;
+async function renderSessionTrendChart(exerciseName) {
+  await ensureChartJs().catch(() => null);
+  const canvas = document.getElementById('sessionTrendChart');
+  if (!window.Chart || !canvas) return;
+  const today = localDateStr();
+  const history = state.lifts.filter((l) => l.exercise === exerciseName)
+    .sort((a, b) => a.date.localeCompare(b.date)).slice(-8);
+  if (sessionTrendChartInstance) sessionTrendChartInstance.destroy();
+  sessionTrendChartInstance = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: history.map((l) => fmtLiftDate(l.date)),
+      datasets: [{
+        label: 'Estimated 1RM (lb)',
+        data: history.map((l) => e1RM(l.weight, l.reps)),
+        backgroundColor: history.map((l) => (l.date === today ? '#C6A15B' : 'rgba(198,161,91,0.35)')),
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8F8C84' }, grid: { display: false } },
+        y: { ticks: { color: '#8F8C84' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+      },
+    },
+  });
+}
+
+let sessionNutritionChartInstance = null;
+async function renderSessionNutritionChart() {
+  await ensureChartJs().catch(() => null);
+  const canvas = document.getElementById('sessionNutritionChart');
+  if (!window.Chart || !canvas) return;
+  const days = last7Days();
+  const byDay = groupByDay(state.historyLogs);
+  if (sessionNutritionChartInstance) sessionNutritionChartInstance.destroy();
+  sessionNutritionChartInstance = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: days.map((d) => fmtLiftDate(d)),
+      datasets: [{
+        label: 'Protein (g)',
+        data: days.map((d) => (byDay.has(d) ? Math.round(sumMacros(byDay.get(d)).protein_g) : 0)),
+        backgroundColor: '#5E7A8C',
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8F8C84' }, grid: { display: false } },
+        y: { ticks: { color: '#8F8C84' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+      },
+    },
+  });
+}
+
+function staleSessionPromptHtml() {
+  if (staleSessionPromptDismissed || !isSessionActiveToday()) return '';
+  const hours = hoursSinceLastLiftActivity();
+  if (hours === null || hours < STALE_SESSION_HOURS) return '';
+  return `
+    <div class="card pr-banner">
+      <div class="small">Still training? It's been a while since your last logged set.</div>
+      <div class="row" style="flex:none;gap:0.5rem;">
+        <button class="btn btn-sm" id="staleStillTrainingBtn">Still going</button>
+        <button class="btn btn-sm btn-primary" id="staleEndWorkoutBtn">End workout</button>
+      </div>
+    </div>
+  `;
+}
+
+function endWorkoutButtonHtml() {
+  if (!isSessionActiveToday()) return '';
+  return `<button class="btn btn-primary btn-block" id="endWorkoutBtn" style="margin-top:0.75rem;">End Workout</button>`;
+}
+
 function renderLiftLog(panel) {
   const lifts = state.lifts;
   const prs = computeLiftPRs(lifts);
@@ -5559,6 +5906,7 @@ function renderLiftLog(panel) {
       <button class="btn btn-sm btn-ghost" id="prBannerDismiss">✕</button>
     </div>` : ''}
     ${cueCardBanner ? cueCardHtml(cueCardBanner) : ''}
+    ${staleSessionPromptHtml()}
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <h3 style="margin:0;">Log a lift</h3>
@@ -5613,6 +5961,7 @@ function renderLiftLog(panel) {
         <div><div class="stat-num">${todaySummary.sets}</div><div class="muted small">set${todaySummary.sets === 1 ? '' : 's'}</div></div>
         <div><div class="stat-num">${Math.round(todaySummary.volume).toLocaleString()}</div><div class="muted small">volume</div></div>
       </div>
+      ${endWorkoutButtonHtml()}
     </div>` : ''}
     ${exercises.length ? `
     <div class="card">
@@ -5744,6 +6093,12 @@ function renderLiftLog(panel) {
   const cueDismiss = $('#cueCardDismiss');
   if (cueDismiss) cueDismiss.addEventListener('click', () => { cueCardBanner = null; renderLiftsTab(); });
   $('#openGlossaryBtn').addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); });
+  const endWorkoutBtn = $('#endWorkoutBtn');
+  if (endWorkoutBtn) endWorkoutBtn.addEventListener('click', endWorkoutSession);
+  const staleStillTraining = $('#staleStillTrainingBtn');
+  if (staleStillTraining) staleStillTraining.addEventListener('click', () => { staleSessionPromptDismissed = true; renderLiftsTab(); });
+  const staleEndWorkout = $('#staleEndWorkoutBtn');
+  if (staleEndWorkout) staleEndWorkout.addEventListener('click', endWorkoutSession);
   $$('[data-suggest-exercise]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const val = btn.dataset.suggestExercise;
     liftForm.exercise = val;

@@ -443,6 +443,44 @@ weekly recap card.
 
 ---
 
+### `workout_sessions` — End Workout flow + post-session AI analysis
+```sql
+id                                 uuid primary key
+user_id                            uuid
+date                               date — one row per (user_id, date); a "session" is one calendar day
+ended_at                           timestamptz — null means active (or reopened)
+analysis                           jsonb — cached { summary, callouts[], highlightExercise } from analyze-session.js
+analysis_generated_at              timestamptz
+created_at                         timestamptz
+```
+unique constraint on `(user_id, date)`.
+
+A session is one calendar day of lifts, matching every other "today's
+session" concept already in `index.html` (the Lifts tab's today summary,
+PR detection) — there's no separate clock-time session boundary, so this
+table doesn't invent one either. There's no `started_at` column: a
+session's start is already implicit in the earliest `lifts.created_at`
+for that date, and the "still training?" staleness prompt (shown when a
+session has been active for a while with no new set logged) reads
+`lifts.created_at` directly rather than duplicating that timestamp here.
+
+**Frontend reads/writes:** loaded once via `loadWorkoutSession()`, upserted
+by `endWorkoutSession()` (sets `ended_at`) and `reopenWorkoutSession()`
+(clears it). Tapping "End Workout" auto-triggers analysis generation via
+the `analyze-session` Netlify function when the account is paid and the
+minimum-history baseline is met (3+ prior days that included one of
+today's exercises) — the result is cached in `analysis`/
+`analysis_generated_at` so it's called at most once per session/day, never
+regenerated on a later view or a reopen-then-re-end. Below the baseline,
+ending the session still works and shows an honest placeholder instead of
+a thin comparison. Charts on the analysis screen (volume/trend for
+whichever exercise the writeup calls out via `highlightExercise`, plus a
+small nutrition-context chart when a "nutrition" callout is present) render
+with Chart.js, loaded lazily from a CDN only when this screen opens — the
+one deliberate exception to the rest of the app's hand-rolled-SVG chart
+convention, per the product spec for this feature specifically.
+
+
 ## Naming Rules — CONSISTENT across ALL tables
 
 | Type | Naming | Example | Notes |
@@ -586,3 +624,8 @@ For the achievement/milestone system (the `user_achievements` table and
 `profiles.glossary_exercises_viewed`): run
 **`supabase-schema-phase15-achievements.sql`** against an existing live
 database; fresh installs get it from `reset-schema.sql`.
+
+For the End Workout flow + post-session AI analysis (the
+`workout_sessions` table): run
+**`supabase-schema-phase16-workout-sessions.sql`** against an existing
+live database; fresh installs get it from `reset-schema.sql`.

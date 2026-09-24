@@ -5,6 +5,7 @@
 -- ============================================================
 
 -- Drop all tables in correct dependency order (reverse of creation)
+drop table if exists workout_sessions cascade;
 drop table if exists user_achievements cascade;
 drop table if exists exercises cascade;
 drop table if exists training_splits cascade;
@@ -732,6 +733,29 @@ create policy "user_achievements_select_own" on user_achievements for select
   using (auth.uid() = user_id);
 create policy "user_achievements_insert_own" on user_achievements for insert
   with check (auth.uid() = user_id);
+
+-- ── workout_sessions (End Workout flow + post-session AI analysis) ──────
+-- A "session" is one calendar day of lifts — see
+-- supabase-schema-phase16-workout-sessions.sql for the full rationale.
+create table workout_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  date date not null,
+  ended_at timestamptz,
+  analysis jsonb,
+  analysis_generated_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (user_id, date)
+);
+
+alter table workout_sessions enable row level security;
+
+create policy "workout_sessions_select_own" on workout_sessions for select
+  using (auth.uid() = user_id);
+create policy "workout_sessions_insert_own" on workout_sessions for insert
+  with check (auth.uid() = user_id);
+create policy "workout_sessions_update_own" on workout_sessions for update
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE
