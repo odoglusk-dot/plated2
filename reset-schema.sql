@@ -78,6 +78,10 @@ create table goals (
   -- Which calculator scenario these goals came from — drives the soft
   -- calorie-range shading on the dashboard ring (see calorieRangeForGoal()).
   goal_mode text not null default 'maintain' check (goal_mode in ('lose', 'maintain', 'gain')),
+  -- When goal_mode last actually changed value (not stamped on every
+  -- goals write) — lets the goal-adaptive nudge tell "just changed" from
+  -- "has been this way for months." See supabase-schema-phase14-goal-nudges.sql.
+  goal_mode_changed_at timestamptz,
   updated_at timestamptz not null default now()
 );
 

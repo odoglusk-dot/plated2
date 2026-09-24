@@ -1914,7 +1914,7 @@ function renderOnboarding() {
       const [{ error: profileError }, { error: bodyError }, { error: goalsError }] = await Promise.all([
         supabase.from('profiles').upsert({ id: state.user.id, age: r.age, sex: r.sex, height_cm: round(r.heightCm, 1), activity_level: r.activity }),
         supabase.from('body_stats').upsert({ user_id: state.user.id, weight_kg: round(r.weightKg, 2), updated_at: new Date().toISOString() }),
-        supabase.from('goals').upsert({ user_id: state.user.id, calories: r.targetCalories, protein_g: r.proteinG, carbs_g: r.carbsG, fat_g: r.fatG, goal_mode: r.goalMode, water_oz: g.water_oz || 64, updated_at: new Date().toISOString() }),
+        supabase.from('goals').upsert(withGoalModeTracking({ user_id: state.user.id, calories: r.targetCalories, protein_g: r.proteinG, carbs_g: r.carbsG, fat_g: r.fatG, goal_mode: r.goalMode, water_oz: g.water_oz || 64, updated_at: new Date().toISOString() })),
       ]);
       const error = profileError || bodyError || goalsError;
       if (error) { toast('Could not save: ' + error.message); btn.disabled = false; return; }
@@ -2702,6 +2702,54 @@ const TIP_LIBRARY = [
         sentence: `Your weight's held steady over your last few check-ins even though you're set to ${goalLabel} — worth double-checking your calorie target still matches that goal.`,
         learnMore: `Metabolism and daily calorie burn shift as body weight changes and as logging accuracy drifts over time, so a target calculated weeks ago can quietly stop matching what a "cut" or "bulk" actually requires. Re-running the Goal Calculator with your current weight is a quick way to check whether the target's still right.`,
       };
+    },
+  },
+  {
+    // Goal-adaptive: specifically about a *recently changed* goal, distinct
+    // from bodyweight_stalled above (which fires regardless of when the
+    // goal was set). Reads goals.goal_mode_changed_at, stamped by
+    // withGoalModeTracking() whenever goal_mode actually changes value.
+    id: 'goal_mode_changed',
+    category: 'nutrition',
+    check(ctx) {
+      const { goal_mode: goalMode, goal_mode_changed_at, calories } = ctx.goals;
+      if (goalMode !== 'lose' && goalMode !== 'gain') return null;
+      if (!goal_mode_changed_at || !calories) return null;
+
+      const changedDate = localDateStr(new Date(goal_mode_changed_at));
+      const daysSinceChange = Math.round((new Date(`${ctx.today}T00:00:00`) - new Date(`${changedDate}T00:00:00`)) / 86400000);
+      // A grace period so logged behavior has time to catch up to a brand
+      // new goal, and a cutoff so this doesn't keep nudging about a change
+      // from a month ago — bodyweight_stalled covers the longer horizon.
+      if (daysSinceChange < 5 || daysSinceChange > 30) return null;
+
+      const byDay = groupByDay(ctx.historyLogs);
+      const loggedDaysSinceChange = [];
+      const cursor = new Date(`${ctx.today}T00:00:00`);
+      cursor.setDate(cursor.getDate() - 1); // exclude today — still in progress
+      for (let i = 0; i < 7; i++) {
+        const dayStr = localDateStr(cursor);
+        if (dayStr < changedDate) break;
+        if (byDay.has(dayStr)) loggedDaysSinceChange.push(dayStr);
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      if (loggedDaysSinceChange.length < 3) return null; // not enough logged data since the change to judge fairly
+
+      const avgCalories = loggedDaysSinceChange.reduce((sum, d) => sum + sumMacros(byDay.get(d)).calories, 0) / loggedDaysSinceChange.length;
+
+      if (goalMode === 'gain' && avgCalories < calories * 0.92) {
+        return {
+          sentence: `You set a bulk goal ${daysSinceChange} days ago, but your average calories since then (${Math.round(avgCalories)}) are still tracking well under your ${Math.round(calories)} target.`,
+          learnMore: `A calorie surplus is what actually drives a bulk — without consistently eating above maintenance, training volume alone won't add much size. If logging looks accurate, closing this with bigger portions or an extra snack matters more right now than anything else in the plan.`,
+        };
+      }
+      if (goalMode === 'lose' && avgCalories > calories * 1.08) {
+        return {
+          sentence: `You set a cut goal ${daysSinceChange} days ago, but your average calories since then (${Math.round(avgCalories)}) are still above your ${Math.round(calories)} target.`,
+          learnMore: `Fat loss requires a consistent calorie deficit — without one, even great training and high protein won't move the scale in that direction. If logging looks accurate, closing this gap (smaller portions, fewer higher-calorie extras) is the highest-leverage change available right now.`,
+        };
+      }
+      return null;
     },
   },
 ];
@@ -3842,6 +3890,18 @@ function computeCaloriesAndMacros({ bmr, tdee, weightLb, weeklyRateLb, goalMode 
   return { targetCalories, proteinG, fatG, carbsG, safetyFloor, adjusted };
 }
 
+// Stamps goal_mode_changed_at only when goal_mode is actually changing from
+// its previously-loaded value — every goals upsert that sets goal_mode
+// (the calculator, onboarding's auto-calc step) routes through this so the
+// goal-adaptive nudge (which reads this column) sees every path a goal can
+// change from, not just one of them.
+function withGoalModeTracking(payload) {
+  if (!payload.goal_mode) return payload;
+  const previous = state.goals?.goal_mode || 'maintain';
+  if (payload.goal_mode === previous) return payload;
+  return { ...payload, goal_mode_changed_at: new Date().toISOString() };
+}
+
 // Soft calorie range per goal — a healthy zone around the target, not a
 // strict rule. "lose" reuses the same BMR-based safety floor as the
 // calculator itself; "gain" has no real lower bound (under-eating a bulk
@@ -4151,7 +4211,7 @@ function renderProfile() {
     $('#calc_apply').addEventListener('click', async () => {
       await supabase.from('profiles').upsert({ id: state.user.id, age, sex, height_cm: round(heightCm, 1), activity_level: activity });
       await supabase.from('body_stats').upsert({ user_id: state.user.id, weight_kg: round(weightKg, 2), updated_at: new Date().toISOString() });
-      await supabase.from('goals').upsert({ user_id: state.user.id, calories: targetCalories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG, goal_mode: goalMode, updated_at: new Date().toISOString() });
+      await supabase.from('goals').upsert(withGoalModeTracking({ user_id: state.user.id, calories: targetCalories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG, goal_mode: goalMode, updated_at: new Date().toISOString() }));
       toast('Goals updated from calculator');
       await Promise.all([loadProfile(), loadBodyStats(), loadGoals()]);
       renderAll();

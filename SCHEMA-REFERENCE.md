@@ -35,16 +35,17 @@ with a retry-on-collision loop; older accounts get one lazily via
 
 ### `goals` — Daily nutrition targets
 ```sql
-user_id     uuid primary key
-calories    int (default: 2200)
-protein_g   int (default: 150)       ← WITH _g suffix
-carbs_g     int (default: 250)       ← WITH _g suffix
-fat_g       int (default: 70)        ← WITH _g suffix
-water_oz    numeric (default: 64) — flat editable default, not calculator-derived
-goal_mode   text (default: 'maintain') ('lose' | 'maintain' | 'gain')
-updated_at  timestamptz
+user_id                uuid primary key
+calories                int (default: 2200)
+protein_g               int (default: 150)       ← WITH _g suffix
+carbs_g                 int (default: 250)       ← WITH _g suffix
+fat_g                   int (default: 70)        ← WITH _g suffix
+water_oz                numeric (default: 64) — flat editable default, not calculator-derived
+goal_mode                text (default: 'maintain') ('lose' | 'maintain' | 'gain')
+goal_mode_changed_at     timestamptz — only stamped when goal_mode actually changes value
+updated_at              timestamptz
 ```
-**Frontend reads/writes:** `user_id, calories, protein_g, carbs_g, fat_g, water_oz, goal_mode, updated_at`  
+**Frontend reads/writes:** `user_id, calories, protein_g, carbs_g, fat_g, water_oz, goal_mode, goal_mode_changed_at, updated_at`  
 ⚠️ **CRITICAL:** All macros use `_g` suffix. If your DB has `protein`, `carbs`, `fat` (without `_g`), goals won't display properly.
 
 `goal_mode` drives two things in `index.html`: the calculator's macro split
@@ -52,6 +53,16 @@ updated_at  timestamptz
 dashboard's soft calorie-range shading (`calorieRangeForGoal()`) — a muted
 ring color when today's total falls outside a healthy zone for that goal,
 never a hard alert.
+
+`goal_mode_changed_at` is written by `withGoalModeTracking()`, wrapped
+around every `goals` upsert that sets `goal_mode` (the Goal Calculator and
+onboarding's auto-calculated step) — it only updates the timestamp when the
+incoming `goal_mode` differs from what's currently loaded in
+`state.goals.goal_mode`, so re-saving the same goal mode (e.g. re-running
+the calculator with a new weight but the same "lose" goal) doesn't reset
+the clock. The `goal_mode_changed` tip trigger (Layer 1 tips library) reads
+this to give logged behavior a several-day grace period after a goal
+change before nudging about a mismatch.
 
 ---
 
@@ -536,4 +547,8 @@ database; fresh installs get it from `reset-schema.sql`.
 For the exercise database (cue cards, muscle map defaults, split builder,
 glossary — the `exercises` table, seeded with ~30 common lifts): run
 **`supabase-schema-phase13-exercises.sql`** against an existing live
+database; fresh installs get it from `reset-schema.sql`.
+
+For goal-adaptive coaching nudges (`goals.goal_mode_changed_at`): run
+**`supabase-schema-phase14-goal-nudges.sql`** against an existing live
 database; fresh installs get it from `reset-schema.sql`.
