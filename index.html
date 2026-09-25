@@ -373,13 +373,6 @@
   .compare-fact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.82rem; }
   .compare-value { font-size: 1rem; }
   .compare-delta { font-size: 0.7rem; text-align: center; min-width: 56px; }
-  .autocomplete-wrap { position: relative; }
-  .autocomplete-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-height: 180px; overflow-y: auto; z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
-  .autocomplete-item { padding: 0.55rem 0.7rem; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid var(--border); }
-  .autocomplete-item:last-child { border-bottom: none; }
-  .autocomplete-item:hover { background: var(--surface-2); }
-  .autocomplete-new { color: var(--accent); }
-  .autocomplete-empty { padding: 0.6rem 0.7rem; font-size: 0.82rem; color: var(--text-dim); }
   .balance-bars { display: flex; flex-direction: column; gap: 0.5rem; }
   .balance-row { display: grid; grid-template-columns: 5rem 1fr auto; align-items: center; gap: 0.5rem; }
   .balance-row-label { font-size: 0.8rem; }
@@ -5493,73 +5486,48 @@ async function recordGlossaryView(exerciseName) {
   if (!error) checkAndUnlockAchievements();
 }
 
-let liftAutocompleteOpen = false;
-
-function autocompleteDropdownHtml(value, options) {
-  const trimmed = value.trim();
-  const filtered = value ? options.filter((o) => o.toLowerCase().includes(value.toLowerCase())) : options;
-  const isNew = trimmed && !options.some((o) => o.toLowerCase() === trimmed.toLowerCase());
-  return `<div class="autocomplete-dropdown">
-    ${filtered.length === 0 && !isNew ? `<div class="autocomplete-empty">No matches</div>` : ''}
-    ${filtered.map((opt) => `<div class="autocomplete-item" data-ac-select="${esc(opt)}">${esc(opt)}</div>`).join('')}
-    ${isNew ? `<div class="autocomplete-item autocomplete-new" data-ac-select="${esc(trimmed)}">+ Add "${esc(trimmed)}" as a new exercise</div>` : ''}
-  </div>`;
-}
-
-// Rendered into its own #liftExerciseWrap container and re-rendered on its
-// own on every keystroke (rather than the whole Lifts panel) so typing
-// doesn't lose focus — only a blur or an actual selection triggers the
-// full-panel re-render needed to reveal the muscle-group/body-region
-// selects and live-comparison card.
+// Uses a native <input list="..."> + <datalist> instead of a hand-rolled
+// dropdown. Two custom-dropdown implementations were tried here and both
+// had the same underlying problem: redrawing anything under the input on
+// every keystroke (even just the dropdown, not the input itself) turned
+// out to be fragile in ways that were hard to fully rule out across real
+// devices. A native datalist needs none of that — the browser owns the
+// suggestion popup entirely, the <input> is never touched by JS after
+// creation, and typing a name that isn't in the list is simply accepted
+// as free text (datalist only ever suggests, it never restricts input),
+// which is exactly "add a new exercise" with no separate affordance
+// needed for it.
 function renderLiftExerciseField(panel, allExerciseOptions) {
   const wrap = $('#liftExerciseWrap', panel);
   if (!wrap) return;
 
-  // The <input> is created exactly once here and never touched again while
-  // the user types — only the dropdown div below it re-renders per
-  // keystroke. An earlier version rebuilt the whole wrap (input included)
-  // on every keystroke; destroying the focused node like that has no way
-  // to carry focus over to its replacement, so typing past the first
-  // character silently went nowhere. (A later fix that explicitly called
-  // .focus() on the new node made it worse — that synchronously re-fires
-  // this same 'focus' listener, which redraws and calls .focus() again,
-  // infinitely.) Leaving the input itself alone sidesteps both problems.
   wrap.innerHTML = `
     <label>Exercise</label>
-    <input class="input" id="lift_exercise" value="${esc(liftForm.exercise)}" placeholder="Search or type a new exercise…" autocomplete="off">
-    <div id="liftAutocompleteDropdown"></div>
+    <input class="input" id="lift_exercise" list="lift_exercise_options" value="${esc(liftForm.exercise)}" placeholder="Search or type a new exercise…" autocomplete="off">
+    <datalist id="lift_exercise_options">
+      ${allExerciseOptions.map((opt) => `<option value="${esc(opt)}"></option>`).join('')}
+    </datalist>
+    ${liftForm.exercise && !allExerciseOptions.some((o) => o.toLowerCase() === liftForm.exercise.trim().toLowerCase()) ? `<p class="muted small" style="margin:0.3rem 0 0;">New exercise — set its muscle group/body region below.</p>` : ''}
   `;
   const input = $('#lift_exercise', wrap);
-  const dropdownEl = $('#liftAutocompleteDropdown', wrap);
 
-  const drawDropdown = () => {
-    dropdownEl.innerHTML = liftAutocompleteOpen ? autocompleteDropdownHtml(liftForm.exercise, allExerciseOptions) : '';
-    $$('[data-ac-select]', dropdownEl).forEach((item) => item.addEventListener('mousedown', (e) => {
-      e.preventDefault(); // keeps focus on the input instead of the item, avoiding the blur race entirely
-      const val = item.dataset.acSelect;
-      liftForm.exercise = val;
-      liftAutocompleteOpen = false;
-      liftForm.muscleGroup = exerciseDefFor(val)?.muscle_group || DEFAULT_MUSCLE_GROUP[val] || liftForm.muscleGroup || '';
-      liftForm.bodyRegion = exerciseDefFor(val)?.body_region || DEFAULT_BODY_REGION[val] || liftForm.bodyRegion || '';
-      prefillLiftFormFromLast(val);
-      renderLiftsTab();
-    }));
-  };
-
-  input.addEventListener('focus', () => { liftAutocompleteOpen = true; drawDropdown(); });
   input.addEventListener('input', (e) => {
     liftForm.exercise = e.target.value;
-    liftAutocompleteOpen = true;
-    drawDropdown();
+    // A datalist pick fires 'input' with the exact option value — apply
+    // the same muscle-group/body-region defaulting a dropdown click used
+    // to, then do the one full-panel re-render needed to reveal those
+    // selects and the "new exercise" hint. Typing that merely *matches* an
+    // option character-for-character mid-keystroke would also take this
+    // path, which is harmless — it's the same values a full match implies.
+    const match = allExerciseOptions.find((o) => o.toLowerCase() === e.target.value.trim().toLowerCase());
+    if (match) {
+      liftForm.muscleGroup = exerciseDefFor(match)?.muscle_group || DEFAULT_MUSCLE_GROUP[match] || liftForm.muscleGroup || '';
+      liftForm.bodyRegion = exerciseDefFor(match)?.body_region || DEFAULT_BODY_REGION[match] || liftForm.bodyRegion || '';
+      prefillLiftFormFromLast(match);
+      renderLiftsTab();
+    }
   });
-  input.addEventListener('blur', () => {
-    // delayed so a dropdown item's mousedown (which fires first) can
-    // still register a selection before the dropdown disappears
-    setTimeout(() => { liftAutocompleteOpen = false; renderLiftsTab(); }, 150);
-  });
-
-  drawDropdown();
-  if (liftAutocompleteOpen) input.focus();
+  input.addEventListener('blur', () => renderLiftsTab());
 }
 
 // ── End Workout flow + post-session AI analysis ─────────────────────
