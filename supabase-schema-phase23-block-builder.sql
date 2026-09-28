@@ -1,0 +1,16 @@
+-- Krafft — Phase 23: Optional Block Builder (deterministic, no AI).
+-- Run this once in the Supabase SQL Editor against the existing live
+-- database. Fresh installs get it automatically from reset-schema.sql
+-- instead.
+--
+-- Stores the whole generated 4-week block (focus, priority areas, days
+-- per week, equipment/avoid filters, and the resulting day-by-day
+-- exercise plan) as a single jsonb blob rather than a new relational
+-- table — the shape is generated fresh by fixed client-side rules every
+-- time and only ever fully replaced or cleared, never queried by field,
+-- so a table with its own columns would just be structure with no
+-- reason to exist. Deliberately separate from training_splits: starting
+-- a block does not touch the user's existing split setup, so nothing
+-- about the split picker, "today's focus" card, or suggested-exercises
+-- logic changes.
+alter table profiles add column if not exists active_training_block jsonb;

@@ -1,0 +1,28 @@
+-- Krafft — Phase 19: warm-up set tracking (feeds weekly hard-sets-per-muscle).
+-- Run this once in the Supabase SQL Editor against the existing live
+-- database. Fresh installs get it automatically from reset-schema.sql
+-- instead.
+--
+-- The weekly hard-sets-per-muscle feature needs to count WORKING sets
+-- only, per the product requirement that warm-up sets not inflate the
+-- count. Since a single `lifts` row already bundles multiple sets at one
+-- weight into reps_per_set (an array), warm-up status has to be tracked
+-- the same way: a parallel boolean array, same length and index alignment
+-- as reps_per_set, rather than a new row-level flag (a single lift row can
+-- mix warm-up and working sets — e.g. two warm-up sets followed by three
+-- working sets at the same logged weight is a realistic case this needs
+-- to support).
+--
+-- Defaults to '{}' (empty), which the read side treats as "no sets in
+-- this row are flagged as warm-up" — i.e. every existing logged set
+-- before this migration counts as a working set, the same as it always
+-- has. This is a deliberate safe default: it doesn't retroactively and
+-- silently zero out anyone's historical volume.
+--
+-- This column is intentionally scoped to the new weekly-volume feature
+-- only. PR detection, career volume, and the existing muscle map heatmap
+-- are unchanged and still count every logged set — extending
+-- warm-up-awareness to those would be a separate, explicit product
+-- decision, not a side effect of adding this column.
+
+alter table lifts add column if not exists warmup_per_set boolean[] not null default '{}';

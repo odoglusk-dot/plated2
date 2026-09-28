@@ -273,6 +273,8 @@
   .reps-per-set-cell { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
   .reps-per-set-cell span { font-size: 0.68rem; color: var(--text-dim); }
   .reps-per-set-cell .input { width: 44px; text-align: center; padding: 0.4rem 0; }
+  .warmup-toggle { display: flex; align-items: center; gap: 0.2rem; font-size: 0.62rem; color: var(--text-dim); white-space: nowrap; }
+  .warmup-toggle input { margin: 0; width: 12px; height: 12px; }
   .live-comparison { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; }
   .live-comparison-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
   .mini-line-svg { width: 100%; height: 60px; display: block; }
@@ -348,6 +350,13 @@
   .muscle-group-legend { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.5rem; }
   .legend-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; color: var(--text-dim); }
   .legend-swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .weekly-sets-bars { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
+  .weekly-sets-row { display: flex; align-items: center; gap: 0.5rem; }
+  .weekly-sets-label { width: 72px; flex-shrink: 0; font-size: 0.72rem; color: var(--text-dim); }
+  .weekly-sets-bar-track { flex: 1; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+  .weekly-sets-bar-fill { height: 100%; border-radius: 4px; background: var(--accent); }
+  .weekly-sets-bar-fill.in-range { background: var(--success); }
+  .weekly-sets-count { width: 30px; flex-shrink: 0; text-align: right; font-size: 0.75rem; color: var(--text-dim); }
   .plateau-row { font-size: 0.85rem; padding: 0.3rem 0; cursor: pointer; }
   .day-card { padding: 0; overflow: hidden; }
   .day-card-head { padding: 0.75rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
@@ -951,6 +960,7 @@ const state = {
   exercises: [], // reference data, same rows for every account — see loadExercises()
   achievements: [], // unlocked rows: {achievement_id, unlocked_at} — see loadAchievements()
   workoutSession: null, // today's row: {date, ended_at, analysis, analysis_generated_at} | null — see loadWorkoutSession()
+  healthSyncToken: null, // {created_at, last_used_at, revoked_at} | null — see loadHealthSyncStatus(). Never the raw token itself; that's only ever seen once, at generation time.
   activeTab: 'dashboard',
   aiRemaining: null,
   subscription: null,
@@ -1377,20 +1387,38 @@ const COMMON_FOODS = [
   { name: 'Thousand Island dressing (2 tbsp)', calories: 140, protein_g: 0, carbs_g: 5, fat_g: 13 },
 ];
 
+// evidenceRating/whatFor are the new evidence-card fields (Strong/
+// Moderate/Limited/Weak + a 1-2 sentence plain-language summary), added
+// only to the 5 starting supplements requested — the rest of this list
+// keeps its existing benefits/drawbacks/notes format unchanged. `notes`
+// already carries a typical dosing range for these entries, so the
+// evidence card reuses it rather than duplicating a new field. The
+// rating itself is a general characterization, not sourced from a
+// specific study yet — see the "Source" toggle in renderSupplements(),
+// which deliberately shows nothing but a pending-verification note. Do
+// not fill it in with an invented citation.
 const SUPPLEMENT_GUIDE = [
-  { name: 'Whey Protein', benefits: ['Convenient way to hit a daily protein target', 'Fast-digesting — good post-workout', 'Complete amino acid profile'],
+  { name: 'Whey Protein', evidenceRating: 'Strong',
+    whatFor: 'A convenient, fast-digesting protein source that helps you hit a daily protein target supporting muscle repair and growth — the benefit comes from meeting your protein needs, not from whey being special.',
+    benefits: ['Convenient way to hit a daily protein target', 'Fast-digesting — good post-workout', 'Complete amino acid profile'],
     drawbacks: ['Can cause GI discomfort/bloating if lactose sensitive (try isolate instead)', 'Not a replacement for whole-food protein sources', 'Unnecessary if diet already meets protein goals'],
     notes: 'Typical dose: 1 scoop (~24g protein) post-workout or as a snack.' },
-  { name: 'Creatine Monohydrate', benefits: ['One of the most researched sports supplements that exists', 'Supports strength/power output and recovery', 'Safe at standard doses per available research'],
+  { name: 'Creatine Monohydrate', evidenceRating: 'Strong',
+    whatFor: 'Helps regenerate ATP faster during short, intense efforts, supporting strength, power output, and training volume.',
+    benefits: ['One of the most researched sports supplements that exists', 'Supports strength/power output and recovery', 'Safe at standard doses per available research'],
     drawbacks: ['Can cause temporary water retention (mostly intracellular, not fat)', 'Minor GI upset if taken in one large dose', 'More relevant to strength/power sports than pure endurance'],
     notes: 'Typical dose: 3–5g/day, any time of day. No "loading phase" needed.' },
   { name: 'Multivitamin', benefits: ['Simple backstop against gaps in a busy training diet', 'Inexpensive insurance'],
     drawbacks: ['No benefit above what a varied diet already provides', 'Megadoses of fat-soluble vitamins (A, D, E, K) can actually be harmful'],
     notes: 'Pick one near 100% daily value — skip ones advertising "1000%".' },
-  { name: 'Vitamin D3', benefits: ['Many indoor/northern-climate athletes run low', 'Supports bone health and immune function — both relevant to injury recovery'],
+  { name: 'Vitamin D3', evidenceRating: 'Moderate',
+    whatFor: 'Supports bone health and immune function, and correcting a genuine deficiency may help those specific issues — general performance benefits beyond correcting a deficiency are less consistently shown.',
+    benefits: ['Many indoor/northern-climate athletes run low', 'Supports bone health and immune function — both relevant to injury recovery'],
     drawbacks: ['Hard to overdose by accident, but very high long-term doses can cause toxicity', 'Guessing a dose is worse than testing blood levels'],
     notes: 'Common starting range: 1000–2000 IU/day. Ask a doctor for bloodwork-based dosing.' },
-  { name: 'Omega-3 Fish Oil', benefits: ['Supports cardiovascular and joint health', 'Some evidence for reduced exercise-induced inflammation'],
+  { name: 'Omega-3 Fish Oil', evidenceRating: 'Moderate',
+    whatFor: 'Mainly supported for cardiovascular and joint health, with some evidence for reduced exercise-induced inflammation — effects are generally modest rather than dramatic.',
+    benefits: ['Supports cardiovascular and joint health', 'Some evidence for reduced exercise-induced inflammation'],
     drawbacks: ['Fishy aftertaste/burps for some people', 'Blood-thinning effect at high doses matters around injuries/surgery', 'Quality varies a lot between brands'],
     notes: 'Look for combined EPA+DHA around 1–2g/day, or eat fatty fish twice a week instead.' },
   { name: 'Magnesium', benefits: ['Involved in muscle contraction/relaxation', 'Some athletes report better sleep, fewer cramps'],
@@ -1402,7 +1430,8 @@ const SUPPLEMENT_GUIDE = [
   { name: 'Iron', benefits: ['Genuinely important for endurance athletes and anyone with heavy training volume', 'Deficiency shows up as fatigue and worse performance'],
     drawbacks: ['This is the one entry here that should never be started on a whim — iron overload is toxic and hard to reverse', 'Supplementing without an actual deficiency does nothing helpful'],
     notes: 'Get a blood ferritin test before supplementing. Do not self-prescribe.' },
-  { name: 'Caffeine / Pre-Workout Blends', caution: true,
+  { name: 'Caffeine / Pre-Workout Blends', caution: true, evidenceRating: 'Strong',
+    whatFor: 'A well-studied stimulant that can modestly improve focus, reduce perceived effort, and support performance across many kinds of training — the caution below is about commercial blends and teen-specific dosing, not caffeine\'s effect itself.',
     benefits: ['Caffeine has solid evidence for improved focus and perceived exertion during training'],
     drawbacks: ['Many commercial pre-workout blends pack 300mg+ caffeine per scoop, well above what is appropriate for a teenage athlete', 'Proprietary stimulant blends often under-disclose ingredients', 'Can cause jitteriness, disrupted sleep, and a dependency on stimulants to feel "ready" to train'],
     notes: 'For a teenage athlete specifically: skip stimulant-heavy pre-workout products entirely. Sleep, food, and hydration do more for training quality with none of the downside.' },
@@ -1906,7 +1935,7 @@ function renderOnboarding() {
       const r = calcFromObInputs();
       const preview = $('#ob_calc_preview');
       preview.innerHTML = r
-        ? `<span class="badge on">${r.targetCalories} kcal</span> <span class="badge">P ${r.proteinG}g</span> <span class="badge">C ${r.carbsG}g</span> <span class="badge">F ${r.fatG}g</span>`
+        ? `<span class="badge on">${r.targetCalories} kcal</span> <span class="badge">P ${r.proteinG}g</span> <span class="badge">C ${r.carbsG}g</span> <span class="badge">F ${r.fatG}g</span>${goalExplainerHtml(r.activity, r.goalMode)}`
         : `Fill in age, height, and weight to see your calculated targets.`;
     }
     updateObPreview();
@@ -2022,7 +2051,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadExercises(), loadAchievements(), loadWorkoutSession()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus()]);
   renderAll();
 }
 
@@ -2202,6 +2231,12 @@ async function loadWorkoutSession() {
   state.workoutSession = data || null;
 }
 
+async function loadHealthSyncStatus() {
+  const { data } = await supabase.from('health_sync_tokens').select('created_at,last_used_at,revoked_at')
+    .eq('user_id', state.user.id).maybeSingle();
+  state.healthSyncToken = data || null;
+}
+
 async function loadReferrals() {
   const { data } = await supabase.from('referrals').select('status').eq('referrer_user_id', state.user.id);
   state.referrals = data || [];
@@ -2295,6 +2330,11 @@ function updateBottomNav() {
 const TABS_WITHOUT_SECONDARY_NAV = new Set(['dashboard', 'profile']);
 
 function setActiveTab(tab) {
+  // Navigating away from Log Food while the barcode camera is running
+  // would otherwise leave it active in the background (setActiveTab only
+  // toggles CSS visibility, it doesn't destroy the panel's DOM) — a real
+  // privacy/battery concern, not just a cosmetic one.
+  if (state.activeTab === 'log' && tab !== 'log' && barcodeScanning) stopBarcodeScan();
   state.activeTab = tab;
   $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
@@ -2977,6 +3017,11 @@ const ACHIEVEMENT_LIBRARY = [
     description: `Looked up the cues for ${GLOSSARY_EXPLORER_THRESHOLD} different exercises in the glossary.`,
     check: (ctx) => (ctx.profile?.glossary_exercises_viewed || []).length >= GLOSSARY_EXPLORER_THRESHOLD,
   },
+  {
+    id: 'learning_path_first', category: 'learning', title: 'First Learning Path Completed',
+    description: 'Read all the way through one of the Learning Paths in the guide.',
+    check: (ctx) => (ctx.profile?.learning_paths_completed || []).length >= 1,
+  },
 ];
 
 let newlyUnlockedAchievementId = null; // most recent unlock this session — dismissible banner
@@ -3187,6 +3232,38 @@ function todaysFocusHeroHtml() {
   </div>`;
 }
 
+// ── Protein by meal ───────────────────────────────────────────────────────
+// food_logs has no meal-type column (breakfast/lunch/dinner) — each row is
+// its own timestamped entry, so "per meal" here means each logged entry
+// across the day in chronological order, not a fixed set of meal slots.
+let proteinByMealInfoExpanded = false;
+function proteinByMealHtml(todayLogs, proteinGoal) {
+  if (!todayLogs.length) return '';
+  const sorted = [...todayLogs].sort((a, b) => new Date(a.logged_at) - new Date(b.logged_at));
+  let running = 0;
+  const rows = sorted.map((l) => {
+    running += l.protein_g;
+    return { time: new Date(l.logged_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), name: l.food_name, protein: l.protein_g, running };
+  });
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">Protein by Meal</h3>
+      <button class="btn btn-sm btn-ghost" id="proteinByMealInfoBtn" style="flex:none;">${proteinByMealInfoExpanded ? 'Hide' : 'Why this matters'}</button>
+    </div>
+    ${proteinByMealInfoExpanded ? `<p class="muted small" style="background:var(--surface-2);border-radius:8px;padding:0.6rem 0.75rem;margin-top:0.5rem;">Some research suggests spreading protein intake across multiple meals — rather than getting most of it in one sitting — may help your body use it more effectively for muscle repair and growth over the day. We don't have a specific verified citation for this yet, so treat it as a general habit worth trying, not a strict rule.</p>` : ''}
+    <div style="margin-top:0.5rem;">
+      ${rows.map((r) => `<div class="row" style="justify-content:space-between;font-size:0.85rem;padding:0.3rem 0;border-bottom:1px solid var(--border);">
+        <span class="muted">${esc(r.time)} · ${esc(r.name)}</span>
+        <span class="mono">${round(r.protein)}g</span>
+      </div>`).join('')}
+    </div>
+    <div class="row" style="justify-content:space-between;margin-top:0.5rem;font-weight:600;">
+      <span>Total today</span>
+      <span class="mono" style="color:var(--accent);">${round(running)}g${proteinGoal ? ` <span class="muted small" style="font-weight:400;">/ ${round(proteinGoal)}g goal</span>` : ''}</span>
+    </div>
+  </div>`;
+}
+
 function renderDashboard() {
   const totals = sumMacros(state.todayLogs);
   const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
@@ -3302,6 +3379,7 @@ function renderDashboard() {
             <button class="btn btn-sm btn-ghost" data-delete-log="${l.id}">✕</button>
           </div>`).join('')}
     </div>
+    ${proteinByMealHtml(state.todayLogs, state.goals.protein_g)}
 
     <div class="card">
       <h3>Quick Add</h3>
@@ -3361,6 +3439,8 @@ function renderDashboard() {
   });
 
   $$('[data-delete-log]', panel).forEach((btn) => btn.addEventListener('click', () => deleteLog(btn.dataset.deleteLog)));
+  const proteinByMealInfoBtn = $('#proteinByMealInfoBtn', panel);
+  if (proteinByMealInfoBtn) proteinByMealInfoBtn.addEventListener('click', () => { proteinByMealInfoExpanded = !proteinByMealInfoExpanded; renderDashboard(); });
   $$('[data-water]', panel).forEach((btn) => btn.addEventListener('click', () => logWater(Number(btn.dataset.water))));
   const logCustomWater = () => {
     const input = $('#water_custom_oz');
@@ -3402,9 +3482,10 @@ async function deleteLog(id) {
   renderAll();
 }
 
-async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source, photo_path }) {
+async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source, photo_path, sugar_g, barcode }) {
   const { error } = await supabase.from('food_logs').insert({
     user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source, photo_path: photo_path || null,
+    sugar_g: sugar_g ?? null, barcode: barcode || null,
   });
   if (error) return toast('Could not log food: ' + error.message);
   await loadHistory();
@@ -3524,13 +3605,18 @@ function renderLogTab() {
     <div class="sub-nav">
       <button class="btn ${logSubTab === 'ai' ? 'btn-primary' : ''}" data-sub="ai">Describe It</button>
       <button class="btn ${logSubTab === 'photo' ? 'btn-primary' : ''}" data-sub="photo">Snap a Photo</button>
+      <button class="btn ${logSubTab === 'barcode' ? 'btn-primary' : ''}" data-sub="barcode">Scan Barcode</button>
       <button class="btn ${logSubTab === 'common' ? 'btn-primary' : ''}" data-sub="common">Common Foods</button>
       <button class="btn ${logSubTab === 'manual' ? 'btn-primary' : ''}" data-sub="manual">Manual Entry</button>
       <button class="btn ${logSubTab === 'favorites' ? 'btn-primary' : ''}" data-sub="favorites">Favorites</button>
     </div>
     <div id="logSubPanel"></div>
   `;
-  $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => { logSubTab = btn.dataset.sub; renderLogTab(); }));
+  $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    if (logSubTab === 'barcode' && btn.dataset.sub !== 'barcode') stopBarcodeScan();
+    logSubTab = btn.dataset.sub;
+    renderLogTab();
+  }));
   renderLogSubPanel();
 }
 
@@ -3595,6 +3681,162 @@ async function saveFavorite(f) {
   toast(`Saved "${f.food_name}" to favorites`);
   await loadFavorites();
   renderAll();
+}
+
+// ── Barcode scanning (free tier — no AI) ────────────────────────────────
+// iOS Safari has no native BarcodeDetector, so scanning goes through
+// ZXing (loaded lazily from a CDN only when this sub-tab is opened, same
+// pattern as ensureChartJs() for the session-analysis charts) rather than
+// a built-in browser API. Lookups hit Open Food Facts directly per scan —
+// it's free with no rate limit that matters at this app's scale, so
+// there's no cache table here (see the phase21 migration's comment).
+let zxingLoadPromise = null;
+function ensureZXing() {
+  if (window.ZXing) return Promise.resolve();
+  if (zxingLoadPromise) return zxingLoadPromise;
+  zxingLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return zxingLoadPromise;
+}
+
+let barcodeReaderInstance = null;
+let barcodeScanning = false;
+let barcodeStartError = '';
+let barcodeLookupLoading = false;
+let barcodeLookupError = '';
+let barcodeResult = null; // { food_name, calories, protein_g, carbs_g, fat_g, sugar_g, servingLabel, barcode }
+let barcodeNotFoundCode = null;
+// Carries the scanned code into Manual Entry when a lookup comes back
+// empty, so the user doesn't have to remember/re-scan it — see
+// renderLogSubPanel()'s 'manual' branch.
+let pendingBarcodeForManualEntry = null;
+
+function stopBarcodeScan() {
+  if (barcodeReaderInstance) {
+    try { barcodeReaderInstance.reset(); } catch { /* already stopped */ }
+    barcodeReaderInstance = null;
+  }
+  barcodeScanning = false;
+}
+
+async function startBarcodeScan() {
+  barcodeStartError = '';
+  barcodeLookupError = '';
+  barcodeResult = null;
+  barcodeNotFoundCode = null;
+  try {
+    await ensureZXing();
+  } catch {
+    barcodeStartError = 'Could not load the barcode scanner — check your connection and try again.';
+    renderLogSubPanel();
+    return;
+  }
+  barcodeScanning = true;
+  renderLogSubPanel();
+  try {
+    barcodeReaderInstance = new window.ZXing.BrowserMultiFormatReader();
+    await barcodeReaderInstance.decodeFromConstraints(
+      { video: { facingMode: 'environment' } },
+      'barcodeVideoEl',
+      (result) => { if (result) handleBarcodeDetected(result.getText()); }
+      // A NotFoundException fires continuously while no barcode is in
+      // frame — that's the library's normal "still looking" signal, not
+      // an error, so it's deliberately ignored here.
+    );
+  } catch (err) {
+    barcodeScanning = false;
+    barcodeStartError = err?.name === 'NotAllowedError'
+      ? 'Camera access was denied — allow camera access in your browser settings to scan a barcode.'
+      : 'Could not start the camera for scanning.';
+    renderLogSubPanel();
+  }
+}
+
+// Open Food Facts prefers per-serving nutriments when the product has
+// them; falls back to per-100g otherwise, labeled accordingly so the
+// user can tell which basis they're confirming/adjusting.
+function normalizeOpenFoodFactsProduct(product) {
+  const n = product.nutriments || {};
+  const hasPerServing = n['energy-kcal_serving'] != null;
+  const round1 = (v) => Math.round((Number(v) || 0) * 10) / 10;
+  return {
+    food_name: product.product_name || product.generic_name || 'Scanned item',
+    servingLabel: hasPerServing ? (product.serving_size || 'labeled serving') : 'per 100g',
+    calories: Math.round(Number(hasPerServing ? n['energy-kcal_serving'] : n['energy-kcal_100g']) || 0),
+    protein_g: round1(hasPerServing ? n['proteins_serving'] : n['proteins_100g']),
+    carbs_g: round1(hasPerServing ? n['carbohydrates_serving'] : n['carbohydrates_100g']),
+    fat_g: round1(hasPerServing ? n['fat_serving'] : n['fat_100g']),
+    sugar_g: round1(hasPerServing ? n['sugars_serving'] : n['sugars_100g']),
+  };
+}
+
+async function handleBarcodeDetected(code) {
+  stopBarcodeScan();
+  barcodeLookupLoading = true;
+  barcodeLookupError = '';
+  renderLogSubPanel();
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`);
+    const data = await res.json();
+    if (data.status !== 1 || !data.product) {
+      barcodeNotFoundCode = code;
+      barcodeResult = null;
+    } else {
+      barcodeResult = { ...normalizeOpenFoodFactsProduct(data.product), barcode: code };
+    }
+  } catch {
+    barcodeLookupError = 'Could not look up that barcode — check your connection and try again.';
+  } finally {
+    barcodeLookupLoading = false;
+    renderLogSubPanel();
+  }
+}
+
+function barcodeResultCardHtml(result) {
+  return `
+    <div class="card" id="barcodeResult">
+      <h3>Found it</h3>
+      <p class="muted">${esc(result.servingLabel)} · from Open Food Facts, not AI</p>
+      <div class="field"><label>Food</label><input class="input" id="bc_name" value="${esc(result.food_name)}"></div>
+      <div class="row">
+        <div class="field"><label>Calories</label><input class="input mono" id="bc_cal" type="number" value="${round(result.calories)}"></div>
+        <div class="field"><label>Protein (g)</label><input class="input mono" id="bc_pro" type="number" value="${round(result.protein_g)}"></div>
+        <div class="field"><label>Carbs (g)</label><input class="input mono" id="bc_carb" type="number" value="${round(result.carbs_g)}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Fat (g)</label><input class="input mono" id="bc_fat" type="number" value="${round(result.fat_g)}"></div>
+        <div class="field"><label>Sugar (g)</label><input class="input mono" id="bc_sugar" type="number" value="${round(result.sugar_g)}"></div>
+      </div>
+      <p class="muted small">Confirm this matches the serving you actually had — adjust any field before logging.</p>
+      <div class="row">
+        <button class="btn btn-primary" id="logBarcodeBtn">Log It</button>
+        <button class="btn" id="favBarcodeBtn">Save to Quick Add</button>
+        <button class="btn btn-ghost" id="rescanBarcodeBtn">Scan Another</button>
+      </div>
+    </div>`;
+}
+
+function wireBarcodeResultCard(barcode) {
+  const readValues = () => ({
+    food_name: $('#bc_name').value.trim() || 'Food',
+    calories: Number($('#bc_cal').value) || 0,
+    protein_g: Number($('#bc_pro').value) || 0,
+    carbs_g: Number($('#bc_carb').value) || 0,
+    fat_g: Number($('#bc_fat').value) || 0,
+    sugar_g: Number($('#bc_sugar').value) || 0,
+  });
+  $('#logBarcodeBtn')?.addEventListener('click', () => {
+    logFood({ ...readValues(), source: 'barcode', barcode });
+    barcodeResult = null;
+    toast('Logged.');
+  });
+  $('#favBarcodeBtn')?.addEventListener('click', () => saveFavorite(readValues()));
+  $('#rescanBarcodeBtn')?.addEventListener('click', () => { barcodeResult = null; startBarcodeScan(); });
 }
 
 function renderLogSubPanel() {
@@ -3733,6 +3975,39 @@ function renderLogSubPanel() {
         btn.disabled = false; btn.textContent = 'Estimate Macros';
       }
     });
+  } else if (logSubTab === 'barcode') {
+    el.innerHTML = `
+      <div class="card">
+        <h3>Scan a barcode</h3>
+        <p class="muted">Free, no AI — looks up packaged foods via Open Food Facts.</p>
+        ${barcodeScanning ? `
+          <video id="barcodeVideoEl" style="width:100%;border-radius:8px;background:#000;" playsinline muted></video>
+          <button class="btn btn-block" id="stopBarcodeBtn" style="margin-top:0.75rem;">Stop Scanning</button>
+        ` : `
+          <button class="btn btn-primary" id="startBarcodeBtn">Start Scanner</button>
+        `}
+        ${barcodeStartError ? `<p class="muted small" style="color:var(--danger);margin-top:0.5rem;">${esc(barcodeStartError)}</p>` : ''}
+        ${barcodeLookupLoading ? `<p class="muted small" style="margin-top:0.5rem;"><span class="spinner spinner-sm"></span> Looking up that barcode…</p>` : ''}
+        ${barcodeLookupError ? `<p class="muted small" style="color:var(--danger);margin-top:0.5rem;">${esc(barcodeLookupError)}</p>` : ''}
+        ${barcodeNotFoundCode ? `
+          <p class="muted small" style="margin-top:0.5rem;">No match for barcode ${esc(barcodeNotFoundCode)} in Open Food Facts.</p>
+          <button class="btn" id="barcodeToManualBtn" style="margin-top:0.25rem;">Enter It Manually</button>
+        ` : ''}
+      </div>
+      ${barcodeResult ? barcodeResultCardHtml(barcodeResult) : ''}
+    `;
+    const startBtn = $('#startBarcodeBtn');
+    if (startBtn) startBtn.addEventListener('click', startBarcodeScan);
+    const stopBtn = $('#stopBarcodeBtn');
+    if (stopBtn) stopBtn.addEventListener('click', () => { stopBarcodeScan(); renderLogSubPanel(); });
+    const toManualBtn = $('#barcodeToManualBtn');
+    if (toManualBtn) toManualBtn.addEventListener('click', () => {
+      pendingBarcodeForManualEntry = barcodeNotFoundCode;
+      barcodeNotFoundCode = null;
+      logSubTab = 'manual';
+      renderLogTab();
+    });
+    if (barcodeResult) wireBarcodeResultCard(barcodeResult.barcode);
   } else if (logSubTab === 'common') {
     el.innerHTML = `
       <div class="card">
@@ -3751,6 +4026,7 @@ function renderLogSubPanel() {
     el.innerHTML = `
       <div class="card">
         <h3>Manual Entry</h3>
+        ${pendingBarcodeForManualEntry ? `<p class="muted small">Barcode ${esc(pendingBarcodeForManualEntry)} wasn't found — enter the details manually and it'll be saved with this entry.</p>` : ''}
         <div class="field"><label>Food name</label><input class="input" id="man_name"></div>
         <div class="row">
           <div class="field"><label>Calories</label><input class="input mono" id="man_cal" type="number"></div>
@@ -3770,7 +4046,10 @@ function renderLogSubPanel() {
       carbs_g: Number($('#man_carb').value) || 0,
       fat_g: Number($('#man_fat').value) || 0,
     });
-    $('#manLogBtn').addEventListener('click', () => logFood({ ...readManual(), source: 'manual' }));
+    $('#manLogBtn').addEventListener('click', () => {
+      logFood({ ...readManual(), source: 'manual', barcode: pendingBarcodeForManualEntry });
+      pendingBarcodeForManualEntry = null;
+    });
     $('#manFavBtn').addEventListener('click', () => saveFavorite(readManual()));
   } else if (logSubTab === 'favorites') {
     el.innerHTML = `
@@ -4021,6 +4300,11 @@ function weightChartSvg(sorted) {
 // ══════════════════════════════════════════════════════════════════
 // SUPPLEMENTS TAB
 // ══════════════════════════════════════════════════════════════════
+const EVIDENCE_RATING_COLORS = { Strong: 'var(--success)', Moderate: '#C6A15B', Limited: '#E8CB88', Weak: 'var(--text-dim)' };
+// Session-only — which supplement cards have their "Source" note expanded.
+// Not user data worth a database column, same as citationExpanded.
+const supplementSourceExpanded = new Set();
+
 function renderSupplements() {
   const panel = $('#panel-supplements');
   panel.innerHTML = `
@@ -4053,6 +4337,16 @@ function renderSupplements() {
       ${SUPPLEMENT_GUIDE.map((s) => `
         <div class="card guide-card ${s.caution ? 'caution' : ''}" style="margin-bottom:0.75rem;">
           <div class="col-title"><h3 style="margin:0;">${esc(s.name)}</h3>${s.caution ? '<span class="badge" style="background:var(--danger);color:#fff;">CAUTION</span>' : ''}</div>
+          ${s.evidenceRating ? `
+          <div class="row" style="align-items:center;gap:0.5rem;margin:0.3rem 0 0.5rem;">
+            <span class="badge" style="background:${EVIDENCE_RATING_COLORS[s.evidenceRating]};color:#1A1A1A;">${esc(s.evidenceRating)} evidence</span>
+          </div>
+          <p style="margin:0 0 0.5rem;font-size:0.88rem;">${esc(s.whatFor)}</p>
+          <div style="margin-bottom:0.6rem;">
+            <button class="btn-link" data-supplement-source="${esc(s.name)}">${supplementSourceExpanded.has(s.name) ? 'Hide source' : 'Source'}</button>
+            ${supplementSourceExpanded.has(s.name) ? `<p class="muted small" style="margin-top:0.3rem;">Not yet backed by a specific verified citation — flagged for review before this evidence rating ships as a sourced claim. Treat it as general information, not medical advice, either way.</p>` : ''}
+          </div>
+          ` : ''}
           <strong style="font-size:0.85rem;color:var(--success);">Benefits</strong>
           <ul style="margin:0.3rem 0 0.7rem 1.1rem; font-size:0.88rem;">${s.benefits.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
           <strong style="font-size:0.85rem;color:var(--danger);">Drawbacks</strong>
@@ -4078,6 +4372,11 @@ function renderSupplements() {
     await supabase.from('supplement_logs').delete().eq('id', btn.dataset.supDel);
     await loadSupplementLogs();
     renderAll();
+  }));
+  $$('[data-supplement-source]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const name = btn.dataset.supplementSource;
+    if (supplementSourceExpanded.has(name)) supplementSourceExpanded.delete(name); else supplementSourceExpanded.add(name);
+    renderSupplements();
   }));
 }
 
@@ -4200,6 +4499,7 @@ async function handleAsk() {
 // PROFILE TAB
 // ══════════════════════════════════════════════════════════════════
 const ACTIVITY_MULTIPLIERS = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 };
+const ACTIVITY_LABELS = { sedentary: 'Sedentary', light: 'Light (1-3 days/wk)', moderate: 'Moderate (3-5 days/wk)', active: 'Active (6-7 days/wk)', very_active: 'Very Active (2x/day training)' };
 
 // Macro split shifts by goal: higher protein/lb when cutting (protects
 // muscle in a deficit), slightly lower when in a surplus (extra calories
@@ -4261,6 +4561,23 @@ function computeCaloriesAndMacros({ bmr, tdee, weightLb, weeklyRateLb, goalMode 
   return { targetCalories, proteinG, fatG, carbsG, safetyFloor, adjusted };
 }
 
+// Shared "here's how we got your numbers" explainer, shown wherever goals
+// are auto-calculated rather than typed in by hand (onboarding's calc step
+// and the Profile → Goal Calculator) — names the formula, the activity
+// multiplier actually used, and the protein basis, rather than just
+// showing the resulting numbers with no explanation of where they came
+// from.
+function goalExplainerHtml(activity, goalMode) {
+  const multiplier = ACTIVITY_MULTIPLIERS[activity];
+  const proteinPerLb = MACRO_SPLIT_BY_GOAL[goalMode].proteinPerLb;
+  const proteinReason = goalMode === 'lose'
+    ? 'the higher end, to help protect muscle in a calorie deficit'
+    : goalMode === 'gain'
+    ? 'the lower end, since surplus calories already help preserve muscle'
+    : 'a middle-ground maintenance level';
+  return `<p class="muted small" style="margin-top:0.5rem;">Here's how we got your numbers: resting calorie burn (BMR) comes from the Mifflin-St Jeor formula using your age, sex, height, and weight; that's multiplied by ${multiplier}× for your "${ACTIVITY_LABELS[activity]}" activity level to estimate total daily burn; and your protein target is set at ${proteinPerLb}g per pound of bodyweight — ${proteinReason}.</p>`;
+}
+
 // Stamps goal_mode_changed_at only when goal_mode is actually changing from
 // its previously-loaded value — every goals upsert that sets goal_mode
 // (the calculator, onboarding's auto-calc step) routes through this so the
@@ -4287,8 +4604,383 @@ function calorieRangeForGoal(calorieGoal, goalMode, bmr) {
 
 let addFriendMessage = '';
 
+// ── In-app User Guide (Profile → Guide) ──────────────────────────────────
+// Static, pre-written reference content — same spirit as TIP_LIBRARY and
+// the exercises table's cue cards, not AI-generated per view. Kept fully
+// separate from the first-time onboarding wizard (showOnboarding()/
+// renderOnboarding()) rather than feeding into it: onboarding is a short
+// 3-step "get started" flow shown once at signup, while this is a much
+// larger browsable reference meant to be consulted later — folding one
+// into the other would either bloat onboarding or bury this behind a
+// one-time screen.
+const USER_GUIDE_SECTIONS = [
+  {
+    id: 'nutrition', title: 'Nutrition',
+    entries: [
+      { id: 'manual-logging', title: 'Manual Food Logging',
+        body: 'Search Krafft\'s food database from the Log Food tab, or type in your own food and enter its calories and macros by hand. Manual logging is free, forever, with no daily limit.' },
+      { id: 'quick-add', title: 'Quick Add',
+        body: 'Save foods you eat regularly — like your go-to breakfast — as one-tap Quick Add entries from the Log Food tab, so you don\'t have to search or type them in again. Quick Add is part of the free tier.' },
+      { id: 'photo-logging', title: 'Photo Food Logging (Snap a Photo)',
+        body: 'Snap a Photo of your meal from the Log Food tab and Krafft\'s AI estimates its calories and macros for you — no manual entry needed. This is a paid-tier AI feature (3-day free trial, then $4.99/month); manual logging and Quick Add remain free forever either way.' },
+      { id: 'barcode-scanning', title: 'Scan Barcode',
+        body: 'Scan a packaged food\'s barcode from the Log Food tab to pull its calories, protein, carbs, fat, and sugar from Open Food Facts — no AI involved, so it\'s free. Confirm or adjust the numbers for your actual serving before logging. If a barcode isn\'t recognized, you can enter it manually and the scanned code is kept with that entry.' },
+      { id: 'macro-goals', title: 'Macro & Goal Tracking',
+        body: 'Set daily calorie, protein, carb, fat, and water goals from the Profile tab, or use the Goal Calculator there (Mifflin-St Jeor formula) to get a personalized estimate from your age, sex, height, weight, activity level, and optional target weight/date. Whenever goals are calculated for you — here or during onboarding — a "here\'s how we got your numbers" note explains the formula, the activity multiplier used, and the protein basis behind the result. Your Dashboard tracks each day\'s progress against these goals.' },
+      { id: 'protein-by-meal', title: 'Protein by Meal',
+        body: 'Your Dashboard\'s "Protein by Meal" card lists everything you\'ve logged today in order, with each entry\'s protein grams and a running total against your daily goal — food_logs has no fixed meal slots, so this is simply every entry across the day. Tap "Why this matters" for a short note on spreading protein across meals.' },
+      { id: 'weekly-recap', title: 'Weekly Recap Card',
+        body: 'The "This Week" card on your Dashboard tracks your protein and hydration goal streaks over the last 7 days, plus your daily averages versus goal. Tap "Share weekly recap" to generate a shareable image summary of the week.' },
+      { id: 'supplement-evidence', title: 'Supplement Evidence Cards',
+        body: 'The Supplement Guide (Supplements tab) rates the evidence behind common supplements — Strong, Moderate, Limited, or Weak — alongside what each one is actually for and a typical dosing range. It\'s general information, not medical advice; talk to a doctor before starting anything new.' },
+    ],
+  },
+  {
+    id: 'training', title: 'Training',
+    entries: [
+      { id: 'todays-lift', title: 'Today\'s Lift',
+        body: 'The top of the Lifts tab always shows everything you\'ve done today: every set per exercise (editable and deletable in place), that exercise\'s volume and estimated 1RM for the day, a PR badge if you set a new best, and session totals — exercises, working sets, total volume, and elapsed time. "End Workout" lives here too, and your post-session analysis appears right below it once generated.' },
+      { id: 'training-splits', title: 'Training Splits (Presets & Custom)',
+        body: 'Set up a training split from the Lifts tab — pick a ready-made preset (like Push/Pull/Legs) or build a fully custom rotation with your own day labels and muscle-group focus per day. Each option shows a rationale card explaining what it is, who it suits, and how often it actually trains each muscle group — computed from your real rotation for a custom split, not generic text. Krafft uses your split to highlight today\'s focus and suggest exercises on the Lifts tab.' },
+      { id: 'exercise-library', title: 'Exercise Library & Cue Cards',
+        body: 'Every exercise in Krafft\'s library comes with quick cue-card bullets (setup, execution, common mistake, bracing) shown the first time you log it, or after a long gap — plus hypertrophy guidance (a rep range, rest interval, tempo note, and mind-muscle cue) for muscle-growth-focused training. Browse the full library anytime with the Glossary button on the Lifts tab.' },
+      { id: 'weekly-volume', title: 'Weekly Training Volume',
+        body: 'The "Weekly Training Volume" card on the Lifts tab totals your hard working sets per muscle group over the last 7 days (warm-up sets you\'ve flagged don\'t count), shown as a bar against a commonly cited 10-20 sets/week guideline — a general guideline, not a target to hit exactly.' },
+      { id: 'muscle-map', title: 'Muscle Map',
+        body: 'A visual heatmap of which muscles you\'ve trained recently, on the Lifts tab, with 7-day/30-day/all-time toggles. Tap a region for details on the volume and exercises behind it.' },
+      { id: 'warmup-1rm', title: 'Warm-Up Ramp & Estimated 1RM',
+        body: 'Enter a working weight on the Log-a-Lift form and tap "Suggest a warm-up ramp" for a static percentage-based ramp-up (no AI). Your estimated 1-rep max (Epley formula) is tracked per exercise over time on that exercise\'s detail page, feeding your Strength Score — estimates get less reliable above about 10 reps, which is called out when relevant.' },
+      { id: 'pr-tracking', title: 'PR Tracking',
+        body: 'Krafft automatically tracks your all-time personal record (heaviest weight logged) for every exercise. Your current PRs show on the Lifts tab in the Personal Records strip, each with a mini trend line of your history on that lift.' },
+      { id: 'block-builder', title: 'Training Block Builder',
+        body: 'Generate an optional 4-week training block from the Lifts tab — pick a focus (Hypertrophy or Strength; Power & Speed, Mobility, and Functional/Athletic are coming soon), up to 3 priority muscle areas for extra volume, days per week, equipment, and anything to avoid. It builds a day-by-day exercise plan from fixed rules (no AI) with a Base → +Sets → +Sets → Deload progression across the 4 weeks. Starting a block doesn\'t change your Training Split setting — you still log lifts the normal way from the Log tab.' },
+    ],
+  },
+  {
+    id: 'coaching', title: 'Coaching & Insights',
+    entries: [
+      { id: 'post-session-analysis', title: 'Post-Session AI Analysis',
+        body: 'Tap "End Workout" on the Lifts tab once you\'re done training for the day, and Krafft can generate a short AI writeup comparing today\'s session to your recent history — generated once per day and cached, not regenerated every time you look. The full comparative analysis needs at least 3 prior days where you trained the same exercise as today; before that, you\'ll get a lighter summary instead.' },
+      { id: 'learning-paths', title: 'Learning Paths',
+        body: 'Short mini-courses in the User Guide — Progressive Overload, Training Volume, Effort and Proximity to Failure, Recovery and Sleep, and Protein and Nutrition Basics — a handful of plain-language cards each, read in order with a progress bar. Finishing one counts toward the Learning achievements.' },
+      { id: 'achievements', title: 'Achievements & Milestones',
+        body: 'Unlock achievements for things like logging streaks, hitting new PRs, exploring cue cards in the Exercise Glossary, and completing Learning Paths. Once earned, an achievement stays earned permanently. Check your progress anytime from the Achievements card in Profile.' },
+    ],
+  },
+  {
+    id: 'account', title: 'Account & Tiers',
+    entries: [
+      { id: 'tiers', title: 'Free vs. Paid Tiers',
+        body: 'Manual food and lift logging, Quick Add, barcode scanning, your Dashboard, training splits, and the friends leaderboard are free, forever, with no time limit. AI-powered features — photo and text macro estimation (Snap a Photo, Describe It) and Ask AI — are $4.99/month after a 3-day free trial.' },
+      { id: 'managing-account', title: 'Managing Your Account',
+        body: 'Update your display name, turn off evening logging-reminder emails, or sign out, all from the Profile tab. Deleting your account from Profile permanently removes it and all logged data — you\'ll need to type DELETE to confirm, since this can\'t be undone.' },
+      { id: 'apple-health-sync', title: 'Apple Health Sync (Beta)',
+        body: 'Sync bodyweight, sleep, and steps from Apple Health via an iOS Shortcut, set up from Profile → Apple Health Sync — iPhone only, free. There\'s no native app yet, so this works through a Shortcut you build once (step-by-step instructions are in the setup screen) rather than direct HealthKit access; a full native app is a possible future upgrade. You can revoke access and generate a new sync token anytime from the same screen.' },
+    ],
+  },
+];
+let showUserGuide = false;
+let guideExpandedId = null;
+let guideSearch = '';
+
+function renderUserGuide(panel) {
+  const q = guideSearch.trim().toLowerCase();
+  const matches = (entry) => !q || entry.title.toLowerCase().includes(q) || entry.body.toLowerCase().includes(q);
+  panel.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">User Guide</h3>
+        <button class="btn btn-sm btn-ghost" id="closeGuideBtn" style="flex:none;">✕ Close</button>
+      </div>
+      <div class="field" style="margin-top:0.75rem;">
+        <input class="input" id="guideSearch" placeholder="Search the guide…" value="${esc(guideSearch)}">
+      </div>
+      <div class="chip-row">
+        ${USER_GUIDE_SECTIONS.map((s) => `<button class="chip" data-guide-jump="${s.id}">${esc(s.title)}</button>`).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <div>
+          <h3 style="margin:0;">Learning Paths</h3>
+          <p class="muted small" style="margin:0.2rem 0 0;">Short mini-courses — Progressive Overload, Training Volume, and more.</p>
+        </div>
+        <button class="btn btn-sm" id="openLearningPathsBtn" style="flex:none;">Browse</button>
+      </div>
+    </div>
+    ${USER_GUIDE_SECTIONS.map((section) => {
+      const entries = section.entries.filter(matches);
+      if (!entries.length) return '';
+      return `
+      <div class="card" id="guide-section-${section.id}">
+        <h3>${esc(section.title)}</h3>
+        ${entries.map((e) => `
+          <div class="glossary-row">
+            <div class="log-row" style="cursor:pointer;border-bottom:none;padding-bottom:${guideExpandedId === e.id ? '0.25rem' : '0.6rem'};" data-guide-toggle="${e.id}">
+              <div class="name">${esc(e.title)}</div>
+              <span class="muted">${guideExpandedId === e.id ? '▲' : '▼'}</span>
+            </div>
+            ${guideExpandedId === e.id ? `<p class="muted small" style="padding-bottom:0.6rem;border-bottom:1px solid var(--border);">${esc(e.body)}</p>` : ''}
+          </div>`).join('')}
+      </div>`;
+    }).join('')}
+  `;
+  $('#closeGuideBtn').addEventListener('click', () => { showUserGuide = false; renderProfile(); });
+  $('#openLearningPathsBtn').addEventListener('click', () => {
+    showLearningPaths = true;
+    openLearningPathId = null;
+    renderProfile();
+  });
+  $('#guideSearch').addEventListener('input', (e) => { guideSearch = e.target.value; renderUserGuide(panel); });
+  $$('[data-guide-jump]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    $(`#guide-section-${btn.dataset.guideJump}`, panel)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+  $$('[data-guide-toggle]', panel).forEach((row) => row.addEventListener('click', () => {
+    const id = row.dataset.guideToggle;
+    guideExpandedId = guideExpandedId === id ? null : id;
+    renderUserGuide(panel);
+  }));
+}
+
+// ── Learning Paths (mini-courses) ────────────────────────────────────────
+// Static, pre-written cards — same convention as USER_GUIDE_SECTIONS and
+// TIP_LIBRARY. Reachable from inside the User Guide rather than its own
+// top-level nav entry, per the "guide/glossary area" placement asked for.
+// Completing a path (reaching and dismissing the last card) is recorded
+// in profiles.learning_paths_completed and feeds the
+// 'learning_path_first' Learning achievement.
+const LEARNING_PATHS = [
+  {
+    id: 'progressive-overload', title: 'Progressive Overload',
+    cards: [
+      { title: 'What it is', body: 'Progressive overload means gradually increasing the demand on your muscles over time — more weight, more reps, more sets, or better form — so your body keeps adapting instead of plateauing.' },
+      { title: 'Why it matters', body: 'Muscles only get stronger when they\'re asked to do something harder than they\'re used to. Without progressive overload, your body has no reason to keep adapting.' },
+      { title: 'Ways to progress', body: 'You don\'t have to add weight every session. Adding a rep, adding a set, slowing the tempo, shortening rest, or improving your range of motion all count as progress too.' },
+      { title: 'It isn\'t always linear', body: 'Some weeks you\'ll progress, some weeks you\'ll hold steady, and occasionally you\'ll need to pull back (a deload). That\'s normal, not failure.' },
+      { title: 'Tracking makes it real', body: 'You can\'t progressively overload what you don\'t track. Logging your lifts here is what lets you see the trend and know what "harder than last time" actually means.' },
+      { title: 'A simple way to start', body: 'Pick one lift you do every week and aim to beat last week\'s numbers in any way — one more rep, five more pounds, one more set. That\'s progressive overload in practice.' },
+    ],
+  },
+  {
+    id: 'training-volume', title: 'Training Volume',
+    cards: [
+      { title: 'What "volume" means', body: 'Training volume usually means your total hard sets for a muscle group over a week — not just how heavy you lift, but how much work you do overall.' },
+      { title: 'Why volume matters', body: 'More total volume, within reason, tends to drive more muscle growth — up to a point where extra sets stop paying off and start just adding fatigue.' },
+      { title: 'There\'s a sweet spot', body: 'Too little volume barely stimulates a muscle. Too much and you can\'t recover between sessions. Most lifters land somewhere in the middle, and it shifts as training experience grows.' },
+      { title: 'Quality over pure numbers', body: 'A set taken to a real, demanding effort counts more than three sloppy sets. Volume matters, but only the sets that actually challenge the muscle count as productive.' },
+      { title: 'How Krafft shows this', body: 'The Weekly Training Volume card on your Lifts tab totals hard sets per muscle group over the last 7 days, so you can see at a glance if something\'s being neglected — or overdone.' },
+      { title: 'Volume isn\'t the whole picture', body: 'Volume interacts with frequency, intensity, and recovery. Increasing volume without also managing those tends to backfire — more isn\'t automatically better.' },
+    ],
+  },
+  {
+    id: 'effort-failure', title: 'Effort and Proximity to Failure',
+    cards: [
+      { title: 'What "proximity to failure" means', body: 'This is how close a set gets you to the point where you physically couldn\'t complete another rep with good form.' },
+      { title: 'Why effort matters', body: 'It\'s less about the exact number of reps and more about how close to failure you take a set — sets taken to a real, demanding effort tend to build more muscle than easy ones.' },
+      { title: 'You don\'t have to go to total failure', body: 'Training to complete failure every set adds a lot of fatigue for little extra benefit. Stopping a rep or two short ("leaving reps in the tank") is usually the more sustainable approach.', citationTopic: 'failure' },
+      { title: 'RPE — a simple way to gauge effort', body: 'RPE (Rate of Perceived Exertion) is a 1-10 scale for how hard a set felt. An RPE 8 means you could\'ve done about 2 more reps. Most working sets in the 7-9 range work well for most goals.' },
+      { title: 'Effort should scale with the exercise', body: 'Going close to failure on a heavy compound lift (like a squat) carries more fatigue cost than on an isolation exercise (like a curl) — it\'s fine, even useful, to push isolation work harder.' },
+    ],
+  },
+  {
+    id: 'recovery-sleep', title: 'Recovery and Sleep',
+    cards: [
+      { title: 'Recovery is where growth happens', body: 'Training creates the stimulus for adaptation, but the actual muscle repair and growth happens during recovery — mostly while you sleep.' },
+      { title: 'Sleep and training performance', body: 'Poor sleep is linked to reduced strength, slower recovery, and a higher perceived effort for the same weights — it\'s not just about feeling tired.' },
+      { title: 'Recovery isn\'t just sleep', body: 'Nutrition (especially protein and total calories), stress levels, and time between hard sessions for the same muscle group all factor into how well you recover.' },
+      { title: 'Signs you might be under-recovered', body: 'Persistent soreness, declining performance on lifts you were previously progressing on, and a general feeling of burnout can all be signs you need more recovery, not more training.' },
+      { title: 'Recovery is trainable, not just passive', body: 'A consistent sleep schedule, managing stress, and building rest days into your training split are active choices — recovery isn\'t just something that happens to you.' },
+    ],
+  },
+  {
+    id: 'protein-nutrition-basics', title: 'Protein and Nutrition Basics',
+    cards: [
+      { title: 'Why protein matters for training', body: 'Protein supplies the amino acids your body uses to repair and build muscle tissue after training — without enough of it, some of the adaptation you\'re working for doesn\'t happen.' },
+      { title: 'How much is "enough"', body: 'Common protein targets for people strength training run roughly 0.7–1g per pound of bodyweight per day, though needs vary by individual, goal, and how much muscle mass you\'re carrying.' },
+      { title: 'Spreading protein across the day', body: 'Distributing protein across meals rather than getting it all at once may help your body use it more effectively — see the per-meal breakdown on your Log Food tab.' },
+      { title: 'Protein isn\'t the whole picture', body: 'Total calories matter just as much — you can\'t build muscle in a large calorie deficit no matter how much protein you eat, and you won\'t lose fat in a surplus no matter how "clean" the food is.' },
+      { title: 'Consistency beats perfection', body: 'Hitting your protein target most days matters far more than hitting it exactly every single day. A flexible, sustainable approach beats a rigid one you can\'t stick to.' },
+    ],
+  },
+];
+let showLearningPaths = false;
+let showHealthSyncSetup = false;
+let healthSyncGeneratedToken = null; // the raw token, held in memory only between generation and leaving this screen — never persisted, never re-fetchable
+let healthSyncBusy = false;
+let openLearningPathId = null;
+let learningPathCardIndex = 0;
+
+function learningPathsListHtml() {
+  const completed = new Set(state.profile?.learning_paths_completed || []);
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">Learning Paths</h3>
+      <button class="btn btn-sm btn-ghost" id="closeLearningPathsBtn" style="flex:none;">✕ Close</button>
+    </div>
+    <p class="muted small" style="margin-top:0.25rem;">Short, plain-language mini-courses — a few cards each, read in order.</p>
+  </div>
+  ${LEARNING_PATHS.map((path) => `
+    <div class="log-row" style="cursor:pointer;" data-path-open="${path.id}">
+      <div>
+        <div class="name">${completed.has(path.id) ? '✓ ' : ''}${esc(path.title)}</div>
+        <div class="macros">${path.cards.length} cards</div>
+      </div>
+      <span class="muted">${completed.has(path.id) ? 'Completed' : 'Start'}</span>
+    </div>`).join('')}`;
+}
+
+function learningPathReaderHtml() {
+  const path = LEARNING_PATHS.find((p) => p.id === openLearningPathId);
+  if (!path) return '';
+  const idx = Math.min(learningPathCardIndex, path.cards.length - 1);
+  const card = path.cards[idx];
+  const isLast = idx === path.cards.length - 1;
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <button class="btn btn-sm btn-ghost" id="learningPathBackBtn">← Paths</button>
+      <span class="muted small">${idx + 1} / ${path.cards.length}</span>
+    </div>
+    <div class="row" style="gap:0.3rem;margin:0.6rem 0;">
+      ${path.cards.map((_, i) => `<span style="flex:1;height:4px;border-radius:2px;background:${i <= idx ? 'var(--accent)' : 'var(--surface-2)'};"></span>`).join('')}
+    </div>
+    <h3 style="margin:0.5rem 0 0.5rem;">${esc(path.title)}</h3>
+    <h4 style="margin:0 0 0.4rem;color:var(--accent);">${esc(card.title)}</h4>
+    <p style="margin:0;">${esc(card.body)}</p>
+    ${card.citationTopic ? citationBlockHtml(card.citationTopic, `learningpath:${path.id}:${idx}`) : ''}
+    <div class="row" style="justify-content:space-between;margin-top:1rem;">
+      <button class="btn btn-sm" id="learningPathPrevBtn" ${idx === 0 ? 'disabled' : ''}>← Back</button>
+      ${isLast
+        ? `<button class="btn btn-sm btn-primary" id="learningPathFinishBtn">Finish path</button>`
+        : `<button class="btn btn-sm btn-primary" id="learningPathNextBtn">Next →</button>`}
+    </div>
+  </div>`;
+}
+
+function renderLearningPaths(panel) {
+  panel.innerHTML = openLearningPathId ? learningPathReaderHtml() : learningPathsListHtml();
+  const closeBtn = $('#closeLearningPathsBtn', panel);
+  if (closeBtn) closeBtn.addEventListener('click', () => { showLearningPaths = false; renderProfile(); });
+  $$('[data-path-open]', panel).forEach((row) => row.addEventListener('click', () => {
+    openLearningPathId = row.dataset.pathOpen;
+    learningPathCardIndex = 0;
+    renderLearningPaths(panel);
+  }));
+  const backBtn = $('#learningPathBackBtn', panel);
+  if (backBtn) backBtn.addEventListener('click', () => { openLearningPathId = null; renderLearningPaths(panel); });
+  const prevBtn = $('#learningPathPrevBtn', panel);
+  if (prevBtn) prevBtn.addEventListener('click', () => { learningPathCardIndex = Math.max(0, learningPathCardIndex - 1); renderLearningPaths(panel); });
+  const nextBtn = $('#learningPathNextBtn', panel);
+  if (nextBtn) nextBtn.addEventListener('click', () => { learningPathCardIndex += 1; renderLearningPaths(panel); });
+  const finishBtn = $('#learningPathFinishBtn', panel);
+  if (finishBtn) finishBtn.addEventListener('click', async () => {
+    const completed = new Set(state.profile?.learning_paths_completed || []);
+    if (!completed.has(openLearningPathId)) {
+      completed.add(openLearningPathId);
+      const updated = Array.from(completed);
+      state.profile = { ...state.profile, learning_paths_completed: updated };
+      const { error } = await supabase.from('profiles').update({ learning_paths_completed: updated }).eq('id', state.user.id);
+      if (!error) checkAndUnlockAchievements();
+    }
+    openLearningPathId = null;
+    renderLearningPaths(panel);
+  });
+  wireCitationEvents(panel, () => renderLearningPaths(panel));
+}
+
+// ── Apple Health Sync setup (beta) ───────────────────────────────────────
+// iOS Shortcut -> webhook route: HealthKit is unreachable from a website
+// or home-screen web app, so a Shortcut reads Apple Health locally and
+// posts to health-sync.js, authenticated by a per-user token rather than a
+// Supabase session (a Shortcut can't hold one). See
+// supabase-schema-phase22-apple-health-sync.sql for the full security
+// shape — only a hash of the token is ever stored, and it's shown here
+// exactly once, right after generation.
+function healthSyncEndpointUrl() {
+  return `${window.location.origin}/.netlify/functions/health-sync`;
+}
+
+function renderHealthSyncSetup(panel) {
+  const token = state.healthSyncToken;
+  const isActive = token && !token.revoked_at;
+  panel.innerHTML = `
+    <div class="card">
+      <button class="btn btn-sm btn-ghost" id="closeHealthSyncBtn">← Back</button>
+      <h3>Apple Health Sync <span class="badge">BETA</span></h3>
+      <p class="muted">Syncs bodyweight, sleep, and steps from Apple Health via an iOS Shortcut you build once — iPhone only. There's no native app yet, so this works through Shortcuts' own "Get Contents of URL" action rather than direct HealthKit access; a full native app with that access is a possible future upgrade.</p>
+    </div>
+
+    <div class="card">
+      <h3>1. Get your sync token</h3>
+      ${healthSyncGeneratedToken ? `
+        <p class="muted small" style="color:var(--danger);">Copy this now — you won't be able to see it again. Paste it into the Shortcut below.</p>
+        <div class="field"><input class="input mono" id="healthSyncTokenDisplay" readonly value="${esc(healthSyncGeneratedToken)}"></div>
+        <button class="btn btn-sm" id="copyHealthSyncTokenBtn">Copy Token</button>
+      ` : isActive ? `
+        <p class="muted">You have an active token. It's never shown again after creation, for security — generate a new one if you've lost it (this replaces the old one, so update your Shortcut too).</p>
+      ` : `
+        <p class="muted">Generate a token to authenticate your Shortcut. Krafft never sees your Apple Health data directly — the Shortcut reads it on your phone and sends it to your own private sync link.</p>
+      `}
+      <div class="row">
+        <button class="btn btn-primary" id="generateHealthSyncTokenBtn" ${healthSyncBusy ? 'disabled' : ''}>${healthSyncBusy ? 'Working…' : (isActive ? 'Regenerate Token' : 'Generate Token')}</button>
+        ${isActive ? `<button class="btn btn-ghost" id="revokeHealthSyncTokenBtn" style="color:var(--danger);" ${healthSyncBusy ? 'disabled' : ''}>Revoke Access</button>` : ''}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>2. Build the Shortcut</h3>
+      <ol style="padding-left:1.2rem;font-size:0.88rem;line-height:1.7;">
+        <li>Open the <strong>Shortcuts</strong> app on your iPhone and create a new shortcut.</li>
+        <li>Add a <strong>"Get Health Sample"</strong> action for each metric you want to sync (Weight, Sleep Analysis, Steps) — one action per metric, for today.</li>
+        <li>Add a <strong>"Text"</strong> action and build a JSON body from those values, e.g.:
+          <br><code style="font-size:0.78rem;word-break:break-all;">{"token": "YOUR_TOKEN", "date": "[Current Date, yyyy-MM-dd]", "bodyweight_lb": [Weight], "sleep_hours": [Sleep Hours], "steps": [Steps]}</code>
+          <br>Only include the fields for metrics you're actually syncing that day — leave the rest out entirely.</li>
+        <li>Add <strong>"Get Contents of URL"</strong>: Method <strong>POST</strong>, Headers none needed, Request Body <strong>JSON</strong> from your Text action, URL:
+          <br><code style="font-size:0.78rem;word-break:break-all;">${esc(healthSyncEndpointUrl())}</code></li>
+        <li>Name it (e.g. "Sync to Krafft") and run it once to test.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>3. Automate it</h3>
+      <p class="muted">In Shortcuts, go to <strong>Automation → Create Personal Automation → Time of Day</strong>, pick a daily time, choose your sync shortcut, and turn off "Ask Before Running" so it runs silently.</p>
+    </div>
+  `;
+  $('#closeHealthSyncBtn').addEventListener('click', () => { showHealthSyncSetup = false; healthSyncGeneratedToken = null; renderProfile(); });
+  const copyBtn = $('#copyHealthSyncTokenBtn');
+  if (copyBtn) copyBtn.addEventListener('click', () => copyToClipboard(healthSyncGeneratedToken, 'Token copied.'));
+  $('#generateHealthSyncTokenBtn').addEventListener('click', async () => {
+    healthSyncBusy = true; renderHealthSyncSetup(panel);
+    try {
+      const result = await callFunction('health-sync-token', { action: 'generate' });
+      healthSyncGeneratedToken = result.token;
+      await loadHealthSyncStatus();
+    } catch (err) {
+      toast('Could not generate a token: ' + err.message);
+    } finally {
+      healthSyncBusy = false; renderHealthSyncSetup(panel);
+    }
+  });
+  const revokeBtn = $('#revokeHealthSyncTokenBtn');
+  if (revokeBtn) revokeBtn.addEventListener('click', async () => {
+    healthSyncBusy = true; renderHealthSyncSetup(panel);
+    try {
+      await callFunction('health-sync-token', { action: 'revoke' });
+      healthSyncGeneratedToken = null;
+      await loadHealthSyncStatus();
+      toast('Apple Health sync disconnected.');
+    } catch (err) {
+      toast('Could not revoke: ' + err.message);
+    } finally {
+      healthSyncBusy = false; renderHealthSyncSetup(panel);
+    }
+  });
+}
+
 function renderProfile() {
   const panel = $('#panel-profile');
+  if (showLearningPaths) { renderLearningPaths(panel); return; }
+  if (showUserGuide) { renderUserGuide(panel); return; }
+  if (showHealthSyncSetup) { renderHealthSyncSetup(panel); return; }
   const p = state.profile || {};
   const bs = state.bodyStats || {};
   panel.innerHTML = `
@@ -4436,6 +5128,20 @@ function renderProfile() {
     </div>
 
     <div class="card">
+      <h3>Guide</h3>
+      <p class="muted">A browsable how-to for every feature — logging, training splits, PRs, AI analysis, tiers, and more.</p>
+      <button class="btn" id="openGuideBtn">Browse the Guide</button>
+    </div>
+
+    <div class="card">
+      <h3>Apple Health Sync <span class="badge">BETA</span></h3>
+      ${state.healthSyncToken && !state.healthSyncToken.revoked_at ? `
+        <p class="muted">Connected. ${state.healthSyncToken.last_used_at ? `Last synced ${new Date(state.healthSyncToken.last_used_at).toLocaleString()}.` : 'No sync received yet — check your Shortcut once it\'s run.'}</p>
+      ` : `<p class="muted">Sync bodyweight, sleep, and steps from Apple Health via an iOS Shortcut — no app install needed. iPhone only.</p>`}
+      <button class="btn" id="openHealthSyncSetupBtn">${state.healthSyncToken && !state.healthSyncToken.revoked_at ? 'Manage Sync' : 'Set Up Apple Health Sync'}</button>
+    </div>
+
+    <div class="card">
       <h3>Support</h3>
       <p class="muted">Something broken, or just have a question?</p>
       <a class="btn" href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20support">Contact Support</a>
@@ -4463,6 +5169,9 @@ function renderProfile() {
   });
 
   $$('[data-achievement-share]', panel).forEach((btn) => btn.addEventListener('click', () => shareAchievement(btn.dataset.achievementShare)));
+
+  $('#openGuideBtn').addEventListener('click', () => { showUserGuide = true; renderProfile(); });
+  $('#openHealthSyncSetupBtn').addEventListener('click', () => { showHealthSyncSetup = true; renderProfile(); });
 
   $('#goal_save').addEventListener('click', async () => {
     const goals = {
@@ -4584,6 +5293,7 @@ function renderProfile() {
       </div>
       <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal · ${targetDateStr ? `Goal: ${goalModeLabel} (${Math.abs(weeklyRateLb).toFixed(2)} lb/week, ${Math.abs(weeklyRatePercent).toFixed(2)}% bodyweight/week)` : 'No target date set — maintenance-calorie estimate.'}${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
       <p class="muted">Healthy range: ${rangeLabel}. Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
+      ${goalExplainerHtml(activity, goalMode)}
       <button class="btn btn-primary" id="calc_apply" style="margin-top:0.5rem;">Apply to My Goals</button>
     `;
 
@@ -4803,92 +5513,212 @@ function heatmapLevel(volume, thresholds) {
   return 4;
 }
 
-function computeRegionStats(lifts, windowDays) {
-  const cutoff = windowDays ? subtractDays(localDateStr(), windowDays) : null;
-  const stats = {};
+// ── Weekly hard sets per muscle group ────────────────────────────────────
+// A finer-grained 14-key taxonomy than body_region (splits "shoulders"
+// into delts, "back" into lats/traps/lowerback, adds obliques) — see
+// supabase-schema-phase18-exercise-tags.sql. Feeds both this card and the
+// sculpted Muscle Map further below, from the same calculation.
+const MUSCLE_MAP_KEYS = ['chest', 'delts', 'biceps', 'triceps', 'forearms', 'abs', 'obliques', 'quads', 'calves', 'traps', 'lats', 'lowerback', 'glutes', 'hamstrings'];
+const MUSCLE_MAP_KEY_LABELS = {
+  chest: 'Chest', delts: 'Delts', biceps: 'Biceps', triceps: 'Triceps', forearms: 'Forearms',
+  abs: 'Abs', obliques: 'Obliques', quads: 'Quads', calves: 'Calves', traps: 'Traps',
+  lats: 'Lats', lowerback: 'Lower Back', glutes: 'Glutes', hamstrings: 'Hamstrings',
+};
+// A commonly cited range, not a specific verified citation — shown to the
+// user as a guideline, never as a rule. See the "why this matters" copy
+// in weeklyHardSetsHtml() below.
+const WEEKLY_SETS_GUIDELINE = { low: 10, high: 20 };
+// A set counts fully toward its primary muscle and at partial value
+// toward secondary muscles it also trains. This weighting is a proposed
+// default, not a cited figure — flagged for review, same as the
+// guideline range above.
+const SECONDARY_MUSCLE_SET_WEIGHT = 0.5;
+
+// warmup_per_set is '{}' (empty) for any row logged before that column
+// existed, or where the user never touched the warm-up toggle — treated
+// as "nothing flagged," so every set in that row counts as working,
+// exactly as it always has.
+function workingSetCount(lift) {
+  const setCount = (lift.reps_per_set && lift.reps_per_set.length) || lift.sets || 0;
+  const warmup = lift.warmup_per_set || [];
+  if (!warmup.length) return setCount;
+  let count = 0;
+  for (let i = 0; i < setCount; i++) if (!warmup[i]) count++;
+  return count;
+}
+
+// windowDays: 7 (default, rolling weekly window inclusive of today), a
+// different number of days (e.g. 30), or null for all-time. Shared by the
+// Weekly Training Volume card (always 7, a weekly guideline needs a
+// weekly window) and the sculpted Muscle Map below (which offers all
+// three) — one calculation, not two, per the product decision that the
+// map must be "driven by the item 5 calculation, not a second one."
+function computeWeeklyHardSetsByMuscle(lifts, exercises, windowDays = 7) {
+  const cutoff = windowDays ? subtractDays(localDateStr(), windowDays - 1) : null;
+  const totals = {};
+  MUSCLE_MAP_KEYS.forEach((k) => { totals[k] = 0; });
   for (const l of lifts) {
     if (cutoff && l.date < cutoff) continue;
-    const region = getBodyRegion(l);
-    if (!region) continue;
-    const vol = l.weight * totalReps(l);
-    const setCount = (l.reps_per_set && l.reps_per_set.length) || l.sets || 0;
-    if (!stats[region]) stats[region] = { volume: 0, sets: 0, exercises: new Map() };
-    stats[region].volume += vol;
-    stats[region].sets += setCount;
-    stats[region].exercises.set(l.exercise, (stats[region].exercises.get(l.exercise) || 0) + vol);
+    const def = exercises.find((e) => e.name.toLowerCase() === l.exercise.trim().toLowerCase());
+    // An exercise with no muscle_map_key (not in the library, or a custom
+    // typed-in name) can't be attributed to a muscle — skipped rather than
+    // guessed at.
+    if (!def || !def.muscle_map_key) continue;
+    const sets = workingSetCount(l);
+    if (sets <= 0) continue;
+    totals[def.muscle_map_key] = (totals[def.muscle_map_key] || 0) + sets;
+    (def.muscle_map_secondary_keys || []).forEach((k) => {
+      totals[k] = (totals[k] || 0) + sets * SECONDARY_MUSCLE_SET_WEIGHT;
+    });
   }
-  return stats;
+  return totals;
 }
 
-// simple geometric silhouette — stylized regions, not anatomically precise
-const BODY_MAP_DECORATIVE = {
-  front: [
-    { type: 'circle', cx: 80, cy: 26, r: 16 },
-    { type: 'rect', x: 72, y: 40, width: 16, height: 10, rx: 4 },
-    { type: 'rect', x: 50, y: 232, width: 22, height: 54, rx: 8 },
-    { type: 'rect', x: 88, y: 232, width: 22, height: 54, rx: 8 },
-  ],
-  back: [
-    { type: 'circle', cx: 80, cy: 26, r: 16 },
-    { type: 'rect', x: 72, y: 40, width: 16, height: 10, rx: 4 },
-  ],
-};
-const BODY_MAP_REGIONS = {
-  front: [
-    { region: 'shoulders', shapes: [{ type: 'ellipse', cx: 42, cy: 64, rx: 16, ry: 13 }, { type: 'ellipse', cx: 118, cy: 64, rx: 16, ry: 13 }] },
-    { region: 'chest', shapes: [{ type: 'rect', x: 44, y: 70, width: 72, height: 42, rx: 10 }] },
-    { region: 'biceps', shapes: [{ type: 'rect', x: 18, y: 70, width: 18, height: 52, rx: 8 }, { type: 'rect', x: 124, y: 70, width: 18, height: 52, rx: 8 }] },
-    { region: 'forearms', shapes: [{ type: 'rect', x: 14, y: 124, width: 16, height: 50, rx: 8 }, { type: 'rect', x: 130, y: 124, width: 16, height: 50, rx: 8 }] },
-    { region: 'abs', shapes: [{ type: 'rect', x: 50, y: 114, width: 60, height: 46, rx: 8 }] },
-    { region: 'quads', shapes: [{ type: 'rect', x: 46, y: 162, width: 30, height: 70, rx: 10 }, { type: 'rect', x: 84, y: 162, width: 30, height: 70, rx: 10 }] },
-  ],
-  back: [
-    { region: 'back', shapes: [{ type: 'rect', x: 44, y: 64, width: 72, height: 68, rx: 10 }] },
-    { region: 'triceps', shapes: [{ type: 'rect', x: 18, y: 70, width: 18, height: 60, rx: 8 }, { type: 'rect', x: 124, y: 70, width: 18, height: 60, rx: 8 }] },
-    { region: 'glutes', shapes: [{ type: 'rect', x: 48, y: 134, width: 64, height: 34, rx: 14 }] },
-    { region: 'hamstrings', shapes: [{ type: 'rect', x: 46, y: 170, width: 30, height: 56, rx: 10 }, { type: 'rect', x: 84, y: 170, width: 30, height: 56, rx: 10 }] },
-    { region: 'calves', shapes: [{ type: 'rect', x: 48, y: 230, width: 26, height: 54, rx: 10 }, { type: 'rect', x: 86, y: 230, width: 26, height: 54, rx: 10 }] },
-  ],
-};
+let weeklySetsInfoExpanded = false;
 
-function bodyMapShapeSvg(shape, { fill, stroke, strokeWidth, region }) {
-  const attrs = `fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${region ? ` data-region="${region}" class="body-map-region"` : ''}`;
-  if (shape.type === 'circle') return `<circle cx="${shape.cx}" cy="${shape.cy}" r="${shape.r}" ${attrs}></circle>`;
-  if (shape.type === 'ellipse') return `<ellipse cx="${shape.cx}" cy="${shape.cy}" rx="${shape.rx}" ry="${shape.ry}" ${attrs}></ellipse>`;
-  return `<rect x="${shape.x}" y="${shape.y}" width="${shape.width}" height="${shape.height}" rx="${shape.rx}" ${attrs}></rect>`;
+function weeklyHardSetsHtml(lifts) {
+  const totals = computeWeeklyHardSetsByMuscle(lifts, state.exercises);
+  const maxForScale = Math.max(WEEKLY_SETS_GUIDELINE.high, ...Object.values(totals));
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">Weekly Training Volume</h3>
+      <button class="btn btn-sm btn-ghost" id="weeklySetsInfoBtn" style="flex:none;">${weeklySetsInfoExpanded ? 'Hide' : 'Why this matters'}</button>
+    </div>
+    <p class="muted small" style="margin-top:0.25rem;">Hard working sets per muscle, last 7 days, against a commonly cited guideline range of ${WEEKLY_SETS_GUIDELINE.low}–${WEEKLY_SETS_GUIDELINE.high} sets/week — a guideline, not a rule.</p>
+    ${weeklySetsInfoExpanded ? `<p class="muted small" style="background:var(--surface-2);border-radius:8px;padding:0.6rem 0.75rem;">Weekly set volume is one of the most-discussed variables in hypertrophy training, and a range of roughly ${WEEKLY_SETS_GUIDELINE.low}–${WEEKLY_SETS_GUIDELINE.high} sets per muscle per week is commonly cited as a reasonable starting point. We don't have a specific verified research citation for this exact range yet, so treat the bars below as a rough guide for spotting muscles you're training a lot, a little, or not at all — not a target to hit precisely. A muscle's secondary involvement (e.g. triceps assisting a bench press) counts at half a set's value, only working sets count (mark warm-ups when you log), and sets from an exercise not in the library (a custom-typed name) aren't counted here.</p>` : ''}
+    <div class="weekly-sets-bars">
+      ${MUSCLE_MAP_KEYS.map((k) => {
+        const val = Math.round(totals[k] * 10) / 10;
+        const pct = Math.max(0, Math.min(100, (val / maxForScale) * 100));
+        const inRange = val >= WEEKLY_SETS_GUIDELINE.low && val <= WEEKLY_SETS_GUIDELINE.high;
+        return `<div class="weekly-sets-row">
+          <span class="weekly-sets-label">${MUSCLE_MAP_KEY_LABELS[k]}</span>
+          <div class="weekly-sets-bar-track"><div class="weekly-sets-bar-fill ${inRange ? 'in-range' : ''}" style="width:${pct}%;"></div></div>
+          <span class="weekly-sets-count mono">${val}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
 }
 
-function bodyMapSvg(view, regionLevels, selectedRegion) {
-  const decorative = BODY_MAP_DECORATIVE[view]
-    .map((s) => bodyMapShapeSvg(s, { fill: 'var(--border)', stroke: 'var(--border)', strokeWidth: 1 }))
-    .join('');
-  const regions = BODY_MAP_REGIONS[view]
-    .map((r) => {
-      const level = regionLevels[r.region] ?? 0;
-      const isSelected = selectedRegion === r.region;
-      return r.shapes
-        .map((shape) => bodyMapShapeSvg(shape, {
-          fill: HEATMAP_LEVELS[level],
-          stroke: isSelected ? 'var(--accent)' : 'var(--border)',
-          strokeWidth: isSelected ? 2 : 1,
-          region: r.region,
-        }))
-        .join('');
-    })
-    .join('');
-  return `<svg viewBox="0 0 160 300" class="body-map-svg">${decorative}${regions}</svg>`;
+function wireWeeklyHardSetsEvents(panel) {
+  const infoBtn = $('#weeklySetsInfoBtn', panel);
+  if (infoBtn) infoBtn.addEventListener('click', () => { weeklySetsInfoExpanded = !weeklySetsInfoExpanded; renderLiftsTab(); });
 }
 
 const MUSCLE_MAP_WINDOWS = [[7, '7 Days'], [30, '30 Days'], [null, 'All Time']];
 let muscleMapWindow = 7;
-let muscleMapSelectedRegion = null;
+let muscleMapSelectedRegion = null; // a MUSCLE_MAP_KEYS key now, not a BODY_REGIONS one
+
+// ── Sculpted Muscle Map (Option B) ───────────────────────────────────────
+// Every path below is the RIGHT half of the body, authored against a
+// viewBox="0 0 200 420"; the left half is the same path mirrored with
+// transform="translate(200,0) scale(-1,1)" rather than a second set of
+// coordinates. head/neck are already centered on the body's midline
+// (x=100), so mirroring them would be a no-op — only base and each
+// muscle (genuinely asymmetric) get drawn twice.
+const MUSCLE_MAP_HEAD = { cx: 100, cy: 34, rx: 17, ry: 21 };
+const MUSCLE_MAP_NECK = { x: 92, y: 52, w: 16, h: 14 };
+const MUSCLE_MAP_BASE_PATH = 'M101,60 L128,68 Q152,68 158,92 L162,152 L168,210 Q168,224 156,224 L146,214 L144,154 L138,118 L134,150 L130,186 L132,204 Q142,250 134,296 L132,384 Q134,406 122,406 L106,406 Q104,340 108,300 L102,232 L101,190 Z';
+const MUSCLE_MAP_DELT_PATH = 'M128,70 Q148,68 154,88 Q156,100 148,108 L138,106 Q136,90 126,80 Z';
+const MUSCLE_MAP_ARM_PATH = 'M138,108 L150,108 Q158,126 156,148 L145,150 Q141,128 138,108 Z';
+const MUSCLE_MAP_FOREARM_PATH = 'M145,152 L157,150 Q165,180 163,210 L153,212 Q147,182 145,152 Z';
+
+const MUSCLE_MAP_FRONT_PARTS = [
+  { key: 'traps', d: 'M110,60 L126,70 L120,77 L104,68 Z' },
+  { key: 'delts', d: MUSCLE_MAP_DELT_PATH },
+  { key: 'biceps', d: MUSCLE_MAP_ARM_PATH },
+  { key: 'forearms', d: MUSCLE_MAP_FOREARM_PATH },
+  { key: 'chest', d: 'M101,74 L127,80 Q138,94 130,110 Q116,117 101,111 Z' },
+  { key: 'abs', d: 'M102,115 L110,115 L110,128 L102,128 Z M102,131 L110,131 L110,145 L102,145 Z M102,148 L110,148 L110,162 L102,162 Z M102,165 L109,165 L109,178 L102,178 Z' },
+  { key: 'obliques', d: 'M113,117 L128,113 L132,146 L124,172 L113,176 Z' },
+  { key: 'quads', d: 'M102,198 L128,192 Q138,240 130,292 L108,294 Q100,250 102,198 Z' },
+  { key: 'calves', d: 'M108,302 L128,298 Q130,340 125,382 L112,382 Q105,340 108,302 Z' },
+];
+const MUSCLE_MAP_BACK_PARTS = [
+  { key: 'traps', d: 'M101,54 L112,60 L130,72 L124,92 L101,126 Z' },
+  { key: 'delts', d: MUSCLE_MAP_DELT_PATH },
+  { key: 'triceps', d: MUSCLE_MAP_ARM_PATH },
+  { key: 'forearms', d: MUSCLE_MAP_FOREARM_PATH },
+  { key: 'lats', d: 'M108,112 L124,96 Q136,112 131,140 L116,168 L104,150 Z' },
+  { key: 'lowerback', d: 'M101,146 L112,150 L114,178 L101,184 Z' },
+  { key: 'glutes', d: 'M101,182 L128,178 Q140,198 126,218 L101,220 Z' },
+  { key: 'hamstrings', d: 'M102,222 L128,220 Q136,254 130,292 L108,294 Q100,258 102,222 Z' },
+  { key: 'calves', d: 'M108,300 L128,296 Q132,336 125,376 L112,376 Q104,336 108,300 Z' },
+];
+
+const MUSCLE_MAP_LEGEND = [
+  { color: '#2B2E32', label: '0' },
+  { color: '#5A4F36', label: '1-5' },
+  { color: '#8A7443', label: '6-9' },
+  { color: '#C6A15B', label: '10-20' },
+  { color: '#E8CB88', label: '21+' },
+];
+function muscleMapHeatColor(sets) {
+  const rounded = Math.round(sets);
+  if (rounded <= 0) return MUSCLE_MAP_LEGEND[0].color;
+  if (rounded <= 5) return MUSCLE_MAP_LEGEND[1].color;
+  if (rounded <= 9) return MUSCLE_MAP_LEGEND[2].color;
+  if (rounded <= 20) return MUSCLE_MAP_LEGEND[3].color;
+  return MUSCLE_MAP_LEGEND[4].color;
+}
+
+function muscleMapPartSvg(part, totals, selectedKey) {
+  const fill = muscleMapHeatColor(totals[part.key] || 0);
+  const isSelected = selectedKey === part.key;
+  // Two overlapping copies of the same path: one carries the heat color
+  // and the tap target, the other — pointer-events disabled — carries the
+  // diagonal light/dark shading gradient on top, giving each muscle a
+  // sculpted look instead of a flat color fill.
+  return `
+    <path d="${part.d}" fill="${fill}" stroke="${isSelected ? 'var(--accent)' : '#0E0F10'}" stroke-width="${isSelected ? '1.6' : '0.9'}" stroke-linejoin="round" class="body-map-region" data-muscle-key="${part.key}"></path>
+    <path d="${part.d}" fill="url(#muscleMapShade)" pointer-events="none"></path>`;
+}
+
+function muscleMapBodySvg(parts, totals, selectedKey, viewName) {
+  const baseAttrs = 'fill="#1B1D20" stroke="#33373B" stroke-width="1"';
+  const base = `<path d="${MUSCLE_MAP_BASE_PATH}" ${baseAttrs}></path>`;
+  const muscles = parts.map((part) => {
+    const right = muscleMapPartSvg(part, totals, selectedKey);
+    const left = `<g transform="translate(200,0) scale(-1,1)">${muscleMapPartSvg(part, totals, selectedKey)}</g>`;
+    return right + left;
+  }).join('');
+  return `<svg viewBox="0 0 200 420" class="body-map-svg">
+    <defs>
+      <linearGradient id="muscleMapShade-${viewName}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity="0.22"></stop>
+        <stop offset="0.55" stop-color="#fff" stop-opacity="0"></stop>
+        <stop offset="1" stop-color="#000" stop-opacity="0.35"></stop>
+      </linearGradient>
+    </defs>
+    <ellipse cx="${MUSCLE_MAP_HEAD.cx}" cy="${MUSCLE_MAP_HEAD.cy}" rx="${MUSCLE_MAP_HEAD.rx}" ry="${MUSCLE_MAP_HEAD.ry}" ${baseAttrs}></ellipse>
+    <rect x="${MUSCLE_MAP_NECK.x}" y="${MUSCLE_MAP_NECK.y}" width="${MUSCLE_MAP_NECK.w}" height="${MUSCLE_MAP_NECK.h}" ${baseAttrs}></rect>
+    ${base}
+    <g transform="translate(200,0) scale(-1,1)">${base}</g>
+    ${muscles.replace(/url\(#muscleMapShade\)/g, `url(#muscleMapShade-${viewName})`)}
+  </svg>`;
+}
+
+function muscleMapReadoutText(key, sets, windowDays) {
+  const label = MUSCLE_MAP_KEY_LABELS[key];
+  const rounded = Math.round(sets * 10) / 10;
+  if (windowDays === 7) {
+    if (rounded <= 0) return `${label}: no sets logged this week yet.`;
+    const inRange = rounded >= WEEKLY_SETS_GUIDELINE.low && rounded <= WEEKLY_SETS_GUIDELINE.high;
+    const rangeNote = inRange
+      ? ` (within the commonly cited ${WEEKLY_SETS_GUIDELINE.low}-${WEEKLY_SETS_GUIDELINE.high} set range)`
+      : rounded < WEEKLY_SETS_GUIDELINE.low
+      ? ` (below the commonly cited ${WEEKLY_SETS_GUIDELINE.low}-${WEEKLY_SETS_GUIDELINE.high} set range)`
+      : ` (above the commonly cited ${WEEKLY_SETS_GUIDELINE.low}-${WEEKLY_SETS_GUIDELINE.high} set range)`;
+    return `${label}: ${rounded} sets this week${rangeNote}.`;
+  }
+  const periodLabel = windowDays === 30 ? 'in the last 30 days' : 'all time';
+  return `${label}: ${rounded} sets ${periodLabel}.`;
+}
 
 function muscleMapHtml(lifts) {
-  const stats = computeRegionStats(lifts, muscleMapWindow);
-  const thresholds = volumeQuantileThresholds(Object.values(stats).map((s) => s.volume).filter((v) => v > 0));
-  const regionLevels = {};
-  for (const region of BODY_REGIONS) regionLevels[region] = heatmapLevel(stats[region]?.volume || 0, thresholds);
-  const selectedStats = muscleMapSelectedRegion ? stats[muscleMapSelectedRegion] : null;
+  const totals = computeWeeklyHardSetsByMuscle(lifts, state.exercises, muscleMapWindow);
+  const anyData = Object.values(totals).some((v) => v > 0);
 
   return `
     <div class="card">
@@ -4899,36 +5729,24 @@ function muscleMapHtml(lifts) {
       <div class="body-map-grid">
         <div class="body-map-col">
           <div class="muted small body-map-label">Front</div>
-          ${bodyMapSvg('front', regionLevels, muscleMapSelectedRegion)}
+          ${muscleMapBodySvg(MUSCLE_MAP_FRONT_PARTS, totals, muscleMapSelectedRegion, 'front')}
         </div>
         <div class="body-map-col">
           <div class="muted small body-map-label">Back</div>
-          ${bodyMapSvg('back', regionLevels, muscleMapSelectedRegion)}
+          ${muscleMapBodySvg(MUSCLE_MAP_BACK_PARTS, totals, muscleMapSelectedRegion, 'back')}
         </div>
       </div>
-      <div class="heatmap-legend">
-        <span>Less</span>
-        ${HEATMAP_LEVELS.map((c) => `<span class="heatmap-swatch" style="background:${c};"></span>`).join('')}
-        <span>More</span>
+      <div class="heatmap-legend" style="flex-wrap:wrap;">
+        ${MUSCLE_MAP_LEGEND.map((l) => `<span class="legend-item"><span class="legend-swatch" style="background:${l.color};"></span>${l.label}</span>`).join('')}
       </div>
+      ${!anyData ? `<p class="muted small" style="text-align:center;margin-top:0.5rem;">No training logged yet — log your first lift to start filling this in.</p>` : ''}
       ${muscleMapSelectedRegion ? `
       <div class="muscle-map-detail">
         <div class="row" style="justify-content:space-between;align-items:center;">
-          <strong>${BODY_REGION_LABELS[muscleMapSelectedRegion]}</strong>
+          <strong>${MUSCLE_MAP_KEY_LABELS[muscleMapSelectedRegion]}</strong>
           <button class="btn btn-sm btn-ghost" id="mmCloseRegion">✕</button>
         </div>
-        ${selectedStats ? `
-          <div class="row" style="gap:1.25rem;margin:0.5rem 0;">
-            <div><div class="stat-num" style="font-size:1.1rem;">${Math.round(selectedStats.volume).toLocaleString()}</div><div class="muted small">lb volume</div></div>
-            <div><div class="stat-num" style="font-size:1.1rem;">${selectedStats.sets}</div><div class="muted small">sets</div></div>
-          </div>
-          <div class="muted small" style="margin-bottom:0.25rem;">Exercises</div>
-          ${[...selectedStats.exercises.entries()].sort((a, b) => b[1] - a[1]).map(([ex, vol]) => `
-            <div class="row" style="justify-content:space-between;">
-              <span style="color:var(--accent);">${esc(ex)}</span>
-              <span class="mono muted">${Math.round(vol).toLocaleString()} lb</span>
-            </div>`).join('')}
-        ` : `<p class="muted small">No ${muscleMapWindow ? `${muscleMapWindow}-day` : 'all-time'} volume for this region yet.</p>`}
+        <p style="margin:0.4rem 0 0;">${esc(muscleMapReadoutText(muscleMapSelectedRegion, totals[muscleMapSelectedRegion] || 0, muscleMapWindow))}</p>
       </div>` : ''}
     </div>
   `;
@@ -4940,8 +5758,8 @@ function wireMuscleMapEvents(panel) {
     muscleMapSelectedRegion = null;
     renderLiftsTab();
   }));
-  $$('.body-map-region', panel).forEach((el) => el.addEventListener('click', () => {
-    muscleMapSelectedRegion = el.dataset.region;
+  $$('[data-muscle-key]', panel).forEach((el) => el.addEventListener('click', () => {
+    muscleMapSelectedRegion = el.dataset.muscleKey;
     renderLiftsTab();
   }));
   const closeBtn = $('#mmCloseRegion', panel);
@@ -4953,6 +5771,37 @@ function e1RM(weight, reps) {
   if (!weight || !reps || reps <= 0) return 0;
   if (reps === 1) return Math.round(weight);
   return Math.round(weight * (1 + reps / 30));
+}
+
+// Static warm-up ramp — a general pattern (percentage of working weight,
+// decreasing reps as the weight climbs), not personalized and not AI.
+// Rounds each step to the nearest 5 lb, a typical barbell plate
+// increment; still a reasonable rough guide for dumbbell/machine work.
+const WARMUP_RAMP_STEPS = [
+  { pct: 0.4, reps: 8 },
+  { pct: 0.6, reps: 5 },
+  { pct: 0.75, reps: 3 },
+  { pct: 0.85, reps: 2 },
+  { pct: 0.9, reps: 1 },
+];
+function warmupRampFor(workingWeight) {
+  if (!workingWeight || workingWeight <= 0) return [];
+  return WARMUP_RAMP_STEPS.map((step) => ({
+    pct: Math.round(step.pct * 100),
+    weight: Math.max(5, Math.round((workingWeight * step.pct) / 5) * 5),
+    reps: step.reps,
+  }));
+}
+function warmupRampHtml(workingWeight) {
+  const steps = warmupRampFor(workingWeight);
+  if (!steps.length) return `<p class="muted small" style="margin:0;">Enter a working weight above first.</p>`;
+  return `
+    <ul class="cue-list" style="margin:0;">
+      ${steps.map((s) => `<li><strong>${s.pct}%:</strong> ${s.weight} lb × ${s.reps} rep${s.reps === 1 ? '' : 's'}</li>`).join('')}
+      <li><strong>100%:</strong> ${workingWeight} lb — your working sets (not warm-up)</li>
+    </ul>
+    <p class="muted small" style="margin:0.4rem 0 0;">A general ramp-up pattern, not personalized — skip a step or two for lighter/isolation work, or adjust based on how you feel.</p>
+  `;
 }
 
 // total reps across all sets — uses reps_per_set if available (allows
@@ -5159,8 +6008,10 @@ function plateStackHtml(weight, barLb = 45) {
 let liftsSelectedExercise = null;
 let liftForm = {
   exercise: '', muscleGroup: '', bodyRegion: '', weight: '', sets: 3,
-  repsPerSet: ['5', '5', '5'], date: localDateStr(), isSuperset: false, supersetGroup: '',
+  repsPerSet: ['5', '5', '5'], warmupPerSet: [false, false, false],
+  date: localDateStr(), isSuperset: false, supersetGroup: '',
 };
+let showWarmupRamp = false;
 let liftFormError = '';
 let liftFormSaving = false;
 let prBanner = null; // { exercise, weight, improvement } — dismissed manually, not auto-timed
@@ -5286,6 +6137,9 @@ function prefillLiftFormFromLast(exercise) {
   liftForm.weight = String(last.weight);
   liftForm.sets = repsPerSet.length;
   liftForm.repsPerSet = repsPerSet.map(String);
+  // Warm-up status never carries over from a previous session's log —
+  // each session's warm-up sets are its own thing to mark fresh.
+  liftForm.warmupPerSet = repsPerSet.map(() => false);
 }
 
 function goalCardHtml(exercise, history, bestE1RM, goal) {
@@ -5365,7 +6219,8 @@ function liftHistoryRowHtml(lift, isLast) {
 function renderLiftsTab() {
   const panel = $('#panel-lifts');
   if (!panel) return;
-  if (showExerciseGlossary) renderExerciseGlossary(panel);
+  if (showBlockBuilder) renderBlockBuilder(panel);
+  else if (showExerciseGlossary) renderExerciseGlossary(panel);
   else if (liftsSelectedExercise) renderLiftDetail(panel);
   else if (isSessionEndedToday()) renderSessionSummary(panel);
   else renderLiftLog(panel);
@@ -5395,6 +6250,97 @@ function suggestedExercisesHtml(alreadyLoggedNames) {
   `;
 }
 
+// Shared citation library backing the hypertrophy guidance shown per
+// exercise and the training-frequency note shown by the split card. Per
+// explicit product instruction, only verified, explicitly-provided
+// citations belong here — do not add more without going back for
+// verification first, since a fabricated or misapplied citation would
+// undermine the app's "science-based" positioning. `lines` is shown
+// inline; `more` is the plain-language "learn more" expansion, itself
+// just elaborating on the same studies, never introducing a new one.
+//
+// Correction (2026-09): the hypertrophy entry originally also cited
+// Grgic, Schoenfeld, Skrepnik, Davies & Mikulic (2018, Sports Medicine)
+// for the rest-interval guidance shown alongside rep range — that review
+// is about muscular STRENGTH outcomes, not hypertrophy, so it's been
+// removed from here. The rest-interval/tempo fields on each exercise
+// still show (they're useful coaching guidance either way), just without
+// a citation until a hypertrophy-specific rest-interval source is
+// verified. Do not re-attach that 2018 review to hypertrophy claims.
+//
+// `failure` (added for the Effort and Proximity to Failure learning path)
+// has no publication year in the product brief that added it — shown
+// without one rather than guessing at a date.
+const CITATION_LIBRARY = {
+  hypertrophy: {
+    lines: [
+      'Based on research showing hypertrophy gains are similar across a range of loads, provided sets are taken close to effort failure (Schoenfeld et al., 2017).',
+    ],
+    more: 'A 2017 meta-analysis (Schoenfeld, Grgic, Ogborn & Krieger, Journal of Strength and Conditioning Research) found no significant difference in muscle growth between lower-load (under 60% of your one-rep max) and higher-load (over 60%) training, as long as sets were taken close to failure — that\'s why the rep range above is a suggestion, not a hard rule. The rest-interval and tempo notes above are general coaching guidance rather than a specific research citation.',
+  },
+  frequency: {
+    lines: [
+      'Based on research showing muscle groups trained 2x/week or more tend to see better growth outcomes than once weekly (Schoenfeld et al., 2016).',
+    ],
+    more: 'A 2016 meta-analysis (Schoenfeld, Grgic & Krieger, Sports Medicine) found that muscle groups trained two or more times per week saw significantly better hypertrophy outcomes than muscle groups trained just once a week — worth keeping in mind when deciding how to split your training days.',
+  },
+  failure: {
+    lines: [
+      'Based on research comparing training to failure with stopping a rep or two short, which found no significant overall difference in hypertrophy (Grgic, Schoenfeld, Orazem & Sabol).',
+    ],
+    more: 'A systematic review and meta-analysis (Grgic, Schoenfeld, Orazem & Sabol) comparing sets taken to complete failure against sets stopped short of failure found no significant overall difference in muscle growth between the two approaches — one reason training to failure on every set isn\'t necessary to make progress.',
+  },
+};
+// Session-only footnote state (dismissed/expanded), keyed per rendered
+// instance (e.g. "hypertrophy:Bench Press") so dismissing one exercise's
+// citation doesn't hide it everywhere else. Resets on reload — this is a
+// lightweight UI convenience, not user data worth a database column.
+const citationDismissed = new Set();
+const citationExpanded = new Set();
+function citationBlockHtml(topicKey, instanceId) {
+  if (citationDismissed.has(instanceId)) return '';
+  const c = CITATION_LIBRARY[topicKey];
+  const expanded = citationExpanded.has(instanceId);
+  return `
+    <div class="citation-line">
+      <p class="muted small" style="margin:0.4rem 0 0;">${c.lines.map((l) => esc(l)).join(' ')}</p>
+      ${expanded ? `<p class="muted small" style="margin:0.4rem 0 0;">${esc(c.more)}</p>` : ''}
+      <div class="row" style="gap:0.75rem;margin-top:0.25rem;">
+        <button class="btn-link" data-citation-more="${esc(instanceId)}">${expanded ? 'Show less' : 'Learn more'}</button>
+        <button class="btn-link" data-citation-dismiss="${esc(instanceId)}">Dismiss</button>
+      </div>
+    </div>`;
+}
+function wireCitationEvents(panel, rerender) {
+  $$('[data-citation-more]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const id = btn.dataset.citationMore;
+    if (citationExpanded.has(id)) citationExpanded.delete(id); else citationExpanded.add(id);
+    rerender();
+  }));
+  $$('[data-citation-dismiss]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    citationDismissed.add(btn.dataset.citationDismiss);
+    rerender();
+  }));
+}
+
+// The four hypertrophy_* columns on `exercises` are nullable (older/
+// unseeded rows may not have them) — render nothing rather than an
+// empty section if none are present.
+function hypertrophyBlockHtml(def) {
+  if (!def.hypertrophy_rep_range && !def.hypertrophy_rest_interval && !def.hypertrophy_tempo && !def.hypertrophy_mind_muscle_cue) return '';
+  return `
+    <div class="hypertrophy-block">
+      <h4 style="margin:0.75rem 0 0.35rem;">For Hypertrophy</h4>
+      <ul class="cue-list">
+        ${def.hypertrophy_rep_range ? `<li><strong>Rep range:</strong> ${esc(def.hypertrophy_rep_range)}</li>` : ''}
+        ${def.hypertrophy_rest_interval ? `<li><strong>Rest:</strong> ${esc(def.hypertrophy_rest_interval)}</li>` : ''}
+        ${def.hypertrophy_tempo ? `<li><strong>Tempo:</strong> ${esc(def.hypertrophy_tempo)}</li>` : ''}
+        ${def.hypertrophy_mind_muscle_cue ? `<li><strong>Mind-muscle cue:</strong> ${esc(def.hypertrophy_mind_muscle_cue)}</li>` : ''}
+      </ul>
+      ${citationBlockHtml('hypertrophy', `hypertrophy:${def.name}`)}
+    </div>`;
+}
+
 function cueCardHtml(banner) {
   const { trigger, def } = banner;
   if (!def) return '';
@@ -5413,6 +6359,7 @@ function cueCardHtml(banner) {
         <li><strong>Common mistake:</strong> ${esc(def.cue_mistake)}</li>
         <li><strong>Bracing:</strong> ${esc(def.cue_bracing)}</li>
       </ul>
+      ${hypertrophyBlockHtml(def)}
     </div>
   `;
 }
@@ -5453,12 +6400,15 @@ function renderExerciseGlossary(panel) {
             <span class="muted">${glossaryExpandedName === e.name ? '▲' : '▼'}</span>
           </div>
           ${glossaryExpandedName === e.name ? `
-          <ul class="cue-list" style="padding-bottom:0.6rem;border-bottom:1px solid var(--border);">
-            <li><strong>Setup:</strong> ${esc(e.cue_setup)}</li>
-            <li><strong>Execution:</strong> ${esc(e.cue_execution)}</li>
-            <li><strong>Common mistake:</strong> ${esc(e.cue_mistake)}</li>
-            <li><strong>Bracing:</strong> ${esc(e.cue_bracing)}</li>
-          </ul>` : ''}
+          <div style="padding-bottom:0.6rem;border-bottom:1px solid var(--border);">
+            <ul class="cue-list">
+              <li><strong>Setup:</strong> ${esc(e.cue_setup)}</li>
+              <li><strong>Execution:</strong> ${esc(e.cue_execution)}</li>
+              <li><strong>Common mistake:</strong> ${esc(e.cue_mistake)}</li>
+              <li><strong>Bracing:</strong> ${esc(e.cue_bracing)}</li>
+            </ul>
+            ${hypertrophyBlockHtml(e)}
+          </div>` : ''}
         </div>`).join('')}
     </div>
   `;
@@ -5475,6 +6425,7 @@ function renderExerciseGlossary(panel) {
     if (expanding) recordGlossaryView(name);
     renderExerciseGlossary(panel);
   }));
+  wireCitationEvents(panel, () => renderExerciseGlossary(panel));
 }
 
 // Feeds the Learning-category achievement — dedup, only writes when a
@@ -5493,12 +6444,32 @@ async function recordGlossaryView(exerciseName) {
 // a real iPhone it fell back to dumping every <option> inline as plain
 // visible text in the page instead of showing them as suggestions, which
 // is worse than not having autocomplete at all. Back to a hand-rolled
-// dropdown, but the <input> element itself is still created exactly once
-// and never touched again while the user types — only a separate sibling
-// div re-renders per keystroke. An even earlier version rebuilt the whole
-// wrap (input included) on every keystroke; destroying the focused node
-// like that has no way to carry focus to its replacement, so typing past
-// the first character went nowhere.
+// dropdown.
+//
+// This field is built exactly once and never rebuilt from scratch again:
+// not on every keystroke (an earlier version did that and destroyed the
+// focused node on every keypress, so typing past the first character went
+// nowhere), and not on every renderLiftLog() re-render either (a later
+// version rebuilt the <input> itself every time the surrounding Lifts tab
+// re-rendered for ANY reason). That second case turned out to be the
+// deeper bug: removing a focused element from the document — even
+// briefly, even to reinsert the exact same node a moment later — blurs it
+// synchronously, and on iOS Safari that silently drops any keyboard-open
+// request already in flight for it. Verified with a headless test that
+// forces an unrelated re-render mid-keystroke: without the guard in
+// renderLiftLog() below, focus was lost even though the DOM node itself
+// survived.
+//
+// So there are three layers now, each closing a different gap:
+//  1. renderLiftLog() skips its whole rebuild while #lift_exercise is
+//     focused, so an unrelated trigger (a PR banner, some other async
+//     callback) can never touch this subtree mid-interaction.
+//  2. This function never rebuilds the <input> once it exists — only
+//     syncs its .value, and only while it isn't the active element.
+//  3. Committing a dropdown selection deliberately blurs the input itself
+//     before re-rendering, rather than relying on the guard to notice —
+//     that's a controlled, user-initiated transition out of "editing",
+//     not a race.
 function autocompleteDropdownHtml(value, options) {
   const trimmed = value.trim();
   const filtered = value ? options.filter((o) => o.toLowerCase().includes(value.toLowerCase())) : options;
@@ -5511,47 +6482,68 @@ function autocompleteDropdownHtml(value, options) {
 }
 
 let liftAutocompleteOpen = false;
+// Read fresh by the persistent dropdown-draw closure below on every call —
+// never captured stale, since the exercise list can still be loading the
+// first time this field is built.
+let liftExerciseFieldOptions = [];
+
+function drawLiftAutocompleteDropdown(wrap) {
+  const input = $('#lift_exercise', wrap);
+  const dropdownEl = $('#liftAutocompleteDropdown', wrap);
+  dropdownEl.innerHTML = liftAutocompleteOpen ? autocompleteDropdownHtml(liftForm.exercise, liftExerciseFieldOptions) : '';
+  $$('[data-ac-select]', dropdownEl).forEach((item) => item.addEventListener('mousedown', (e) => {
+    e.preventDefault(); // stops the mousedown's own default focus-shift so this handler (not a stray blur) controls what happens next
+    const val = item.dataset.acSelect;
+    liftForm.exercise = val;
+    liftAutocompleteOpen = false;
+    liftForm.muscleGroup = exerciseDefFor(val)?.muscle_group || DEFAULT_MUSCLE_GROUP[val] || liftForm.muscleGroup || '';
+    liftForm.bodyRegion = exerciseDefFor(val)?.body_region || DEFAULT_BODY_REGION[val] || liftForm.bodyRegion || '';
+    prefillLiftFormFromLast(val);
+    // Deliberately blur before re-rendering — a selection is a completed
+    // action, and renderLiftLog() would otherwise skip the render it
+    // needs to run (to reveal the muscle-group/body-region selects) since
+    // its focus-guard would still see this input as active.
+    input.blur();
+    renderLiftsTab();
+  }));
+}
 
 function renderLiftExerciseField(panel, allExerciseOptions) {
   const wrap = $('#liftExerciseWrap', panel);
   if (!wrap) return;
+  liftExerciseFieldOptions = allExerciseOptions;
 
-  wrap.innerHTML = `
-    <label>Exercise</label>
-    <input class="input" id="lift_exercise" value="${esc(liftForm.exercise)}" placeholder="Search or type a new exercise…" autocomplete="off">
-    <div id="liftAutocompleteDropdown"></div>
-  `;
-  const input = $('#lift_exercise', wrap);
-  const dropdownEl = $('#liftAutocompleteDropdown', wrap);
+  let input = $('#lift_exercise', wrap);
+  if (!input) {
+    wrap.innerHTML = `
+      <label>Exercise</label>
+      <input class="input" id="lift_exercise" placeholder="Search or type a new exercise…" autocomplete="off">
+      <div id="liftAutocompleteDropdown"></div>
+    `;
+    input = $('#lift_exercise', wrap);
+    input.value = liftForm.exercise;
+    input.addEventListener('focus', () => { liftAutocompleteOpen = true; drawLiftAutocompleteDropdown(wrap); });
+    input.addEventListener('input', (e) => {
+      liftForm.exercise = e.target.value;
+      liftAutocompleteOpen = true;
+      drawLiftAutocompleteDropdown(wrap);
+    });
+    input.addEventListener('blur', () => {
+      // Delayed so a dropdown item's mousedown (which fires first) can
+      // still register a selection before the dropdown disappears. This
+      // is the natural end of the interaction, so a full re-render is
+      // safe here — renderLiftLog()'s focus-guard no longer applies once
+      // this fires, since focus has already left the field.
+      setTimeout(() => { liftAutocompleteOpen = false; renderLiftsTab(); }, 150);
+    });
+  } else if (document.activeElement !== input) {
+    // Only sync from external state changes (e.g. tapping a "Suggested for
+    // today" chip) — never while the user is actively typing here, or
+    // we'd be fighting their caret position on every keystroke.
+    input.value = liftForm.exercise;
+  }
 
-  const drawDropdown = () => {
-    dropdownEl.innerHTML = liftAutocompleteOpen ? autocompleteDropdownHtml(liftForm.exercise, allExerciseOptions) : '';
-    $$('[data-ac-select]', dropdownEl).forEach((item) => item.addEventListener('mousedown', (e) => {
-      e.preventDefault(); // keeps focus on the input instead of the item, avoiding the blur race entirely
-      const val = item.dataset.acSelect;
-      liftForm.exercise = val;
-      liftAutocompleteOpen = false;
-      liftForm.muscleGroup = exerciseDefFor(val)?.muscle_group || DEFAULT_MUSCLE_GROUP[val] || liftForm.muscleGroup || '';
-      liftForm.bodyRegion = exerciseDefFor(val)?.body_region || DEFAULT_BODY_REGION[val] || liftForm.bodyRegion || '';
-      prefillLiftFormFromLast(val);
-      renderLiftsTab();
-    }));
-  };
-
-  input.addEventListener('focus', () => { liftAutocompleteOpen = true; drawDropdown(); });
-  input.addEventListener('input', (e) => {
-    liftForm.exercise = e.target.value;
-    liftAutocompleteOpen = true;
-    drawDropdown();
-  });
-  input.addEventListener('blur', () => {
-    // delayed so a dropdown item's mousedown (which fires first) can
-    // still register a selection before the dropdown disappears
-    setTimeout(() => { liftAutocompleteOpen = false; renderLiftsTab(); }, 150);
-  });
-
-  drawDropdown();
-  if (liftAutocompleteOpen) input.focus();
+  drawLiftAutocompleteDropdown(wrap);
 }
 
 // ── End Workout flow + post-session AI analysis ─────────────────────
@@ -5768,29 +6760,11 @@ function wireSessionAnalysisEvents(panel) {
 }
 
 function renderSessionSummary(panel) {
-  const todayLifts = todaysLifts();
-  const summary = {
-    exerciseCount: new Set(todayLifts.map((l) => l.exercise)).size,
-    sets: todayLifts.reduce((sum, l) => sum + (l.reps_per_set?.length || l.sets || 0), 0),
-    volume: todayLifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0),
-  };
-  const byExercise = {};
-  for (const l of todayLifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
-
   panel.innerHTML = `
-    <div class="card">
-      <h3>Workout Complete</h3>
-      <div class="today-summary-row">
-        <div><div class="stat-num">${summary.exerciseCount}</div><div class="muted small">exercise${summary.exerciseCount === 1 ? '' : 's'}</div></div>
-        <div><div class="stat-num">${summary.sets}</div><div class="muted small">set${summary.sets === 1 ? '' : 's'}</div></div>
-        <div><div class="stat-num">${Math.round(summary.volume).toLocaleString()}</div><div class="muted small">volume</div></div>
-      </div>
-      <div class="muted small" style="margin-top:0.5rem;">${Object.entries(byExercise).map(([ex, sets]) => `${esc(ex)} (${sets.length}x)`).join(' · ')}</div>
-      <button class="btn" id="reopenSessionBtn" style="margin-top:0.75rem;">Reopen Session</button>
-    </div>
+    ${todaysLiftPanelHtml()}
     ${sessionAnalysisHtml()}
   `;
-  $('#reopenSessionBtn').addEventListener('click', reopenWorkoutSession);
+  wireTodaysLiftEditEvents(panel);
   wireSessionAnalysisEvents(panel);
 }
 
@@ -5890,19 +6864,181 @@ function endWorkoutButtonHtml() {
   return `<button class="btn btn-primary btn-block" id="endWorkoutBtn" style="margin-top:0.75rem;">End Workout</button>`;
 }
 
+// ── Today's Lift panel ──────────────────────────────────────────────────
+// Shown at the top of the Lift page whether the session is still active
+// (renderLiftLog) or already ended (renderSessionSummary) — same function
+// either way, so the two views can't drift. Reuses liftHistoryRowHtml()
+// (the per-set edit/delete UI already built for the per-exercise detail
+// view) rather than a second implementation; wireTodaysLiftEditEvents()
+// below is a separate, simpler wiring function rather than reusing
+// wireLiftDetailEvents(), since that one also handles per-exercise goal
+// editing this panel has no use for.
+function todaysLiftPanelHtml() {
+  const todayLiftsList = todaysLifts();
+  const ended = isSessionEndedToday();
+  if (!todayLiftsList.length) {
+    return `<div class="card">
+      <h3>Today's Lift</h3>
+      <p class="muted" style="text-align:center;">Nothing logged yet today — log your first lift below to get started.</p>
+    </div>`;
+  }
+
+  const byExercise = {};
+  todayLiftsList.forEach((l) => (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l));
+  const today = localDateStr();
+  const priorPRs = computeLiftPRs(state.lifts.filter((l) => l.date < today));
+  const currentPRs = computeLiftPRs(state.lifts);
+
+  const workingSets = todayLiftsList.reduce((sum, l) => sum + workingSetCount(l), 0);
+  const totalVolume = todayLiftsList.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
+  const exerciseCount = Object.keys(byExercise).length;
+
+  const timestamps = todayLiftsList.map((l) => (l.created_at ? new Date(l.created_at).getTime() : null)).filter(Boolean);
+  let elapsedLabel = null;
+  if (timestamps.length) {
+    const start = Math.min(...timestamps);
+    const end = ended && state.workoutSession?.ended_at ? new Date(state.workoutSession.ended_at).getTime() : Date.now();
+    const mins = Math.max(0, Math.round((end - start) / 60000));
+    elapsedLabel = mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  }
+
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">Today's Lift</h3>
+      ${ended ? `<span class="badge on">Complete</span>` : ''}
+    </div>
+    <div class="today-summary-row" style="margin-top:0.5rem;">
+      <div><div class="stat-num">${exerciseCount}</div><div class="muted small">exercise${exerciseCount === 1 ? '' : 's'}</div></div>
+      <div><div class="stat-num">${workingSets}</div><div class="muted small">working set${workingSets === 1 ? '' : 's'}</div></div>
+      <div><div class="stat-num">${Math.round(totalVolume).toLocaleString()}</div><div class="muted small">volume</div></div>
+      ${elapsedLabel ? `<div><div class="stat-num">${elapsedLabel}</div><div class="muted small">elapsed</div></div>` : ''}
+    </div>
+    ${Object.entries(byExercise).map(([exercise, sets]) => {
+      const volume = sets.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
+      const bestE1RMToday = Math.max(...sets.map((l) => e1RM(l.weight, l.reps)));
+      // "New PR today" — the current all-time best for this exercise was
+      // set today (by weight) and either didn't exist before today or is
+      // higher than whatever it was before today.
+      const cur = currentPRs[exercise];
+      const isPR = !!cur && sets.some((l) => l.weight === cur.weight) && (!priorPRs[exercise] || cur.weight > priorPRs[exercise].weight);
+      return `<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border);">
+        <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;">
+          <strong>${esc(exercise)}${isPR ? ' 🏆 PR' : ''}</strong>
+          <span class="muted small">${Math.round(volume).toLocaleString()} lb volume · e1RM ~${bestE1RMToday} lb</span>
+        </div>
+        ${sets.map((l, i) => liftHistoryRowHtml(l, i === sets.length - 1)).join('')}
+      </div>`;
+    }).join('')}
+    ${ended ? `<button class="btn btn-block" id="reopenSessionBtn" style="margin-top:0.75rem;">Reopen Session</button>` : endWorkoutButtonHtml()}
+  </div>`;
+}
+
+// Generic edit/save/delete wiring for liftHistoryRowHtml() rows, searching
+// state.lifts directly rather than a single exercise's scoped history —
+// Today's Lift can show rows from several exercises logged the same day.
+// Deliberately separate from wireLiftDetailEvents() (which also wires
+// per-exercise goal editing this panel doesn't need) to avoid touching
+// that existing, working code path.
+function wireTodaysLiftEditEvents(panel) {
+  $$('[data-lift-edit]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const lift = state.lifts.find((l) => l.id === btn.dataset.liftEdit);
+    if (!lift) return;
+    const repsPerSet = lift.reps_per_set && lift.reps_per_set.length ? lift.reps_per_set : [lift.reps];
+    liftHistoryEditingId = lift.id;
+    liftHistoryEditForm = { weight: String(lift.weight), date: lift.date, repsPerSet: repsPerSet.map(String) };
+    liftHistoryError = '';
+    liftHistoryConfirmDeleteId = null;
+    renderLiftsTab();
+  }));
+
+  const cancelBtn = $('#lhe_cancel', panel);
+  if (cancelBtn) cancelBtn.addEventListener('click', () => { liftHistoryEditingId = null; renderLiftsTab(); });
+  const weightInput = $('#lhe_weight', panel);
+  if (weightInput) weightInput.addEventListener('input', (e) => { liftHistoryEditForm.weight = e.target.value; });
+  const dateInput = $('#lhe_date', panel);
+  if (dateInput) dateInput.addEventListener('change', (e) => { liftHistoryEditForm.date = e.target.value; });
+  const setsInput = $('#lhe_sets', panel);
+  if (setsInput) setsInput.addEventListener('change', (e) => {
+    const count = Math.max(1, Math.min(20, Number(e.target.value) || 1));
+    const arr = liftHistoryEditForm.repsPerSet;
+    const fillVal = arr.length ? arr[arr.length - 1] : '5';
+    while (arr.length < count) arr.push(fillVal);
+    arr.length = count;
+    renderLiftsTab();
+  });
+  $$('[data-lhe-rep-idx]', panel).forEach((inp) => inp.addEventListener('input', (e) => {
+    liftHistoryEditForm.repsPerSet[Number(e.target.dataset.lheRepIdx)] = e.target.value;
+  }));
+
+  const saveBtn = $('#lhe_save', panel);
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const repsPerSet = liftHistoryEditForm.repsPerSet.map((r) => Number(r) || 0);
+    if (!liftHistoryEditForm.weight || repsPerSet.length === 0) return;
+    const reps = Math.round(avgReps(repsPerSet) * 10) / 10;
+    liftHistorySaving = true;
+    liftHistoryError = '';
+    renderLiftsTab();
+    const { error } = await supabase.from('lifts').update({
+      weight: Number(liftHistoryEditForm.weight), sets: repsPerSet.length,
+      reps_per_set: repsPerSet, reps, date: liftHistoryEditForm.date,
+    }).eq('id', liftHistoryEditingId);
+    liftHistorySaving = false;
+    if (error) { liftHistoryError = error.message || 'Failed to save.'; renderLiftsTab(); return; }
+    liftHistoryEditingId = null;
+    await loadLifts();
+    renderAll();
+  });
+
+  const deleteBtn = $('#lhe_delete', panel);
+  if (deleteBtn) deleteBtn.addEventListener('click', () => { liftHistoryConfirmDeleteId = liftHistoryEditingId; renderLiftsTab(); });
+  const cancelDeleteBtn = $('#lhe_cancelDelete', panel);
+  if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', () => { liftHistoryConfirmDeleteId = null; renderLiftsTab(); });
+  const confirmDeleteBtn = $('#lhe_confirmDelete', panel);
+  if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', async () => {
+    liftHistoryDeleting = true;
+    renderLiftsTab();
+    const { error } = await supabase.from('lifts').delete().eq('id', liftHistoryEditingId);
+    liftHistoryDeleting = false;
+    if (error) { liftHistoryError = error.message || 'Failed to delete.'; liftHistoryConfirmDeleteId = null; renderLiftsTab(); return; }
+    liftHistoryEditingId = null;
+    liftHistoryConfirmDeleteId = null;
+    await loadLifts();
+    renderAll();
+  });
+
+  const reopenBtn = $('#reopenSessionBtn', panel);
+  if (reopenBtn) reopenBtn.addEventListener('click', reopenWorkoutSession);
+  const endBtn = $('#endWorkoutBtn', panel);
+  if (endBtn) endBtn.addEventListener('click', endWorkoutSession);
+}
+
 function renderLiftLog(panel) {
+  // Skip the whole rebuild while the exercise field is actively focused.
+  // This is what actually prevents an unrelated trigger from blurring the
+  // field mid-interaction (see the long comment above
+  // renderLiftExerciseField) — the field's own handlers never call
+  // renderLiftsTab() while typing, and a deliberate selection blurs the
+  // input itself first, so this only ever defers renders that have
+  // nothing to do with the field. A full render always follows once
+  // focus naturally leaves it (see the input's 'blur' handler).
+  if (document.activeElement && document.activeElement.id === 'lift_exercise') return;
+
   const lifts = state.lifts;
   const prs = computeLiftPRs(lifts);
   const exercises = Array.from(new Set(lifts.map((l) => l.exercise)));
   const allExerciseOptions = Array.from(new Set([...state.exercises.map((e) => e.name), ...COMMON_LIFTS, ...exercises]));
-  const today = localDateStr();
-  const todayLifts = lifts.filter((l) => l.date === today);
-  const todaySummary = {
-    exerciseCount: new Set(todayLifts.map((l) => l.exercise)).size,
-    sets: todayLifts.reduce((sum, l) => sum + (l.reps_per_set?.length || l.sets || 0), 0),
-    volume: todayLifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0),
-  };
   const groupsForFormDate = Array.from(new Set(lifts.filter((l) => l.date === liftForm.date && l.superset_group).map((l) => l.superset_group)));
+
+  // Preserve the live #liftExerciseWrap DOM node (input + dropdown) across
+  // this innerHTML rebuild instead of letting it get destroyed and
+  // recreated from scratch. renderLiftLog reruns for reasons that have
+  // nothing to do with the exercise field (a date change, a superset
+  // toggle, a PR banner appearing) — replacing the whole panel every time
+  // was destroying and rebuilding the <input> under the user's finger,
+  // which on iOS Safari silently drops any keyboard-open request already
+  // in flight for the node being removed. See renderLiftExerciseField()
+  // below for the other half of this fix.
+  const preservedExerciseWrap = $('#liftExerciseWrap', panel);
 
   panel.innerHTML = `
     ${prBanner ? `
@@ -5912,6 +7048,7 @@ function renderLiftLog(panel) {
     </div>` : ''}
     ${cueCardBanner ? cueCardHtml(cueCardBanner) : ''}
     ${staleSessionPromptHtml()}
+    ${todaysLiftPanelHtml()}
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <h3 style="margin:0;">Log a lift</h3>
@@ -5939,10 +7076,16 @@ function renderLiftLog(panel) {
         <div class="field"><label>Weight (lb)</label><input class="input mono" id="lift_weight" type="number" value="${esc(liftForm.weight)}"></div>
         <div class="field"><label>Sets</label><input class="input mono" id="lift_sets" type="number" min="1" max="20" value="${liftForm.sets}"></div>
       </div>
+      <button type="button" class="btn btn-sm btn-ghost" id="warmupRampToggle" style="margin-bottom:0.75rem;">${showWarmupRamp ? 'Hide warm-up ramp' : 'Suggest a warm-up ramp'}</button>
+      ${showWarmupRamp ? `<div class="field" style="background:var(--surface-2);border-radius:8px;padding:0.6rem 0.75rem;margin-bottom:0.75rem;"><div id="warmupRampContent">${warmupRampHtml(Number(liftForm.weight) || 0)}</div></div>` : ''}
       <div class="field">
         <label>Reps per set (can vary set to set)</label>
         <div class="reps-per-set-row" id="liftRepsRow">
-          ${liftForm.repsPerSet.map((r, i) => `<div class="reps-per-set-cell"><span>Set ${i + 1}</span><input class="input mono" type="number" data-rep-idx="${i}" value="${esc(r)}"></div>`).join('')}
+          ${liftForm.repsPerSet.map((r, i) => `<div class="reps-per-set-cell">
+            <span>Set ${i + 1}</span>
+            <input class="input mono" type="number" data-rep-idx="${i}" value="${esc(r)}">
+            <label class="warmup-toggle"><input type="checkbox" data-warmup-idx="${i}" ${liftForm.warmupPerSet[i] ? 'checked' : ''}> warm-up</label>
+          </div>`).join('')}
         </div>
         <div class="muted small" style="margin-top:0.4rem;">Avg: <span class="mono" style="color:var(--accent);">${avgReps(liftForm.repsPerSet.map((r) => Number(r) || 0)).toFixed(1)}</span> reps/set (used for charts) · total ${liftForm.repsPerSet.reduce((s, r) => s + (Number(r) || 0), 0)} reps</div>
       </div>
@@ -5958,16 +7101,6 @@ function renderLiftLog(panel) {
       ${liftFormError ? `<div class="muted small" style="color:var(--danger);margin-bottom:0.5rem;">${esc(liftFormError)}</div>` : ''}
       <button class="btn btn-primary" id="lift_save" ${liftFormSaving ? 'disabled' : ''}>${liftFormSaving ? 'Saving…' : 'Add lift'}</button>
     </div>
-    ${todaySummary.sets > 0 ? `
-    <div class="card">
-      <h3>Today so far</h3>
-      <div class="today-summary-row">
-        <div><div class="stat-num">${todaySummary.exerciseCount}</div><div class="muted small">exercise${todaySummary.exerciseCount === 1 ? '' : 's'}</div></div>
-        <div><div class="stat-num">${todaySummary.sets}</div><div class="muted small">set${todaySummary.sets === 1 ? '' : 's'}</div></div>
-        <div><div class="stat-num">${Math.round(todaySummary.volume).toLocaleString()}</div><div class="muted small">volume</div></div>
-      </div>
-      ${endWorkoutButtonHtml()}
-    </div>` : ''}
     ${exercises.length ? `
     <div class="card">
       <h3>Exercises</h3>
@@ -5997,6 +7130,8 @@ function renderLiftLog(panel) {
     ${suggestedExercisesHtml(exercises)}
 
     ${todaysFocusHtml()}
+    ${blockBuilderSummaryCardHtml()}
+    ${weeklyHardSetsHtml(lifts)}
     ${muscleMapHtml(lifts)}
 
     <div class="stat-grid-2">
@@ -6058,9 +7193,12 @@ function renderLiftLog(panel) {
     </div>` : ''}
   `;
 
+  if (preservedExerciseWrap) $('#liftExerciseWrap', panel)?.replaceWith(preservedExerciseWrap);
   renderLiftExerciseField(panel, allExerciseOptions);
+  wireWeeklyHardSetsEvents(panel);
   wireMuscleMapEvents(panel);
   wireSplitEvents(panel);
+  wireBlockBuilderSummaryEvents(panel);
   $$('[data-pr-open]', panel).forEach((card) => card.addEventListener('click', () => {
     liftsSelectedExercise = card.dataset.prOpen;
     liftHistoryEditingId = null;
@@ -6071,17 +7209,32 @@ function renderLiftLog(panel) {
   if (mgSel) mgSel.addEventListener('change', (e) => { liftForm.muscleGroup = e.target.value; });
   const brSel = $('#lift_bodyRegion');
   if (brSel) brSel.addEventListener('change', (e) => { liftForm.bodyRegion = e.target.value; });
-  $('#lift_weight').addEventListener('input', (e) => { liftForm.weight = e.target.value; });
+  $('#lift_weight').addEventListener('input', (e) => {
+    liftForm.weight = e.target.value;
+    // Patch the ramp content directly rather than a full renderLiftsTab()
+    // — the same lesson as the exercise field: a full panel rebuild on
+    // every keystroke would tear down whichever input the user is
+    // actively typing in.
+    const rampContent = $('#warmupRampContent', panel);
+    if (rampContent) rampContent.innerHTML = warmupRampHtml(Number(e.target.value) || 0);
+  });
+  const warmupToggle = $('#warmupRampToggle', panel);
+  if (warmupToggle) warmupToggle.addEventListener('click', () => { showWarmupRamp = !showWarmupRamp; renderLiftsTab(); });
   $('#lift_sets').addEventListener('change', (e) => {
     const count = Math.max(1, Math.min(20, Number(e.target.value) || 1));
     const fillVal = liftForm.repsPerSet.length ? liftForm.repsPerSet[liftForm.repsPerSet.length - 1] : '5';
     while (liftForm.repsPerSet.length < count) liftForm.repsPerSet.push(fillVal);
+    while (liftForm.warmupPerSet.length < count) liftForm.warmupPerSet.push(false);
     liftForm.repsPerSet.length = count;
+    liftForm.warmupPerSet.length = count;
     liftForm.sets = count;
     renderLiftsTab();
   });
   $$('[data-rep-idx]', panel).forEach((inp) => inp.addEventListener('input', (e) => {
     liftForm.repsPerSet[Number(e.target.dataset.repIdx)] = e.target.value;
+  }));
+  $$('[data-warmup-idx]', panel).forEach((inp) => inp.addEventListener('change', (e) => {
+    liftForm.warmupPerSet[Number(e.target.dataset.warmupIdx)] = e.target.checked;
   }));
   $('#lift_date').addEventListener('change', (e) => {
     liftForm.date = e.target.value || localDateStr();
@@ -6097,9 +7250,9 @@ function renderLiftLog(panel) {
   if (prDismiss) prDismiss.addEventListener('click', () => { prBanner = null; renderLiftsTab(); });
   const cueDismiss = $('#cueCardDismiss');
   if (cueDismiss) cueDismiss.addEventListener('click', () => { cueCardBanner = null; renderLiftsTab(); });
+  wireCitationEvents(panel, renderLiftsTab);
+  wireTodaysLiftEditEvents(panel);
   $('#openGlossaryBtn').addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); });
-  const endWorkoutBtn = $('#endWorkoutBtn');
-  if (endWorkoutBtn) endWorkoutBtn.addEventListener('click', endWorkoutSession);
   const staleStillTraining = $('#staleStillTrainingBtn');
   if (staleStillTraining) staleStillTraining.addEventListener('click', () => { staleSessionPromptDismissed = true; renderLiftsTab(); });
   const staleEndWorkout = $('#staleEndWorkoutBtn');
@@ -6156,15 +7309,18 @@ async function addLiftFromForm() {
   liftFormSaving = true;
   liftFormError = '';
   renderLiftsTab();
+  const warmupPerSet = liftForm.warmupPerSet.slice(0, repsPerSet.length);
   const { error } = await supabase.from('lifts').insert({
     user_id: state.user.id,
     exercise, muscle_group: muscleGroup, body_region: bodyRegion,
     weight: weightNum, sets: repsPerSet.length, reps_per_set: repsPerSet, reps,
+    warmup_per_set: warmupPerSet.some(Boolean) ? warmupPerSet : [],
     date: liftForm.date, superset_group: liftForm.isSuperset ? (liftForm.supersetGroup.trim() || null) : null,
   });
   liftFormSaving = false;
   if (error) { liftFormError = error.message || 'Failed to save lift.'; renderLiftsTab(); return; }
   liftForm.weight = '';
+  liftForm.warmupPerSet = liftForm.warmupPerSet.map(() => false);
   if (priorBest && weightNum > priorBest.weight) {
     prBanner = { exercise, weight: weightNum, improvement: Math.round((weightNum - priorBest.weight) * 100) / 100 };
   }
@@ -6181,7 +7337,8 @@ function renderLiftDetail(panel) {
   const prs = computeLiftPRs(state.lifts);
   const pr = prs[exercise];
   const plateaued = detectPlateau(history);
-  const bestE1RM = history.length ? Math.max(...history.map((l) => e1RM(l.weight, l.reps))) : 0;
+  const bestE1RMEntry = history.reduce((best, l) => (e1RM(l.weight, l.reps) > (best ? e1RM(best.weight, best.reps) : -1) ? l : best), null);
+  const bestE1RM = bestE1RMEntry ? e1RM(bestE1RMEntry.weight, bestE1RMEntry.reps) : 0;
   const muscleGroup = history.length ? getMuscleGroup(history[history.length - 1]) : null;
   const prBodyweight = pr ? bodyweightAsOf(pr.date, state.weightLog) : null;
   const currentBW = latestBodyweightEntry(state.weightLog);
@@ -6204,6 +7361,7 @@ function renderLiftDetail(panel) {
     ${bestE1RM > 0 ? `<div class="card">
       <h3>Estimated 1-Rep Max</h3>
       <div class="stat-num">${bestE1RM} <span class="muted small">lb (Epley estimate)</span></div>
+      ${bestE1RMEntry.reps > 10 ? `<p class="muted small" style="margin-top:0.35rem;">Estimated from a ${bestE1RMEntry.reps}-rep set — 1RM estimates get less reliable above about 10 reps, so treat this as rough.</p>` : ''}
     </div>` : ''}
     ${strengthScore !== null ? `<div class="card">
       <h3>Strength Score</h3>
@@ -6378,6 +7536,67 @@ function computeSplitDayIndex(split, dateStr) {
   return ((daysSince % n) + n) % n;
 }
 
+// ── Split rationale cards ────────────────────────────────────────────────
+// Static "what is this / who's it for" copy per preset, plus a frequency
+// note computed live from the actual days array — same code path for
+// presets and Custom, so a hand-built rotation gets an honest, specific
+// note ("your split hits Push 1x/week...") instead of generic copy.
+const SPLIT_RATIONALE = {
+  'Push/Pull/Legs': {
+    summary: 'Push/Pull/Legs (PPL) groups training by movement pattern — one day for pushing muscles (chest, shoulders, triceps), one for pulling muscles (back, biceps), one for legs.',
+    suits: 'Suits lifters who want a simple rotation that repeats every 3 days and can be run at anywhere from 3 to 6 days a week.',
+  },
+  'Upper/Lower': {
+    summary: 'Upper/Lower splits training into upper-body and lower-body days, giving each half of the body a dedicated session.',
+    suits: 'Suits lifters training around 4 days a week who want solid frequency per muscle group without a packed daily schedule.',
+  },
+  'Bro Split': {
+    summary: 'A "bro split" dedicates each training day to one body part — chest, back, legs, shoulders, arms — across a 5-day rotation.',
+    suits: 'Suits lifters who enjoy going hard on one muscle group per session and can commit to 5 training days, though it typically means less frequency per muscle than the other presets here.',
+  },
+  'Arnold Split': {
+    summary: 'The Arnold Split pairs opposing muscle groups (chest with back, shoulders with arms) across a 6-day rotation plus a rest day.',
+    suits: 'Suits more experienced lifters ready for a 6-day training week and higher weekly volume per muscle group.',
+  },
+  custom: {
+    summary: 'This is the rotation you built yourself.',
+    suits: 'Custom splits work well once you already have a sense of how often you want to train each muscle group — if you\'re not sure yet, one of the presets above is a safer starting point.',
+  },
+};
+
+// Coarse MUSCLE_GROUPS frequency (Push/Pull/Legs/Core/Full Body/Other) —
+// the same taxonomy split days are already tagged with, not the finer
+// 14-key muscle-map taxonomy used elsewhere, since a split day only
+// carries the coarse tag today.
+function splitMuscleGroupFrequency(days) {
+  const cycleLen = days.length;
+  if (!cycleLen) return {};
+  const counts = {};
+  days.forEach((d) => (d.muscle_groups || []).forEach((mg) => { counts[mg] = (counts[mg] || 0) + 1; }));
+  const freq = {};
+  Object.keys(counts).forEach((mg) => { freq[mg] = (counts[mg] / cycleLen) * 7; });
+  return freq;
+}
+
+function splitRationaleHtml(presetKey, days) {
+  if (!days || !days.length) return '';
+  const info = SPLIT_RATIONALE[presetKey] || SPLIT_RATIONALE.custom;
+  const freq = splitMuscleGroupFrequency(days);
+  const entries = Object.entries(freq);
+  if (!entries.length) return `<div class="card"><p class="muted small" style="margin:0;">${esc(info.summary)} ${esc(info.suits)}</p></div>`;
+  const formatFreq = (f) => `${Math.round(f * 10) / 10}x/week`;
+  const freqParts = entries.map(([mg, f]) => `${mg} ${formatFreq(f)}`).join(', ');
+  const anyOnceOrLess = entries.some(([, f]) => f <= 1.1);
+  const frequencyNote = anyOnceOrLess
+    ? `This rotation hits ${freqParts} on average. Training a muscle group once a week isn't "wrong" — plenty of lifters make good progress that way — but it's less optimal on average than higher frequency.`
+    : `This rotation hits ${freqParts} on average, in line with research on training frequency.`;
+  return `<div class="card">
+    <p style="margin:0;">${esc(info.summary)} ${esc(info.suits)}</p>
+    <p class="muted small" style="margin-top:0.5rem;">${frequencyNote}</p>
+    ${citationBlockHtml('frequency', `frequency:splitrationale:${presetKey}`)}
+  </div>`;
+}
+
 let splitEditorOpen = false;
 let splitEditorPreset = null; // preset name, or 'custom'
 let splitCustomDays = null; // days array being edited
@@ -6413,7 +7632,8 @@ function splitEditorHtml() {
     <button class="btn btn-primary" id="splitSaveBtn">Save split</button>
     ` : ''}
     ${state.trainingSplit ? `<button class="btn btn-ghost" id="splitRemoveBtn" style="margin-left:0.5rem;">Remove split</button>` : ''}
-  </div>`;
+  </div>
+  ${splitEditorPreset ? splitRationaleHtml(splitEditorPreset, splitEditorPreset === 'custom' ? splitCustomDays : SPLIT_PRESETS.find((p) => p.name === splitEditorPreset)?.days) : ''}`;
 }
 
 function todaysFocusHtml() {
@@ -6433,6 +7653,7 @@ function todaysFocusHtml() {
     <div class="stat-num" style="font-size:1.6rem;">${esc(today.label)}</div>
     ${today.muscle_groups?.length ? `<div class="muted small" style="margin-top:0.25rem;">${today.muscle_groups.join(', ')}</div>` : ''}
     <button class="btn btn-sm btn-ghost" id="splitSetupBtn" style="margin-top:0.5rem;">${splitEditorOpen ? 'Close' : 'Change split'}</button>
+    ${citationBlockHtml('frequency', 'frequency:split')}
   </div>${editor}`;
 }
 
@@ -6513,6 +7734,469 @@ function wireSplitEvents(panel) {
     await loadTrainingSplit();
     renderAll();
   });
+}
+
+// ── Optional Block Builder (deterministic, no AI) ───────────────────────
+// A self-contained 4-week block generator built entirely from fixed rules
+// over the exercise library's existing tags (block_types, movement_type,
+// avoid_flags, muscle_map_key, lengthened_bias) — no model call, nothing
+// invented per-request. Deliberately never touches training_splits, the
+// Log a Lift form, or the split picker above: a block is a suggested plan
+// the user follows by logging lifts the normal way, stored as its own
+// jsonb blob on profiles.active_training_block (see
+// supabase-schema-phase23-block-builder.sql).
+const BLOCK_FOCUS_OPTIONS = [
+  { key: 'hypertrophy', name: 'Hypertrophy', description: 'Build muscle size with moderate reps and higher total volume.' },
+  { key: 'strength', name: 'Strength', description: 'Build maximal strength on compound lifts with lower reps, heavier loads.' },
+  { key: 'power_speed', name: 'Power & Speed', description: 'Explosive, Olympic-lift-family training.', comingSoon: true },
+  { key: 'mobility', name: 'Mobility', description: 'Joint range of motion and movement-quality work.', comingSoon: true },
+  { key: 'functional_athletic', name: 'Functional / Athletic', description: 'General athletic conditioning and movement patterns.', comingSoon: true },
+];
+const BLOCK_DAYS_OPTIONS = [3, 4, 5, 6];
+const BLOCK_EQUIPMENT_OPTIONS = ['Barbell', 'Dumbbell', 'Cable', 'Machine', 'Bodyweight'];
+const BLOCK_AVOID_OPTIONS = [
+  { key: 'overhead', label: 'Overhead pressing' },
+  { key: 'heavy_spinal_load', label: 'Heavy spinal loading' },
+];
+const BLOCK_MAX_PRIORITIES = 3;
+// Coarse push/pull/legs grouping used only to build a day's exercise
+// slate — separate from the MUSCLE_GROUPS/muscle_group taxonomy the split
+// picker uses, and from the 14-key muscle map, though it's built from the
+// same muscle-map keys. Abs/obliques are deliberately left out of every
+// group (no split day is "for" abs) and only appear when picked as a
+// priority area, in which case they're added to every training day.
+const BLOCK_GROUP_MUSCLES = {
+  push: ['chest', 'delts', 'triceps'],
+  pull: ['lats', 'traps', 'lowerback', 'biceps', 'forearms'],
+  legs: ['quads', 'hamstrings', 'glutes', 'calves'],
+};
+// Rep/set numbers are this app's own program-writing convention, not a
+// research claim — nothing here gets a citation. Main-lift reps for
+// Hypertrophy intentionally match the verified 6-12 rep range already
+// cited elsewhere (CITATION_LIBRARY.hypertrophy) rather than introducing
+// a second, uncited number for the same thing.
+const BLOCK_SCHEME = {
+  strength: { mainSets: 4, mainReps: '5', accessorySets: 3, accessoryReps: '8-10' },
+  hypertrophy: { mainSets: 3, mainReps: '8-12', accessorySets: 3, accessoryReps: '10-15' },
+};
+const BLOCK_WEEK_STRIP = ['Base', '+Sets', '+Sets', 'Deload'];
+
+function blockSplitTemplate(days) {
+  if (days <= 3) return [
+    { label: 'Full Body A', groups: ['push', 'pull', 'legs'] },
+    { label: 'Full Body B', groups: ['push', 'pull', 'legs'] },
+    { label: 'Full Body C', groups: ['push', 'pull', 'legs'] },
+  ].slice(0, days);
+  if (days === 4) return [
+    { label: 'Upper A', groups: ['push', 'pull'] },
+    { label: 'Lower A', groups: ['legs'] },
+    { label: 'Upper B', groups: ['push', 'pull'] },
+    { label: 'Lower B', groups: ['legs'] },
+  ];
+  if (days === 5) return [
+    { label: 'Push', groups: ['push'] },
+    { label: 'Pull', groups: ['pull'] },
+    { label: 'Legs', groups: ['legs'] },
+    { label: 'Upper', groups: ['push', 'pull'] },
+    { label: 'Lower', groups: ['legs'] },
+  ];
+  return [
+    { label: 'Push A', groups: ['push'] },
+    { label: 'Pull A', groups: ['pull'] },
+    { label: 'Legs A', groups: ['legs'] },
+    { label: 'Push B', groups: ['push'] },
+    { label: 'Pull B', groups: ['pull'] },
+    { label: 'Legs B', groups: ['legs'] },
+  ];
+}
+
+function blockSplitName(days) {
+  if (days <= 3) return `${days}-Day Full Body`;
+  if (days === 4) return '4-Day Upper/Lower';
+  if (days === 5) return '5-Day Push/Pull/Legs + Upper/Lower';
+  return '6-Day Push/Pull/Legs x2';
+}
+
+function blockExercisePool(muscleKey, blockType, usedNames, filters) {
+  return state.exercises.filter((e) =>
+    e.muscle_map_key === muscleKey &&
+    (e.block_types || []).includes(blockType) &&
+    !usedNames.has(e.name) &&
+    (!filters.equipment.length || filters.equipment.includes(e.equipment)) &&
+    !(e.avoid_flags || []).some((f) => filters.avoid.includes(f))
+  );
+}
+
+// Strength-focused blocks fall back to the hypertrophy-tagged pool when a
+// muscle has no strength-tagged option — the library only tags true main
+// barbell/bodyweight lifts 'strength' (see phase18's comment), so most
+// muscles only have one or two candidates there.
+function pickMainExercise(muscleKey, focus, usedNames, filters) {
+  let pool = blockExercisePool(muscleKey, focus, usedNames, filters);
+  if (!pool.length && focus !== 'hypertrophy') pool = blockExercisePool(muscleKey, 'hypertrophy', usedNames, filters);
+  pool = [...pool].sort((a, b) => (a.movement_type === b.movement_type ? 0 : a.movement_type === 'compound' ? -1 : 1));
+  return pool[0] || null;
+}
+
+// Accessory/priority-bonus picks always draw from the hypertrophy pool
+// (accessory volume is accessory volume regardless of the block's main
+// focus) and prefer isolation work over another compound.
+function pickAccessoryExercise(muscleKey, usedNames, filters) {
+  let pool = blockExercisePool(muscleKey, 'hypertrophy', usedNames, filters);
+  pool = [...pool].sort((a, b) => (a.movement_type === b.movement_type ? 0 : a.movement_type === 'isolation' ? -1 : 1));
+  return pool[0] || null;
+}
+
+function blockExerciseEntry(ex, muscleKey, role, focus) {
+  const scheme = role === 'main' ? BLOCK_SCHEME[focus] : BLOCK_SCHEME.hypertrophy;
+  const sets = role === 'main' ? scheme.mainSets : scheme.accessorySets;
+  const reps = role === 'main' ? scheme.mainReps : scheme.accessoryReps;
+  const tags = [];
+  if (role === 'priority') tags.push(`Priority: ${MUSCLE_MAP_KEY_LABELS[muscleKey]}`);
+  if (ex.lengthened_bias) tags.push('Lengthened bias · emerging evidence');
+  const reason = role === 'priority'
+    ? `Extra volume for ${MUSCLE_MAP_KEY_LABELS[muscleKey]}, since you flagged it as a priority area.`
+    : ex.movement_type === 'compound'
+    ? `Primary compound movement for ${MUSCLE_MAP_KEY_LABELS[muscleKey]}.`
+    : `Accessory work for ${MUSCLE_MAP_KEY_LABELS[muscleKey]}.`;
+  return { name: ex.name, muscle: muscleKey, sets, reps, tags, reason };
+}
+
+function generateBlock({ focus, priorities, days, equipment, avoid }) {
+  const filters = { equipment, avoid };
+  const template = blockSplitTemplate(days);
+  const blockDays = template.map((day) => {
+    const usedNames = new Set();
+    const isFullBody = day.groups.length >= 3;
+    const targetMuscles = isFullBody
+      ? ['chest', 'lats', 'quads']
+      : [...new Set(day.groups.flatMap((g) => BLOCK_GROUP_MUSCLES[g]))];
+    // A priority muscle with no natural slot on this day (most commonly
+    // abs/obliques, which belong to no push/pull/legs group) gets added
+    // purely because it's a priority — so its one exercise is tagged
+    // 'priority' outright, rather than picked as a 'main' slot that then
+    // has no bonus exercise left to add on top of it.
+    const addedByPriorityOnly = new Set();
+    priorities.forEach((p) => {
+      if (targetMuscles.includes(p)) return;
+      const belongsToDayGroups = day.groups.some((g) => (BLOCK_GROUP_MUSCLES[g] || []).includes(p));
+      const isUncategorized = !Object.values(BLOCK_GROUP_MUSCLES).some((list) => list.includes(p));
+      if (belongsToDayGroups || isUncategorized) {
+        targetMuscles.push(p);
+        addedByPriorityOnly.add(p);
+      }
+    });
+    const exercises = [];
+    targetMuscles.forEach((muscle) => {
+      if (addedByPriorityOnly.has(muscle)) {
+        const ex = pickMainExercise(muscle, focus, usedNames, filters);
+        if (ex) {
+          usedNames.add(ex.name);
+          exercises.push(blockExerciseEntry(ex, muscle, 'priority', focus));
+        }
+        return;
+      }
+      const main = pickMainExercise(muscle, focus, usedNames, filters);
+      if (main) {
+        usedNames.add(main.name);
+        exercises.push(blockExerciseEntry(main, muscle, 'main', focus));
+      }
+      if (priorities.includes(muscle)) {
+        const bonus = pickAccessoryExercise(muscle, usedNames, filters);
+        if (bonus) {
+          usedNames.add(bonus.name);
+          exercises.push(blockExerciseEntry(bonus, muscle, 'priority', focus));
+        }
+      }
+    });
+    return { label: day.label, groups: day.groups, exercises };
+  });
+  return { focus, priorities, days, equipment, avoid, blockDays, createdDate: localDateStr() };
+}
+
+let showBlockBuilder = false;
+let blockBuilderStep = 1;
+let blockBuilderFocus = null;
+let blockBuilderPriorities = [];
+let blockBuilderDays = 4;
+let blockBuilderEquipment = [];
+let blockBuilderAvoid = [];
+let blockBuilderPreview = null;
+let blockBuilderExpandedDayIndex = 0;
+let blockBuilderViewingActive = false;
+let blockBuilderStarting = false;
+
+function resetBlockBuilderState() {
+  blockBuilderStep = 1;
+  blockBuilderFocus = null;
+  blockBuilderPriorities = [];
+  blockBuilderDays = 4;
+  blockBuilderEquipment = [];
+  blockBuilderAvoid = [];
+  blockBuilderPreview = null;
+  blockBuilderExpandedDayIndex = 0;
+  blockBuilderViewingActive = false;
+}
+
+function blockBuilderProgressHtml(step) {
+  return `<div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${(step / 3) * 100}%;background:var(--accent);"></div></div>
+    <p class="muted small" style="margin:0 0 0.75rem;">Step ${step} of 3</p>`;
+}
+
+function blockBuilderSummaryCardHtml() {
+  const active = state.profile?.active_training_block;
+  if (!active) {
+    return `<div class="card">
+      <h3>Training Block <span class="muted small" style="font-weight:400;">(optional)</span></h3>
+      <p class="muted small">Generate a 4-week block — focus, priority areas, and a day-by-day exercise plan — from fixed rules. No AI.</p>
+      <button class="btn btn-sm" id="blockBuilderOpenBtn">Build a block</button>
+    </div>`;
+  }
+  const start = new Date(`${active.createdDate}T00:00:00`);
+  const today = new Date(`${localDateStr()}T00:00:00`);
+  const daysSince = Math.round((today - start) / 86400000);
+  const weekNum = Math.min(4, Math.floor(Math.max(0, daysSince) / 7) + 1);
+  const focusOpt = BLOCK_FOCUS_OPTIONS.find((o) => o.key === active.focus);
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">Training Block</h3>
+      <span class="muted small">Week ${weekNum}/4 · ${esc(BLOCK_WEEK_STRIP[weekNum - 1])}</span>
+    </div>
+    <p class="muted small" style="margin-top:0.25rem;">${esc(focusOpt ? focusOpt.name : active.focus)} · ${esc(blockSplitName(active.days))}</p>
+    <div class="row" style="margin-top:0.5rem;">
+      <button class="btn btn-sm btn-ghost" id="blockBuilderViewBtn">View block</button>
+      <button class="btn btn-sm btn-ghost" id="blockBuilderEndBtn">End block</button>
+    </div>
+  </div>`;
+}
+
+function wireBlockBuilderSummaryEvents(panel) {
+  const openBtn = $('#blockBuilderOpenBtn', panel);
+  if (openBtn) openBtn.addEventListener('click', () => {
+    resetBlockBuilderState();
+    showBlockBuilder = true;
+    renderLiftsTab();
+  });
+  const viewBtn = $('#blockBuilderViewBtn', panel);
+  if (viewBtn) viewBtn.addEventListener('click', () => {
+    blockBuilderPreview = state.profile.active_training_block;
+    blockBuilderExpandedDayIndex = 0;
+    blockBuilderViewingActive = true;
+    blockBuilderStep = 3;
+    showBlockBuilder = true;
+    renderLiftsTab();
+  });
+  const endBtn = $('#blockBuilderEndBtn', panel);
+  if (endBtn) endBtn.addEventListener('click', async () => {
+    const { error } = await supabase.from('profiles').update({ active_training_block: null }).eq('id', state.user.id);
+    if (error) return toast('Could not end block: ' + error.message);
+    state.profile = { ...state.profile, active_training_block: null };
+    renderLiftsTab();
+  });
+}
+
+function blockBuilderStep1Html() {
+  return `<div class="card">
+    <h3>Choose a block focus</h3>
+    ${blockBuilderProgressHtml(1)}
+    <div style="display:flex;flex-direction:column;gap:0.6rem;">
+      ${BLOCK_FOCUS_OPTIONS.map((opt) => {
+        const selected = blockBuilderFocus === opt.key;
+        const disabled = !!opt.comingSoon;
+        return `<button class="card" data-block-focus="${opt.key}" ${disabled ? 'disabled' : ''}
+          style="display:block;width:100%;text-align:left;margin-bottom:0;cursor:${disabled ? 'default' : 'pointer'};opacity:${disabled ? '0.5' : '1'};border:1px solid ${selected ? 'var(--accent)' : 'var(--border)'};background:${selected ? 'var(--surface-2)' : 'var(--surface)'};">
+          <div class="display" style="text-transform:uppercase;font-weight:700;">${esc(opt.name)}</div>
+          <div class="muted small" style="margin-top:0.2rem;">${esc(opt.description)}${disabled ? ' — coming soon, no exercises tagged for this yet.' : ''}</div>
+        </button>`;
+      }).join('')}
+    </div>
+    <button class="btn btn-primary" id="blockNextStep1" style="width:100%;margin-top:0.9rem;" ${blockBuilderFocus ? '' : 'disabled'}>Next</button>
+    <button class="btn btn-ghost" id="blockCancelBtn" style="width:100%;margin-top:0.5rem;">Cancel</button>
+  </div>`;
+}
+
+function wireBlockBuilderStep1(panel) {
+  $$('[data-block-focus]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    if (btn.disabled) return;
+    blockBuilderFocus = btn.dataset.blockFocus;
+    renderLiftsTab();
+  }));
+  const nextBtn = $('#blockNextStep1', panel);
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    if (!blockBuilderFocus) return;
+    blockBuilderStep = 2;
+    renderLiftsTab();
+  });
+  const cancelBtn = $('#blockCancelBtn', panel);
+  if (cancelBtn) cancelBtn.addEventListener('click', () => {
+    showBlockBuilder = false;
+    resetBlockBuilderState();
+    renderLiftsTab();
+  });
+}
+
+function blockBuilderStep2Html() {
+  return `<div class="card">
+    <h3>What do you want to bring up?</h3>
+    ${blockBuilderProgressHtml(2)}
+    <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.85rem;margin-bottom:0.4rem;">Priority areas (up to ${BLOCK_MAX_PRIORITIES})</div>
+    <div class="chip-row" style="margin-bottom:1rem;">
+      ${MUSCLE_MAP_KEYS.map((k) => `<button class="chip ${blockBuilderPriorities.includes(k) ? 'chip-active' : ''}" data-block-priority="${k}">${esc(MUSCLE_MAP_KEY_LABELS[k])}</button>`).join('')}
+    </div>
+    <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.85rem;margin-bottom:0.4rem;">Days per week</div>
+    <div class="chip-row" style="margin-bottom:1rem;">
+      ${BLOCK_DAYS_OPTIONS.map((d) => `<button class="chip ${blockBuilderDays === d ? 'chip-active' : ''}" data-block-days="${d}">${d}</button>`).join('')}
+    </div>
+    <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.85rem;margin-bottom:0.4rem;">Equipment</div>
+    <div class="chip-row" style="margin-bottom:1rem;">
+      ${BLOCK_EQUIPMENT_OPTIONS.map((eq) => `<button class="chip ${blockBuilderEquipment.includes(eq) ? 'chip-active' : ''}" data-block-equipment="${esc(eq)}">${esc(eq)}</button>`).join('')}
+    </div>
+    <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.85rem;margin-bottom:0.4rem;">Avoid (optional)</div>
+    <div class="chip-row">
+      ${BLOCK_AVOID_OPTIONS.map((a) => {
+        const selected = blockBuilderAvoid.includes(a.key);
+        return `<button class="chip ${selected ? 'chip-active' : ''}" data-block-avoid="${a.key}" style="${selected ? 'background:var(--danger);border-color:var(--danger);color:#fff;' : ''}">${esc(a.label)}</button>`;
+      }).join('')}
+    </div>
+    <p class="muted small" style="margin-top:0.6rem;">Avoid options only filter exercises. They aren't medical advice.</p>
+    <button class="btn btn-primary" id="blockBuildBtn" style="width:100%;margin-top:0.75rem;">Build my block</button>
+    <button class="btn btn-ghost" id="blockBackStep2" style="width:100%;margin-top:0.5rem;">Back</button>
+  </div>`;
+}
+
+function wireBlockBuilderStep2(panel) {
+  $$('[data-block-priority]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const k = btn.dataset.blockPriority;
+    const idx = blockBuilderPriorities.indexOf(k);
+    if (idx >= 0) blockBuilderPriorities.splice(idx, 1);
+    else if (blockBuilderPriorities.length < BLOCK_MAX_PRIORITIES) blockBuilderPriorities.push(k);
+    else return toast(`You can pick up to ${BLOCK_MAX_PRIORITIES} priority areas.`);
+    renderLiftsTab();
+  }));
+  $$('[data-block-days]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    blockBuilderDays = Number(btn.dataset.blockDays);
+    renderLiftsTab();
+  }));
+  $$('[data-block-equipment]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const eq = btn.dataset.blockEquipment;
+    const idx = blockBuilderEquipment.indexOf(eq);
+    if (idx >= 0) blockBuilderEquipment.splice(idx, 1); else blockBuilderEquipment.push(eq);
+    renderLiftsTab();
+  }));
+  $$('[data-block-avoid]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const key = btn.dataset.blockAvoid;
+    const idx = blockBuilderAvoid.indexOf(key);
+    if (idx >= 0) blockBuilderAvoid.splice(idx, 1); else blockBuilderAvoid.push(key);
+    renderLiftsTab();
+  }));
+  const backBtn = $('#blockBackStep2', panel);
+  if (backBtn) backBtn.addEventListener('click', () => { blockBuilderStep = 1; renderLiftsTab(); });
+  const buildBtn = $('#blockBuildBtn', panel);
+  if (buildBtn) buildBtn.addEventListener('click', () => {
+    blockBuilderPreview = generateBlock({
+      focus: blockBuilderFocus,
+      priorities: blockBuilderPriorities,
+      days: blockBuilderDays,
+      equipment: blockBuilderEquipment,
+      avoid: blockBuilderAvoid,
+    });
+    blockBuilderExpandedDayIndex = 0;
+    blockBuilderViewingActive = false;
+    blockBuilderStep = 3;
+    renderLiftsTab();
+  });
+}
+
+function blockDayCardHtml(day, index, isExpanded) {
+  if (!isExpanded) {
+    return `<div class="card" data-block-day-toggle="${index}" style="cursor:pointer;margin-bottom:0.6rem;">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>${esc(day.label)}</strong>
+        <span class="muted small">${day.exercises.length} exercise${day.exercises.length === 1 ? '' : 's'}</span>
+      </div>
+    </div>`;
+  }
+  return `<div class="card" data-block-day-toggle="${index}" style="cursor:pointer;margin-bottom:0.6rem;">
+    <strong>${esc(day.label)}</strong>
+    ${day.exercises.length ? day.exercises.map((ex) => `
+      <div style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid var(--border);">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <span>${esc(ex.name)}</span>
+          <span class="mono" style="color:var(--accent);">${ex.sets} x ${esc(ex.reps)}</span>
+        </div>
+        ${ex.tags.length ? `<div class="chip-row" style="margin-top:0.3rem;">${ex.tags.map((t) => `<span class="muted small" style="border:1px solid var(--border);border-radius:999px;padding:0.15rem 0.5rem;">${esc(t)}</span>`).join('')}</div>` : ''}
+        <p class="muted small" style="margin:0.3rem 0 0;font-style:italic;">${esc(ex.reason)}</p>
+      </div>`).join('') : `<p class="muted small" style="margin-top:0.5rem;">No exercises matched your filters for this day — try loosening equipment or avoid options.</p>`}
+  </div>`;
+}
+
+function blockBuilderStep3Html() {
+  const block = blockBuilderPreview;
+  const focusOpt = BLOCK_FOCUS_OPTIONS.find((o) => o.key === block.focus);
+  return `<div class="card">
+    <h3>4-week ${esc(focusOpt ? focusOpt.name : block.focus)} block</h3>
+    <p class="muted small" style="margin-top:-0.5rem;">${block.priorities.length ? `Priority: ${block.priorities.map((p) => esc(MUSCLE_MAP_KEY_LABELS[p])).join(', ')}` : 'No priority areas selected'}</p>
+    <div class="chip-row" style="margin-top:0.5rem;">
+      <span class="mono muted small">${esc(blockSplitName(block.days))}</span>
+      <span class="mono muted small">${block.days} days/week</span>
+      <span class="mono muted small">${block.equipment.length ? esc(block.equipment.join(', ')) : 'Any equipment'}</span>
+      <span class="mono muted small">${block.avoid.length ? 'Avoiding: ' + esc(block.avoid.map((a) => BLOCK_AVOID_OPTIONS.find((o) => o.key === a)?.label || a).join(', ')) : 'No avoid filters'}</span>
+    </div>
+    <div class="stat-grid-2" style="margin-top:0.9rem;grid-template-columns:repeat(4,1fr);gap:0.4rem;">
+      ${BLOCK_WEEK_STRIP.map((w, i) => `<div class="stat-card-sm" style="padding:0.5rem;text-align:center;"><div class="muted small">Wk ${i + 1}</div><div style="font-size:0.78rem;font-weight:600;">${esc(w)}</div></div>`).join('')}
+    </div>
+    <p class="muted small" style="margin-top:0.6rem;">Weeks 2–3 add a set to each main lift. Week 4 (deload) drops to about half the sets at lighter, non-max effort.</p>
+  </div>
+  ${block.blockDays.map((day, i) => blockDayCardHtml(day, i, i === blockBuilderExpandedDayIndex)).join('')}
+  <div class="card">
+    ${blockBuilderViewingActive
+      ? `<button class="btn btn-ghost" id="blockCloseBtn" style="width:100%;">Close</button>`
+      : `<button class="btn btn-primary" id="blockStartBtn" style="width:100%;" ${blockBuilderStarting ? 'disabled' : ''}>${blockBuilderStarting ? 'Starting…' : 'Start block'}</button>
+         <button class="btn btn-ghost" id="blockBackStep3" style="width:100%;margin-top:0.5rem;">Back</button>`}
+    <p class="muted small" style="text-align:center;margin-top:0.6rem;margin-bottom:0;">Built from your inputs using fixed rules. No AI.</p>
+  </div>`;
+}
+
+function wireBlockBuilderStep3(panel) {
+  $$('[data-block-day-toggle]', panel).forEach((card) => card.addEventListener('click', () => {
+    const idx = Number(card.dataset.blockDayToggle);
+    blockBuilderExpandedDayIndex = blockBuilderExpandedDayIndex === idx ? -1 : idx;
+    renderLiftsTab();
+  }));
+  const backBtn = $('#blockBackStep3', panel);
+  if (backBtn) backBtn.addEventListener('click', () => { blockBuilderStep = 2; renderLiftsTab(); });
+  const closeBtn = $('#blockCloseBtn', panel);
+  if (closeBtn) closeBtn.addEventListener('click', () => {
+    showBlockBuilder = false;
+    resetBlockBuilderState();
+    renderLiftsTab();
+  });
+  const startBtn = $('#blockStartBtn', panel);
+  if (startBtn) startBtn.addEventListener('click', async () => {
+    blockBuilderStarting = true;
+    renderLiftsTab();
+    const { error } = await supabase.from('profiles').update({ active_training_block: blockBuilderPreview }).eq('id', state.user.id);
+    blockBuilderStarting = false;
+    if (error) { toast('Could not start block: ' + error.message); renderLiftsTab(); return; }
+    state.profile = { ...state.profile, active_training_block: blockBuilderPreview };
+    showBlockBuilder = false;
+    resetBlockBuilderState();
+    toast('Block started — check Training for your Week 1 plan.');
+    renderLiftsTab();
+  });
+}
+
+function renderBlockBuilder(panel) {
+  if (blockBuilderStep === 1) {
+    panel.innerHTML = blockBuilderStep1Html();
+    wireBlockBuilderStep1(panel);
+  } else if (blockBuilderStep === 2) {
+    panel.innerHTML = blockBuilderStep2Html();
+    wireBlockBuilderStep2(panel);
+  } else {
+    panel.innerHTML = blockBuilderStep3Html();
+    wireBlockBuilderStep3(panel);
+  }
 }
 
 // ── Photos tab (progress photos, uploaded to the progress-photos bucket) ──

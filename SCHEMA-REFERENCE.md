@@ -22,9 +22,11 @@ referral_code         text unique
 email_reminders_opt_out boolean (default: false)
 onboarded_at          timestamptz — set once the first-time onboarding overlay finishes/is skipped
 glossary_exercises_viewed text[] (default: '{}') — distinct Exercise Glossary cue cards expanded
+learning_paths_completed text[] (default: '{}') — path ids from LEARNING_PATHS finished (also feeds Learning achievements)
+active_training_block jsonb (nullable) — the user's current generated Block Builder plan, or null if none is active; see the Block Builder section below
 created_at            timestamptz
 ```
-**Frontend reads/writes:** `id, display_name, age, sex, height_cm, activity_level, age_over_18, age_gate_shown_at, parental_consent_at, referral_code, email_reminders_opt_out, onboarded_at, glossary_exercises_viewed`
+**Frontend reads/writes:** `id, display_name, age, sex, height_cm, activity_level, age_over_18, age_gate_shown_at, parental_consent_at, referral_code, email_reminders_opt_out, onboarded_at, glossary_exercises_viewed, learning_paths_completed, active_training_block`
 
 `age_over_18`/`age_gate_shown_at`/`parental_consent_at` are set once at
 signup (see the `#authForm` submit handler and `ensureProfileAndGoals()` in
@@ -87,19 +89,28 @@ calories    numeric
 protein_g   numeric         ← WITH _g suffix
 carbs_g     numeric         ← WITH _g suffix
 fat_g       numeric         ← WITH _g suffix
-source      text ('manual' | 'ai_text' | 'ai_photo' | 'favorite' | 'common')
+source      text ('manual' | 'ai_text' | 'ai_photo' | 'favorite' | 'common' | 'barcode')
 photo_path  text (optional — path within the food-photos bucket, "<user_id>/<file>.jpg")
+sugar_g     numeric (optional — only ever set by a barcode scan; nullable for every other source)
+barcode     text (optional — the scanned code, kept even if the lookup failed and the entry was finished manually)
 logged_at   timestamptz (indexed)
 created_at  timestamptz
 ```
 **Frontend reads:** `logged_at, (all other columns via select(*))`, ordered by `logged_at desc`  
-**Frontend writes:** `user_id, food_name, calories, protein_g, carbs_g, fat_g, source, photo_path`
+**Frontend writes:** `user_id, food_name, calories, protein_g, carbs_g, fat_g, source, photo_path, sugar_g, barcode`
 
 `photo_path` (added in `supabase-schema-phase10-food-photos.sql`) is only
 ever set when a meal was logged from the "Snap a Photo" AI-estimate flow
 and the upload succeeded — every other logging path leaves it null. Same
 signed-URL display pattern as `photos.storage_path`: the image lives in
 the private `food-photos` bucket, this column just tracks the path.
+
+`sugar_g`/`barcode`/the `'barcode'` source value (added in
+`supabase-schema-phase21-barcode-scanning.sql`) back the barcode scanner
+— no cache table for barcode lookups on purpose, since Open Food Facts is
+free with no meaningful rate limit at this app's scale; a direct API call
+per scan is simpler than maintaining a cache that solves no real cost
+problem.
 
 ---
 
@@ -140,10 +151,83 @@ user_id     uuid
 logged_date date (indexed)
 weight_lb   numeric
 note        text (optional)
+source      text (default 'manual' | 'healthkit_shortcut' — a partial unique index on (user_id, logged_date) applies only to 'healthkit_shortcut' rows, so manual multi-entry per day is untouched)
 created_at  timestamptz
 ```
 **Frontend reads:** `logged_date, weight_lb, note` (via select(*), order by `logged_date desc`)  
-**Frontend writes:** `user_id, logged_date, weight_lb, note`
+**Frontend writes:** `user_id, logged_date, weight_lb, note` — `source` is only ever written by the health-sync webhook (service role), never the client directly.
+
+---
+
+### `health_sync_tokens` / `sleep_log` / `steps_log` — Apple Health sync (beta)
+Added in `supabase-schema-phase22-apple-health-sync.sql`, backing the iOS
+Shortcut → webhook Apple Health route (native HealthKit is unreachable
+from a website or home-screen web app, so this is the free/no-App-Store
+path; a Capacitor + HealthKit native wrapper is the possible later
+upgrade — see the guide entry for the tradeoffs).
+```sql
+-- health_sync_tokens (one row per user)
+id            uuid primary key
+user_id       uuid unique
+token_hash    text unique   -- SHA-256 hash only; no plaintext column, ever
+created_at    timestamptz
+last_used_at  timestamptz
+revoked_at    timestamptz
+
+-- sleep_log / steps_log (one row per user per day)
+id           uuid primary key
+user_id      uuid
+logged_date  date
+hours / steps numeric / integer
+source       text (default 'healthkit_shortcut')
+created_at   timestamptz
+unique (user_id, logged_date)  -- makes a Shortcut run twice for the same day idempotent
+```
+**Frontend reads:** `select own` RLS only, for the Settings card's "last
+synced" indicator — no client-side writes to any of these three tables.
+Token issuance/regeneration/revocation goes through
+`netlify/functions/health-sync-token.js` (an authenticated,
+client-callable function using the caller's normal Supabase session);
+actual health data is written only by `netlify/functions/health-sync.js`
+(the public webhook the Shortcut posts to, authenticated by the token
+hash — not a Supabase session — using the service-role key server-side).
+The raw token is shown to the user exactly once, at generation time; only
+its hash is ever persisted.
+
+---
+
+### `profiles.active_training_block` — Optional Block Builder
+Added in `supabase-schema-phase23-block-builder.sql`. A single jsonb blob
+rather than a relational table, since the whole plan is generated fresh
+client-side from fixed rules every time and only ever fully replaced or
+cleared — never queried by field:
+```json
+{
+  "focus": "hypertrophy" | "strength",
+  "priorities": ["chest", "abs"],
+  "days": 4,
+  "equipment": ["Barbell"],
+  "avoid": ["heavy_spinal_load"],
+  "blockDays": [
+    { "label": "Upper A", "groups": ["push", "pull"], "exercises": [
+      { "name": "Bench Press", "muscle": "chest", "sets": 3, "reps": "8-12",
+        "tags": [], "reason": "Primary compound movement for Chest." }
+    ] }
+  ],
+  "createdDate": "2026-09-28"
+}
+```
+Generated and read entirely client-side (`generateBlock()` in
+`index.html`) from the `exercises` table's existing tags
+(`block_types`, `movement_type`, `muscle_map_key`, `avoid_flags`,
+`lengthened_bias` — see phase18). Deliberately independent of
+`training_splits`: starting or ending a block never touches the split
+picker, the split's "today's focus" card, or suggested-exercises logic.
+Rep/set numbers are this app's own program-writing convention, not a
+research citation — Hypertrophy's main-lift rep range intentionally
+reuses the same 6-12 figure already cited elsewhere
+(`CITATION_LIBRARY.hypertrophy`) rather than introducing an uncited
+second number for the same thing.
 
 ---
 
@@ -274,10 +358,19 @@ reps             numeric
 date             date (indexed)
 superset_group   text (optional — bundles entries into one superset/circuit)
 body_region      text (optional — muscle-map region, e.g. 'chest', 'quads')
+warmup_per_set   boolean[] (default '{}' — parallel to reps_per_set; true = that set was a warm-up)
 created_at       timestamptz
 ```
 **Frontend reads/writes:** `exercise, muscle_group, weight, sets,
-reps_per_set, reps, date, superset_group, body_region`
+reps_per_set, reps, date, superset_group, body_region, warmup_per_set`
+
+`warmup_per_set` (added by `supabase-schema-phase19-warmup-sets.sql`) feeds
+the weekly hard-sets-per-muscle feature only — an empty array means no
+sets in that row are flagged, so pre-migration rows and rows where the
+user never touches the warm-up toggle still count every set as working,
+exactly as before this column existed. PR detection, career volume, and
+the muscle map heatmap deliberately still count every set regardless of
+this flag.
 
 Ported from IronLog's own schema as-is — no naming collision with anything
 in Plated's nutrition side.
@@ -391,19 +484,61 @@ cue_setup                          text
 cue_execution                      text
 cue_mistake                        text
 cue_bracing                        text
+hypertrophy_rep_range              text (e.g. "6–12 reps"; nullable)
+hypertrophy_rest_interval          text (e.g. "2–3 min"; nullable)
+hypertrophy_tempo                  text (e.g. "2-1-1 tempo — lower for 2 sec…"; nullable)
+hypertrophy_mind_muscle_cue        text (one-line mind-muscle-connection cue; nullable)
+movement_type                      text ('compound' | 'isolation'; nullable)
+lengthened_bias                    boolean (default false — true if the exercise notably loads the muscle at long length, e.g. RDL, Nordic Curl)
+avoid_flags                        text[] (default '{}' — values in use: 'overhead', 'heavy_spinal_load'; 'impact' reserved, unused)
+block_types                        text[] (default '{}' — values in use: 'strength', 'hypertrophy', 'power_speed'; 'mobility'/'functional_athletic' reserved, unused)
+muscle_map_key                     text (one of the 14 muscle-map keys — see below; nullable)
+muscle_map_secondary_keys          text[] (default '{}' — same 14-key taxonomy)
+image_url                          text (nullable — reserved for a future visual-assets pass)
+video_url                          text (nullable — reserved for a future visual-assets pass)
 created_at                         timestamptz
 ```
 **Frontend reads:** select-only for every account (`exercises_select_all`
 RLS policy, no insert/update/delete policy) — this is shared reference
 content, not per-user data. Seeded once by
 `supabase-schema-phase13-exercises.sql` with ~30 common compound/accessory
-lifts; not user-editable.
+lifts, then replaced (truncate + reinsert — safe, since nothing references
+`exercises.id` by foreign key) by
+`supabase-schema-phase17-exercise-hypertrophy.sql` with the full ~75-exercise
+library plus the four `hypertrophy_*` columns above, then tagged in place
+(plain updates, no truncate) by `supabase-schema-phase18-exercise-tags.sql`
+with the columns above; not user-editable.
+
+**`muscle_map_key`/`muscle_map_secondary_keys` taxonomy** (14 keys, used by
+the weekly-sets-per-muscle feature and the sculpted muscle map): `chest`,
+`delts`, `biceps`, `triceps`, `forearms`, `abs`, `obliques`, `quads`,
+`calves`, `traps`, `lats`, `lowerback`, `glutes`, `hamstrings`. This is
+more granular than `body_region` above (which stays as-is for the
+existing simple muscle map and `DEFAULT_BODY_REGION` fallback) — it splits
+`shoulders` into `delts`, splits `back` into `lats`/`traps`/`lowerback`,
+and adds `obliques`. All 75 exercises mapped cleanly; see phase18's header
+comment for the handful of judgment calls (e.g. Deadlift and the
+Olympic-lift family are keyed to `lowerback` as their single primary key,
+matching their existing `body_region`; Farmer's Carry is keyed to
+`forearms` as grip-dominant).
 
 **Build once, reuse across features** — this single table powers:
 - **Cue cards**: the first time a user logs an exercise (or after a long
   gap), the app shows its 4 cue bullets (setup/execution/common mistake/
   bracing) — static copy, not AI-generated, same spirit as the Layer 1
   tips library.
+- **Hypertrophy guidance**: rep range/rest interval/tempo/mind-muscle cue,
+  shown alongside the cue card. The citation backing rep-range guidance
+  (Schoenfeld et al. 2017) lives in a static `CITATION_LIBRARY` object in
+  index.html, not a column here — it's the same citation reused across
+  every exercise, so a column would just duplicate the same string ~75
+  times. Rest interval and tempo show as general coaching guidance with no
+  citation attached (the source originally cited for rest interval — Grgic
+  et al. 2018 — covers strength outcomes, not hypertrophy, and was removed
+  rather than misapplied; a hypertrophy-specific rest-interval source is
+  still unverified). A separate citation (Schoenfeld et al. 2016, on
+  ≥2x/week training frequency) isn't per-exercise at all and surfaces once,
+  next to the Training Split card, where frequency actually gets decided.
 - **Muscle Map**: `body_region` is the same taxonomy the muscle map
   already visualizes from `lifts.body_region` — a lift logged against a
   name found here can default its `body_region`/`muscle_group` from this
@@ -629,3 +764,56 @@ For the End Workout flow + post-session AI analysis (the
 `workout_sessions` table): run
 **`supabase-schema-phase16-workout-sessions.sql`** against an existing
 live database; fresh installs get it from `reset-schema.sql`.
+
+For the exercise library expansion + hypertrophy guidance (adds
+`exercises.hypertrophy_rep_range`/`hypertrophy_rest_interval`/
+`hypertrophy_tempo`/`hypertrophy_mind_muscle_cue`, then truncates and
+reseeds `exercises` with the full ~75-exercise library — safe, since
+nothing references `exercises.id` by foreign key): run
+**`supabase-schema-phase17-exercise-hypertrophy.sql`** against an existing
+live database; fresh installs get it from `reset-schema.sql`. If a long
+paste of that single ~580-line file into the Supabase SQL Editor produces
+a syntax error partway through the VALUES list (seen on mobile — the
+paste was silently truncating), run the five smaller files instead —
+**`supabase-schema-phase17-part1-of-5.sql`** through **`...-part5-of-5.sql`**,
+in order. They're a byte-for-byte split of the same statement (15
+exercises per INSERT, part 1 also carries the ALTER/TRUNCATE) and
+produce an identical result either way.
+
+For exercise tags and the muscle-map key mapping (adds `movement_type`,
+`lengthened_bias`, `avoid_flags`, `block_types`, `muscle_map_key`,
+`muscle_map_secondary_keys`, `image_url`, `video_url` to `exercises`, then
+updates all 75 rows in place — no truncate, since phase17's data is left
+untouched): run **`supabase-schema-phase18-exercise-tags.sql`** against an
+existing live database; fresh installs get it from `reset-schema.sql`.
+
+For warm-up set tracking (adds `lifts.warmup_per_set`, feeding the weekly
+hard-sets-per-muscle feature): run
+**`supabase-schema-phase19-warmup-sets.sql`** against an existing live
+database; fresh installs get it from `reset-schema.sql`.
+
+For learning-path completion tracking (adds
+`profiles.learning_paths_completed`): run
+**`supabase-schema-phase20-learning-paths.sql`** against an existing live
+database; fresh installs get it from `reset-schema.sql`.
+
+For barcode scanning (adds the `'barcode'` value to `food_logs.source`,
+plus `food_logs.sugar_g` and `food_logs.barcode`): run
+**`supabase-schema-phase21-barcode-scanning.sql`** against an existing
+live database; fresh installs get it from `reset-schema.sql`.
+
+For Apple Health sync (adds `health_sync_tokens`, `sleep_log`,
+`steps_log`, and `weight_log.source`): run
+**`supabase-schema-phase22-apple-health-sync.sql`** against an existing
+live database; fresh installs get it from `reset-schema.sql`. Also
+requires the two new Netlify functions
+(`health-sync-token.js`/`health-sync.js`) to be deployed — no new
+environment variables beyond the `SUPABASE_SERVICE_ROLE_KEY` this repo's
+other admin-style functions already need.
+
+For the optional Block Builder (adds `profiles.active_training_block`):
+run **`supabase-schema-phase23-block-builder.sql`** against an existing
+live database; fresh installs get it from `reset-schema.sql`. No new
+Netlify function or environment variable — the whole feature is
+client-side generation plus one jsonb column, written directly from the
+browser the same way `learning_paths_completed` is.
