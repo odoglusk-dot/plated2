@@ -219,8 +219,7 @@
 
   .tab-nav { padding: 0.5rem 0.6rem; background: var(--nav-bg);
     border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 19; }
-  .tab-btn-row { display: flex; gap: 0.35rem; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
-  .tab-btn-row::-webkit-scrollbar { display: none; }
+  .tab-btn-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
   .tab-btn { flex: none; font-family: var(--font-display); letter-spacing: 0.02em; text-transform: uppercase;
     font-size: 0.72rem; padding: 0.45rem 0.85rem; border-radius: 999px; background: var(--surface-2);
     border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; white-space: nowrap; }
@@ -262,6 +261,7 @@
   .mini-plate .ring-wrap { width: 54px; height: 54px; }
   .mini-plate .ring-value { font-size: 0.72rem; }
   .mini-plate .plate-label { font-size: 0.58rem; }
+  .daily-totals-line { margin: 0.5rem 0 0; text-align: center; line-height: 1.4; }
   .plate-secondary { justify-self: start; align-self: end; opacity: 0.85; }
   .plate-note { font-size: 0.6rem; color: var(--text-dim); }
 
@@ -3601,6 +3601,7 @@ function renderLogTab() {
         ${miniPlateHtml('CARBS', totals.carbs_g, g.carbs_g, 'var(--macro-carbs)')}
         ${miniPlateHtml('FAT', totals.fat_g, g.fat_g, 'var(--macro-fat)')}
       </div>
+      <p class="muted small daily-totals-line">${round(totals.calories)} / ${round(g.calories)} kcal · ${round(totals.protein_g)} / ${round(g.protein_g)}g protein · ${round(totals.carbs_g)} / ${round(g.carbs_g)}g carbs · ${round(totals.fat_g)} / ${round(g.fat_g)}g fat</p>
     </div>
     <div class="sub-nav">
       <button class="btn ${logSubTab === 'ai' ? 'btn-primary' : ''}" data-sub="ai">Describe It</button>
@@ -4603,6 +4604,7 @@ function calorieRangeForGoal(calorieGoal, goalMode, bmr) {
 }
 
 let addFriendMessage = '';
+let profileSubTab = 'account'; // 'account' | 'settings'
 
 // ── In-app User Guide (Profile → Guide) ──────────────────────────────────
 // Static, pre-written reference content — same spirit as TIP_LIBRARY and
@@ -4983,7 +4985,10 @@ function renderProfile() {
   if (showHealthSyncSetup) { renderHealthSyncSetup(panel); return; }
   const p = state.profile || {};
   const bs = state.bodyStats || {};
-  panel.innerHTML = `
+  // "Account" is identity/every-visit content (profile, goals, achievements,
+  // sign out); "Settings" is everything else — same split as the prior
+  // collapsed-sections version, now a real sub-tab.
+  const profileAccountSubTabHtml = `
     <div class="card">
       <h3>Profile</h3>
       <div class="field"><label>Display name</label><input class="input" id="prof_name" value="${esc(p.display_name || '')}"></div>
@@ -5008,6 +5013,20 @@ function renderProfile() {
       ${achievementsGridHtml()}
     </div>
 
+    <div class="card">
+      <h3>Account</h3>
+      <p class="muted">Signed in as ${esc(state.user.email)}</p>
+      <button class="btn btn-sm" id="signOutBtn" style="margin-bottom:0.75rem;">Sign Out</button>
+      <button class="btn btn-danger" id="delete_account_btn">Delete My Account</button>
+      <div id="delete_confirm" class="hidden" style="margin-top:0.75rem;">
+        <p class="muted">This permanently deletes your account and all logged data. Type DELETE to confirm.</p>
+        <input class="input" id="delete_confirm_input" style="margin-bottom:0.5rem;">
+        <button class="btn btn-danger" id="delete_confirm_btn">Permanently Delete</button>
+      </div>
+    </div>
+  `;
+
+  const profileSettingsSubTabHtml = `
     <div class="card">
       <h3>Goal Calculator</h3>
       <p class="muted">Mifflin-St Jeor based estimate. Pick a target weight and date — the pace that implies is checked
@@ -5048,6 +5067,15 @@ function renderProfile() {
       <div id="calc_result" style="margin-top:1rem;"></div>
     </div>
 
+    <div class="card">
+      <h3>Email Reminders</h3>
+      <div class="consent-line" style="margin-top:0;">
+        <input type="checkbox" id="email_reminders_check" ${p.email_reminders_opt_out ? '' : 'checked'}>
+        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="email_reminders_check">
+          Email me a reminder in the evening if I haven't logged any food that day.
+        </label>
+      </div>
+    </div>
     <div class="card">
       <h3>Subscription</h3>
       <span class="badge ${hasAccess(state.subscription) ? 'on' : ''}">${hasAccess(state.subscription) ? '⭐ Paid — AI unlocked' : '🔓 Free tier'}</span>
@@ -5118,16 +5146,6 @@ function renderProfile() {
     </div>
 
     <div class="card">
-      <h3>Email Reminders</h3>
-      <div class="consent-line" style="margin-top:0;">
-        <input type="checkbox" id="email_reminders_check" ${p.email_reminders_opt_out ? '' : 'checked'}>
-        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="email_reminders_check">
-          Email me a reminder in the evening if I haven't logged any food that day.
-        </label>
-      </div>
-    </div>
-
-    <div class="card">
       <h3>Guide</h3>
       <p class="muted">A browsable how-to for every feature — logging, training splits, PRs, AI analysis, tiers, and more.</p>
       <button class="btn" id="openGuideBtn">Browse the Guide</button>
@@ -5146,21 +5164,22 @@ function renderProfile() {
       <p class="muted">Something broken, or just have a question?</p>
       <a class="btn" href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20support">Contact Support</a>
     </div>
-
-    <div class="card">
-      <h3>Account</h3>
-      <p class="muted">Signed in as ${esc(state.user.email)}</p>
-      <button class="btn btn-sm" id="signOutBtn" style="margin-bottom:0.75rem;">Sign Out</button>
-      <button class="btn btn-danger" id="delete_account_btn">Delete My Account</button>
-      <div id="delete_confirm" class="hidden" style="margin-top:0.75rem;">
-        <p class="muted">This permanently deletes your account and all logged data. Type DELETE to confirm.</p>
-        <input class="input" id="delete_confirm_input" style="margin-bottom:0.5rem;">
-        <button class="btn btn-danger" id="delete_confirm_btn">Permanently Delete</button>
-      </div>
-    </div>
   `;
 
-  $('#prof_save').addEventListener('click', async () => {
+  panel.innerHTML = `
+    <div class="sub-nav">
+      <button class="btn btn-sm ${profileSubTab === 'account' ? 'btn-primary' : ''}" data-sub="account">Account</button>
+      <button class="btn btn-sm ${profileSubTab === 'settings' ? 'btn-primary' : ''}" data-sub="settings">Settings</button>
+    </div>
+    ${profileSubTab === 'account' ? profileAccountSubTabHtml : profileSettingsSubTabHtml}
+  `;
+
+  $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    profileSubTab = btn.dataset.sub;
+    renderProfile();
+  }));
+
+  $('#prof_save')?.addEventListener('click', async () => {
     const display_name = $('#prof_name').value.trim() || 'Athlete';
     const { error } = await supabase.from('profiles').upsert({ id: state.user.id, display_name });
     if (error) return toast('Could not save: ' + error.message);
@@ -5170,10 +5189,10 @@ function renderProfile() {
 
   $$('[data-achievement-share]', panel).forEach((btn) => btn.addEventListener('click', () => shareAchievement(btn.dataset.achievementShare)));
 
-  $('#openGuideBtn').addEventListener('click', () => { showUserGuide = true; renderProfile(); });
-  $('#openHealthSyncSetupBtn').addEventListener('click', () => { showHealthSyncSetup = true; renderProfile(); });
+  $('#openGuideBtn')?.addEventListener('click', () => { showUserGuide = true; renderProfile(); });
+  $('#openHealthSyncSetupBtn')?.addEventListener('click', () => { showHealthSyncSetup = true; renderProfile(); });
 
-  $('#goal_save').addEventListener('click', async () => {
+  $('#goal_save')?.addEventListener('click', async () => {
     const goals = {
       user_id: state.user.id,
       calories: Number($('#goal_cal').value) || 0,
@@ -5193,7 +5212,7 @@ function renderProfile() {
     renderAll();
   });
 
-  $('#calc_run').addEventListener('click', async () => {
+  $('#calc_run')?.addEventListener('click', async () => {
     const age = Number($('#calc_age').value);
     const sex = $('#calc_sex').value;
     const heightFt = Number($('#calc_height_ft').value) || 0;
@@ -5348,7 +5367,7 @@ function renderProfile() {
   const copyLinkBtn = $('#copy_referral_link');
   if (copyLinkBtn) copyLinkBtn.addEventListener('click', () => copyToClipboard($('#referral_link_display').value, 'Referral link copied.'));
 
-  $('#add_friend_btn').addEventListener('click', async () => {
+  $('#add_friend_btn')?.addEventListener('click', async () => {
     const input = $('#add_friend_code_input');
     const code = input.value.trim();
     if (!code) return;
@@ -5400,19 +5419,19 @@ function renderProfile() {
     renderProfile();
   }));
 
-  $('#email_reminders_check').addEventListener('change', async (e) => {
+  $('#email_reminders_check')?.addEventListener('change', async (e) => {
     const { error } = await supabase.from('profiles').upsert({ id: state.user.id, email_reminders_opt_out: !e.target.checked });
     if (error) { toast('Could not save preference: ' + error.message); return; }
     toast(e.target.checked ? 'Reminder emails on.' : 'Reminder emails off.');
     await loadProfile();
   });
 
-  $('#signOutBtn').addEventListener('click', async () => {
+  $('#signOutBtn')?.addEventListener('click', async () => {
     await supabase.auth.signOut();
   });
 
-  $('#delete_account_btn').addEventListener('click', () => $('#delete_confirm').classList.remove('hidden'));
-  $('#delete_confirm_btn').addEventListener('click', async () => {
+  $('#delete_account_btn')?.addEventListener('click', () => $('#delete_confirm').classList.remove('hidden'));
+  $('#delete_confirm_btn')?.addEventListener('click', async () => {
     if ($('#delete_confirm_input').value !== 'DELETE') return toast('Type DELETE exactly to confirm.');
     try {
       await callFunction('delete-account', {});
@@ -6019,6 +6038,7 @@ let cueCardBanner = null; // { trigger: 'first'|'gap', def: exercises row } — 
 let showExerciseGlossary = false;
 let glossaryFilter = { search: '', muscleGroup: '' };
 let glossaryExpandedName = null;
+let liftsSubTab = 'log'; // 'log' | 'training'
 
 let goalCardEditing = false;
 let goalCardError = '';
@@ -6617,7 +6637,7 @@ function showUndoToast(message, onUndo, ms = 6000) {
 async function endWorkoutSession() {
   const today = localDateStr();
   const { error } = await supabase.from('workout_sessions')
-    .upsert({ user_id: state.user.id, date: today, ended_at: new Date().toISOString() });
+    .upsert({ user_id: state.user.id, date: today, ended_at: new Date().toISOString() }, { onConflict: 'user_id,date' });
   if (error) { toast('Could not end workout: ' + error.message); return; }
   analysisError = null;
   await loadWorkoutSession();
@@ -6631,7 +6651,7 @@ async function endWorkoutSession() {
 async function reopenWorkoutSession() {
   const today = localDateStr();
   const { error } = await supabase.from('workout_sessions')
-    .upsert({ user_id: state.user.id, date: today, ended_at: null });
+    .upsert({ user_id: state.user.id, date: today, ended_at: null }, { onConflict: 'user_id,date' });
   if (error) { toast('Could not reopen: ' + error.message); return; }
   analysisError = null;
   staleSessionPromptDismissed = false;
@@ -6696,7 +6716,7 @@ async function generateSessionAnalysis() {
     const { error } = await supabase.from('workout_sessions').upsert({
       user_id: state.user.id, date: localDateStr(),
       analysis: result.analysis, analysis_generated_at: new Date().toISOString(),
-    });
+    }, { onConflict: 'user_id,date' });
     if (error) throw error;
     await loadWorkoutSession();
   } catch (err) {
@@ -7040,14 +7060,11 @@ function renderLiftLog(panel) {
   // below for the other half of this fix.
   const preservedExerciseWrap = $('#liftExerciseWrap', panel);
 
-  panel.innerHTML = `
-    ${prBanner ? `
-    <div class="card pr-banner">
-      <div class="small">🔥 New PR — <strong>${esc(prBanner.exercise)}</strong> at <span class="mono" style="color:var(--accent);">${prBanner.weight} lb</span> · +${prBanner.improvement} lb over your previous best</div>
-      <button class="btn btn-sm btn-ghost" id="prBannerDismiss">✕</button>
-    </div>` : ''}
-    ${cueCardBanner ? cueCardHtml(cueCardBanner) : ''}
-    ${staleSessionPromptHtml()}
+  // "Log" is the everyday content (today's lift, the log form, today's
+  // exercises); "Training" is the planning/reference content (split,
+  // block builder, weekly volume, muscle map, stats, PRs, history) — same
+  // split as before, now a real sub-tab instead of a collapsed section.
+  const liftLogSubTabHtml = `
     ${todaysLiftPanelHtml()}
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
@@ -7128,69 +7145,86 @@ function renderLiftLog(panel) {
       })()}
     </div>` : ''}
     ${suggestedExercisesHtml(exercises)}
+  `;
 
-    ${todaysFocusHtml()}
-    ${blockBuilderSummaryCardHtml()}
-    ${weeklyHardSetsHtml(lifts)}
-    ${muscleMapHtml(lifts)}
+  const liftTrainingSubTabHtml = `
+      ${todaysFocusHtml()}
+      ${blockBuilderSummaryCardHtml()}
+      ${weeklyHardSetsHtml(lifts)}
+      ${muscleMapHtml(lifts)}
 
-    <div class="stat-grid-2">
-      <div class="stat-card-sm">
-        <h3>Bodyweight</h3>
-        <div class="stat-num">${latestBodyweightEntry(state.weightLog) ? round(latestBodyweightEntry(state.weightLog).weight_lb, 1) : '—'} <span class="muted small">lb</span></div>
-        <div class="muted small">${latestBodyweightEntry(state.weightLog) ? latestBodyweightEntry(state.weightLog).logged_date : 'no entries yet'}</div>
+      <div class="stat-grid-2">
+        <div class="stat-card-sm">
+          <h3>Bodyweight</h3>
+          <div class="stat-num">${latestBodyweightEntry(state.weightLog) ? round(latestBodyweightEntry(state.weightLog).weight_lb, 1) : '—'} <span class="muted small">lb</span></div>
+          <div class="muted small">${latestBodyweightEntry(state.weightLog) ? latestBodyweightEntry(state.weightLog).logged_date : 'no entries yet'}</div>
+        </div>
+        <div class="stat-card-sm">
+          <h3>Lifts Logged</h3>
+          <div class="stat-num">${lifts.length}</div>
+          <div class="muted small">${Object.keys(prs).length} exercises tracked</div>
+        </div>
+        <div class="stat-card-sm">
+          <h3>Career Volume</h3>
+          <div class="stat-num">${Math.round(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)).toLocaleString()} <span class="muted small">lb</span></div>
+          ${volumeFunFact(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)) ? `<div class="muted small" style="color:var(--accent);">${esc(volumeFunFact(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)))}</div>` : ''}
+        </div>
       </div>
-      <div class="stat-card-sm">
-        <h3>Lifts Logged</h3>
-        <div class="stat-num">${lifts.length}</div>
-        <div class="muted small">${Object.keys(prs).length} exercises tracked</div>
-      </div>
-      <div class="stat-card-sm">
-        <h3>Career Volume</h3>
-        <div class="stat-num">${Math.round(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)).toLocaleString()} <span class="muted small">lb</span></div>
-        ${volumeFunFact(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)) ? `<div class="muted small" style="color:var(--accent);">${esc(volumeFunFact(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)))}</div>` : ''}
-      </div>
-    </div>
 
-    ${(() => {
-      const prList = Object.values(prs).sort((a, b) => b.date.localeCompare(a.date));
-      if (!prList.length) return '';
-      return `
-    <div>
-      <h3 style="margin:0 0 0.5rem;">Personal records</h3>
-      <div style="display:flex;gap:0.75rem;overflow-x:auto;padding-bottom:0.4rem;">
-        ${prList.map((pr) => {
-          const history = lifts.filter((l) => l.exercise === pr.exercise).sort((a, b) => a.date.localeCompare(b.date));
-          return `
-          <div class="card" style="min-width:150px;flex-shrink:0;margin-bottom:0;cursor:pointer;" data-pr-open="${esc(pr.exercise)}">
-            <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin-bottom:0.25rem;">${esc(pr.exercise)}</div>
-            <div class="stat-num" style="font-size:1.2rem;">${pr.weight} <span class="muted small">lb</span></div>
-            <div class="muted small">${pr.date}</div>
-            ${history.length > 1 ? `<div style="margin-top:0.35rem;">${miniLineSvg(history.map((l) => l.weight), 130, 32)}</div>` : ''}
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-    })()}
-    ${(() => {
-      const recent = [...lifts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-      if (!recent.length) return '';
-      return `
-    <div>
-      <h3 style="margin:0 0 0.5rem;">Recent sessions</h3>
-      <div class="card" style="padding:0;">
-        ${recent.map((l) => `
-          <div class="log-row">
-            <span>${esc(l.exercise)}</span>
-            <span class="mono muted">${l.weight}lb · ${repsDisplay(l)} · ${l.date}</span>
-          </div>`).join('')}
-      </div>
-    </div>`;
-    })()}
+      ${(() => {
+        const prList = Object.values(prs).sort((a, b) => b.date.localeCompare(a.date));
+        if (!prList.length) return '';
+        return `
+      <div>
+        <h3 style="margin:0 0 0.5rem;">Personal records</h3>
+        <div style="display:flex;gap:0.75rem;overflow-x:auto;padding-bottom:0.4rem;">
+          ${prList.map((pr) => {
+            const history = lifts.filter((l) => l.exercise === pr.exercise).sort((a, b) => a.date.localeCompare(b.date));
+            return `
+            <div class="card" style="min-width:150px;flex-shrink:0;margin-bottom:0;cursor:pointer;" data-pr-open="${esc(pr.exercise)}">
+              <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin-bottom:0.25rem;">${esc(pr.exercise)}</div>
+              <div class="stat-num" style="font-size:1.2rem;">${pr.weight} <span class="muted small">lb</span></div>
+              <div class="muted small">${pr.date}</div>
+              ${history.length > 1 ? `<div style="margin-top:0.35rem;">${miniLineSvg(history.map((l) => l.weight), 130, 32)}</div>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+      })()}
+      ${(() => {
+        const recent = [...lifts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+        if (!recent.length) return '';
+        return `
+      <div>
+        <h3 style="margin:0 0 0.5rem;">Recent sessions</h3>
+        <div class="card" style="padding:0;">
+          ${recent.map((l) => `
+            <div class="log-row">
+              <span>${esc(l.exercise)}</span>
+              <span class="mono muted">${l.weight}lb · ${repsDisplay(l)} · ${l.date}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+      })()}
     ${lifts.length === 0 ? `
     <div class="card">
       <p class="muted" style="text-align:center;">No lifts logged yet — log your first one above to start tracking PRs, volume, and your muscle map.</p>
     </div>` : ''}
+  `;
+
+  panel.innerHTML = `
+    ${prBanner ? `
+    <div class="card pr-banner">
+      <div class="small">🔥 New PR — <strong>${esc(prBanner.exercise)}</strong> at <span class="mono" style="color:var(--accent);">${prBanner.weight} lb</span> · +${prBanner.improvement} lb over your previous best</div>
+      <button class="btn btn-sm btn-ghost" id="prBannerDismiss">✕</button>
+    </div>` : ''}
+    ${cueCardBanner ? cueCardHtml(cueCardBanner) : ''}
+    ${staleSessionPromptHtml()}
+    <div class="sub-nav">
+      <button class="btn btn-sm ${liftsSubTab === 'log' ? 'btn-primary' : ''}" data-sub="log">Log</button>
+      <button class="btn btn-sm ${liftsSubTab === 'training' ? 'btn-primary' : ''}" data-sub="training">Training</button>
+    </div>
+    ${liftsSubTab === 'log' ? liftLogSubTabHtml : liftTrainingSubTabHtml}
   `;
 
   if (preservedExerciseWrap) $('#liftExerciseWrap', panel)?.replaceWith(preservedExerciseWrap);
@@ -7199,6 +7233,10 @@ function renderLiftLog(panel) {
   wireMuscleMapEvents(panel);
   wireSplitEvents(panel);
   wireBlockBuilderSummaryEvents(panel);
+  $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    liftsSubTab = btn.dataset.sub;
+    renderLiftsTab();
+  }));
   $$('[data-pr-open]', panel).forEach((card) => card.addEventListener('click', () => {
     liftsSelectedExercise = card.dataset.prOpen;
     liftHistoryEditingId = null;
@@ -7209,7 +7247,7 @@ function renderLiftLog(panel) {
   if (mgSel) mgSel.addEventListener('change', (e) => { liftForm.muscleGroup = e.target.value; });
   const brSel = $('#lift_bodyRegion');
   if (brSel) brSel.addEventListener('change', (e) => { liftForm.bodyRegion = e.target.value; });
-  $('#lift_weight').addEventListener('input', (e) => {
+  $('#lift_weight')?.addEventListener('input', (e) => {
     liftForm.weight = e.target.value;
     // Patch the ramp content directly rather than a full renderLiftsTab()
     // — the same lesson as the exercise field: a full panel rebuild on
@@ -7220,7 +7258,7 @@ function renderLiftLog(panel) {
   });
   const warmupToggle = $('#warmupRampToggle', panel);
   if (warmupToggle) warmupToggle.addEventListener('click', () => { showWarmupRamp = !showWarmupRamp; renderLiftsTab(); });
-  $('#lift_sets').addEventListener('change', (e) => {
+  $('#lift_sets')?.addEventListener('change', (e) => {
     const count = Math.max(1, Math.min(20, Number(e.target.value) || 1));
     const fillVal = liftForm.repsPerSet.length ? liftForm.repsPerSet[liftForm.repsPerSet.length - 1] : '5';
     while (liftForm.repsPerSet.length < count) liftForm.repsPerSet.push(fillVal);
@@ -7236,11 +7274,11 @@ function renderLiftLog(panel) {
   $$('[data-warmup-idx]', panel).forEach((inp) => inp.addEventListener('change', (e) => {
     liftForm.warmupPerSet[Number(e.target.dataset.warmupIdx)] = e.target.checked;
   }));
-  $('#lift_date').addEventListener('change', (e) => {
+  $('#lift_date')?.addEventListener('change', (e) => {
     liftForm.date = e.target.value || localDateStr();
     renderLiftsTab();
   });
-  $('#lift_isSuperset').addEventListener('change', (e) => {
+  $('#lift_isSuperset')?.addEventListener('change', (e) => {
     liftForm.isSuperset = e.target.checked;
     renderLiftsTab();
   });
@@ -7252,7 +7290,7 @@ function renderLiftLog(panel) {
   if (cueDismiss) cueDismiss.addEventListener('click', () => { cueCardBanner = null; renderLiftsTab(); });
   wireCitationEvents(panel, renderLiftsTab);
   wireTodaysLiftEditEvents(panel);
-  $('#openGlossaryBtn').addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); });
+  $('#openGlossaryBtn')?.addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); });
   const staleStillTraining = $('#staleStillTrainingBtn');
   if (staleStillTraining) staleStillTraining.addEventListener('click', () => { staleSessionPromptDismissed = true; renderLiftsTab(); });
   const staleEndWorkout = $('#staleEndWorkoutBtn');
@@ -7265,7 +7303,7 @@ function renderLiftLog(panel) {
     prefillLiftFormFromLast(val);
     renderLiftsTab();
   }));
-  $('#lift_save').addEventListener('click', addLiftFromForm);
+  $('#lift_save')?.addEventListener('click', addLiftFromForm);
 
   $$('[data-lift-exercise]', panel).forEach((row) => row.addEventListener('click', () => {
     liftsSelectedExercise = row.dataset.liftExercise;
@@ -9236,13 +9274,15 @@ function friendsLeaderboardHtml() {
   </div>`;
 }
 
+let insightsSubTab = 'training'; // 'training' | 'social'
+
 function renderInsightsTab() {
   const panel = $('#panel-insights');
   if (!panel) return;
   const lifts = state.lifts;
   const deload = computeDeloadSignal(lifts);
 
-  panel.innerHTML = `
+  const insightsTrainingSubTabHtml = `
     <div class="card">
       <h3>Training Balance</h3>
       <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Share of all-time volume by muscle group.</p>
@@ -9274,6 +9314,9 @@ function renderInsightsTab() {
       <h3>Weekly Training Frequency</h3>
       ${weeklyFrequencyChartHtml(lifts)}
     </div>
+  `;
+
+  const insightsSocialSubTabHtml = `
     <div class="card">
       <h3>Nutrition × Training</h3>
       <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Weekly protein-goal consistency vs. lift volume — no AI, just your own logged data grouped by week.</p>
@@ -9289,6 +9332,19 @@ function renderInsightsTab() {
       ${goalsOverviewHtml(lifts, state.exerciseGoals)}
     </div>
   `;
+
+  panel.innerHTML = `
+    <div class="sub-nav">
+      <button class="btn btn-sm ${insightsSubTab === 'training' ? 'btn-primary' : ''}" data-sub="training">Training</button>
+      <button class="btn btn-sm ${insightsSubTab === 'social' ? 'btn-primary' : ''}" data-sub="social">Nutrition & Social</button>
+    </div>
+    ${insightsSubTab === 'training' ? insightsTrainingSubTabHtml : insightsSocialSubTabHtml}
+  `;
+
+  $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    insightsSubTab = btn.dataset.sub;
+    renderInsightsTab();
+  }));
 
   $$('[data-insight-open]', panel).forEach((el) => el.addEventListener('click', () => {
     liftsSelectedExercise = el.dataset.insightOpen;
