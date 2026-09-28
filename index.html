@@ -3604,12 +3604,12 @@ function renderLogTab() {
       <p class="muted small daily-totals-line">${round(totals.calories)} / ${round(g.calories)} kcal · ${round(totals.protein_g)} / ${round(g.protein_g)}g protein · ${round(totals.carbs_g)} / ${round(g.carbs_g)}g carbs · ${round(totals.fat_g)} / ${round(g.fat_g)}g fat</p>
     </div>
     <div class="sub-nav">
-      <button class="btn ${logSubTab === 'ai' ? 'btn-primary' : ''}" data-sub="ai">Describe It</button>
-      <button class="btn ${logSubTab === 'photo' ? 'btn-primary' : ''}" data-sub="photo">Snap a Photo</button>
-      <button class="btn ${logSubTab === 'barcode' ? 'btn-primary' : ''}" data-sub="barcode">Scan Barcode</button>
-      <button class="btn ${logSubTab === 'common' ? 'btn-primary' : ''}" data-sub="common">Common Foods</button>
-      <button class="btn ${logSubTab === 'manual' ? 'btn-primary' : ''}" data-sub="manual">Manual Entry</button>
-      <button class="btn ${logSubTab === 'favorites' ? 'btn-primary' : ''}" data-sub="favorites">Favorites</button>
+      <button class="btn btn-sm ${logSubTab === 'ai' ? 'btn-primary' : ''}" data-sub="ai">Describe It</button>
+      <button class="btn btn-sm ${logSubTab === 'photo' ? 'btn-primary' : ''}" data-sub="photo">Snap a Photo</button>
+      <button class="btn btn-sm ${logSubTab === 'barcode' ? 'btn-primary' : ''}" data-sub="barcode">Scan Barcode</button>
+      <button class="btn btn-sm ${logSubTab === 'common' ? 'btn-primary' : ''}" data-sub="common">Common Foods</button>
+      <button class="btn btn-sm ${logSubTab === 'manual' ? 'btn-primary' : ''}" data-sub="manual">Manual Entry</button>
+      <button class="btn btn-sm ${logSubTab === 'favorites' ? 'btn-primary' : ''}" data-sub="favorites">Favorites</button>
     </div>
     <div id="logSubPanel"></div>
   `;
