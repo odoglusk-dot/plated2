@@ -6242,7 +6242,6 @@ function renderLiftsTab() {
   if (showBlockBuilder) renderBlockBuilder(panel);
   else if (showExerciseGlossary) renderExerciseGlossary(panel);
   else if (liftsSelectedExercise) renderLiftDetail(panel);
-  else if (isSessionEndedToday()) renderSessionSummary(panel);
   else renderLiftLog(panel);
 }
 
@@ -6779,15 +6778,6 @@ function wireSessionAnalysisEvents(panel) {
   if ((analysis?.callouts || []).some((c) => c.type === 'nutrition')) renderSessionNutritionChart();
 }
 
-function renderSessionSummary(panel) {
-  panel.innerHTML = `
-    ${todaysLiftPanelHtml()}
-    ${sessionAnalysisHtml()}
-  `;
-  wireTodaysLiftEditEvents(panel);
-  wireSessionAnalysisEvents(panel);
-}
-
 // Loaded lazily from a CDN only when the analysis screen actually renders
 // a chart — the one deliberate exception to the rest of this app's
 // hand-rolled-SVG chart convention, per the product spec for this feature.
@@ -6886,8 +6876,10 @@ function endWorkoutButtonHtml() {
 
 // ── Today's Lift panel ──────────────────────────────────────────────────
 // Shown at the top of the Lift page whether the session is still active
-// (renderLiftLog) or already ended (renderSessionSummary) — same function
-// either way, so the two views can't drift. Reuses liftHistoryRowHtml()
+// (renderLiftLog) or already ended — same panel either way, so the "Log"
+// sub-tab never loses its Training-tab sibling or the rest of its own
+// content just because today's session is marked complete. Reuses
+// liftHistoryRowHtml()
 // (the per-set edit/delete UI already built for the per-exercise detail
 // view) rather than a second implementation; wireTodaysLiftEditEvents()
 // below is a separate, simpler wiring function rather than reusing
@@ -7066,6 +7058,7 @@ function renderLiftLog(panel) {
   // split as before, now a real sub-tab instead of a collapsed section.
   const liftLogSubTabHtml = `
     ${todaysLiftPanelHtml()}
+    ${isSessionEndedToday() ? sessionAnalysisHtml() : ''}
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <h3 style="margin:0;">Log a lift</h3>
@@ -7290,6 +7283,7 @@ function renderLiftLog(panel) {
   if (cueDismiss) cueDismiss.addEventListener('click', () => { cueCardBanner = null; renderLiftsTab(); });
   wireCitationEvents(panel, renderLiftsTab);
   wireTodaysLiftEditEvents(panel);
+  wireSessionAnalysisEvents(panel);
   $('#openGlossaryBtn')?.addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); });
   const staleStillTraining = $('#staleStillTrainingBtn');
   if (staleStillTraining) staleStillTraining.addEventListener('click', () => { staleSessionPromptDismissed = true; renderLiftsTab(); });
