@@ -65,6 +65,14 @@ create table profiles (
   -- resulting day-by-day exercise plan), or null if none is active. See
   -- supabase-schema-phase23-block-builder.sql.
   active_training_block jsonb,
+  -- Display-only weight unit preference — every weight column keeps
+  -- storing exactly what it always has; this never changes stored data.
+  -- Opting out of the friend leaderboard hides you from it entirely
+  -- (including your own view), defaulting to true since the leaderboard
+  -- already showed everyone with no toggle before this existed. See
+  -- supabase-schema-phase24-unit-and-leaderboard-prefs.sql.
+  weight_unit text not null default 'lb' check (weight_unit in ('lb', 'kg')),
+  leaderboard_opt_in boolean not null default true,
   created_at timestamptz not null default now()
 );
 

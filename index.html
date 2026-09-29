@@ -902,6 +902,25 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const round = (n, d = 0) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
 
+// ── Weight unit preference ──────────────────────────────────────────────
+// Every table keeps storing weight exactly as it always has (lifts.weight
+// and exercise_goals.target_weight in lb, weight_log.weight_lb in lb,
+// body_stats.weight_kg in kg) — this is a display-only conversion layer on
+// top, never a data migration. lb is the canonical unit passed into these
+// helpers; kg-native values (body_stats) are converted to lb once at the
+// point they're read, then treated the same as everything else.
+const LB_PER_KG = 0.453592;
+function weightUnitLabel() { return state.profile?.weight_unit === 'kg' ? 'kg' : 'lb'; }
+function toDisplayWeight(lb, d = 0) {
+  const unit = weightUnitLabel();
+  const value = unit === 'kg' ? round((Number(lb) || 0) * LB_PER_KG, d) : round(lb, d);
+  return { value, unit };
+}
+function fromDisplayWeight(displayValue) {
+  const n = Number(displayValue) || 0;
+  return weightUnitLabel() === 'kg' ? n / LB_PER_KG : n;
+}
+
 function toast(msg, ms = 3200) {
   let t = $('#toastEl');
   if (t) t.remove();
@@ -2565,7 +2584,7 @@ async function generateWeeklyRecapCanvas(data) {
     ctx.font = '500 42px Inter, sans-serif';
     for (const pr of data.prs.slice(0, 6)) {
       ctx.fillStyle = '#EDECE8';
-      ctx.fillText(`${pr.exercise} — ${pr.weight} lb`, 540, y);
+      ctx.fillText(`${pr.exercise} — ${toDisplayWeight(pr.weight).value} ${weightUnitLabel()}`, 540, y);
       y += 64;
     }
   }
@@ -2667,8 +2686,10 @@ const TIP_LIBRARY = [
         const last3 = sorted.slice(-3);
         const weight = last3[0].weight;
         if (last3.every((l) => l.weight === weight)) {
+          const wd = toDisplayWeight(weight);
+          const bump = weightUnitLabel() === 'kg' ? '2.5kg' : '5lb';
           return {
-            sentence: `You've logged ${weight}lb on ${exercise} for 3 sessions straight — try adding 5lb next time you're fresh.`,
+            sentence: `You've logged ${wd.value}${wd.unit} on ${exercise} for 3 sessions straight — try adding ${bump} next time you're fresh.`,
             learnMore: `Progressive overload — a small, steady increase in weight, reps, or volume over time — is the core driver of ongoing strength and muscle gains. Repeating the exact same weight for several sessions in a row usually means there's room to push a little further, even if it's just a few pounds or one extra rep.`,
           };
         }
@@ -2935,6 +2956,16 @@ const ACHIEVEMENT_LIBRARY = [
     },
   },
   {
+    id: 'goal_crusher', category: 'strength', title: 'Goal Crusher',
+    description: 'Hit an estimated-1RM target you set for yourself on an exercise.',
+    check(ctx) {
+      return ctx.exerciseGoals.some((g) => {
+        const best = ctx.lifts.filter((l) => l.exercise === g.exercise).reduce((max, l) => Math.max(max, e1RM(l.weight, l.reps)), 0);
+        return best >= g.target_weight;
+      });
+    },
+  },
+  {
     id: 'full_macro_week', category: 'consistency', title: 'First Full Week On Target',
     description: 'Hit both your calorie and protein targets seven days in a row.',
     check(ctx) {
@@ -3039,7 +3070,7 @@ async function checkAndUnlockAchievements() {
     const ctx = {
       lifts: state.lifts, historyLogs: state.historyLogs, waterLog: state.waterLog,
       weightLog: state.weightLog, goals: state.goals, profile: state.profile,
-      trainingSplit: state.trainingSplit,
+      trainingSplit: state.trainingSplit, exerciseGoals: state.exerciseGoals,
     };
     const unlockedIds = new Set(state.achievements.map((a) => a.achievement_id));
     let anyNew = false;
@@ -3314,7 +3345,7 @@ function renderDashboard() {
       </div>
       <div class="stat-card-sm">
         <h3>Today's Volume</h3>
-        <div class="stat-num" style="font-size:1.3rem;">${Math.round(todaysLiftVolume).toLocaleString()}<span class="muted" style="font-size:0.72rem;"> lb</span></div>
+        <div class="stat-num" style="font-size:1.3rem;">${toDisplayWeight(todaysLiftVolume, 0).value.toLocaleString()}<span class="muted" style="font-size:0.72rem;"> ${weightUnitLabel()}</span></div>
       </div>
       <div class="stat-card-sm">
         <h3>Carbs</h3>
@@ -4236,7 +4267,7 @@ function renderWeight() {
       <h3>Log Weight</h3>
       <div class="row">
         <div class="field"><label>Date</label><input class="input" id="wt_date" type="date" value="${localDateStr()}"></div>
-        <div class="field"><label>Weight (lb)</label><input class="input mono" id="wt_lb" type="number" step="0.1"></div>
+        <div class="field"><label>Weight (${weightUnitLabel()})</label><input class="input mono" id="wt_lb" type="number" step="0.1"></div>
       </div>
       <div class="field"><label>Note (optional)</label><input class="input" id="wt_note"></div>
       <button class="btn btn-primary" id="wt_save">Save</button>
@@ -4248,17 +4279,17 @@ function renderWeight() {
     <div class="card">
       <h3>Recent Entries</h3>
       ${sorted.length === 0 ? `<p class="muted">No entries yet.</p>` :
-        [...sorted].reverse().map((w) => `
+        [...sorted].reverse().map((w) => { const wd = toDisplayWeight(w.weight_lb, 1); return `
           <div class="log-row">
-            <div><div class="name">${w.logged_date}</div><div class="macros">${round(w.weight_lb, 1)} lb${w.note ? ' · ' + esc(w.note) : ''}</div></div>
+            <div><div class="name">${w.logged_date}</div><div class="macros">${wd.value} ${wd.unit}${w.note ? ' · ' + esc(w.note) : ''}</div></div>
             <button class="btn btn-sm btn-ghost" data-wt-del="${w.id}">✕</button>
-          </div>`).join('')}
+          </div>`; }).join('')}
     </div>
   `;
 
   $('#wt_save').addEventListener('click', async () => {
     const logged_date = $('#wt_date').value || localDateStr();
-    const weight_lb = Number($('#wt_lb').value);
+    const weight_lb = fromDisplayWeight($('#wt_lb').value);
     if (!weight_lb) return toast('Enter a weight first.');
     const note = $('#wt_note').value.trim() || null;
     const { error } = await supabase.from('weight_log').insert({ user_id: state.user.id, logged_date, weight_lb, note });
@@ -4293,8 +4324,8 @@ function weightChartSvg(sorted) {
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
     <polyline points="${points.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" />
     ${points.map((p) => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--accent)" />`).join('')}
-    <text x="${pad}" y="14" fill="var(--text-dim)" font-size="11" font-family="monospace">${round(max, 1)} lb</text>
-    <text x="${pad}" y="${h - 8}" fill="var(--text-dim)" font-size="11" font-family="monospace">${round(min, 1)} lb</text>
+    <text x="${pad}" y="14" fill="var(--text-dim)" font-size="11" font-family="monospace">${toDisplayWeight(max, 1).value} ${weightUnitLabel()}</text>
+    <text x="${pad}" y="${h - 8}" fill="var(--text-dim)" font-size="11" font-family="monospace">${toDisplayWeight(min, 1).value} ${weightUnitLabel()}</text>
   </svg>`;
 }
 
@@ -4448,8 +4479,8 @@ async function buildDataSummary() {
   }
 
   if (state.weightLog.length) {
-    lines.push('\nRecent weight entries (lb):');
-    state.weightLog.slice(0, 10).forEach((w) => lines.push(`${w.logged_date}: ${round(w.weight_lb, 1)} lb`));
+    lines.push(`\nRecent weight entries (${weightUnitLabel()}):`);
+    state.weightLog.slice(0, 10).forEach((w) => { const wd = toDisplayWeight(w.weight_lb, 1); lines.push(`${w.logged_date}: ${wd.value} ${wd.unit}`); });
   }
 
   if (state.supplementLogs.length) {
@@ -5028,6 +5059,19 @@ function renderProfile() {
 
   const profileSettingsSubTabHtml = `
     <div class="card">
+      <h3>Units</h3>
+      <p class="muted">Switches how weight is shown everywhere in the app — nothing about how it's stored changes, so switching back and forth is always safe.</p>
+      <div class="row">
+        <button class="btn btn-sm ${weightUnitLabel() === 'lb' ? 'btn-primary' : ''}" id="unit_lb_btn">Pounds (lb)</button>
+        <button class="btn btn-sm ${weightUnitLabel() === 'kg' ? 'btn-primary' : ''}" id="unit_kg_btn">Kilograms (kg)</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Your Data</h3>
+      <p class="muted">Download everything you've logged — nutrition, lifts, and weight history — as a JSON file.</p>
+      <button class="btn btn-sm" id="export_data_btn">Export My Data</button>
+    </div>
+    <div class="card">
       <h3>Goal Calculator</h3>
       <p class="muted">Mifflin-St Jeor based estimate. Pick a target weight and date — the pace that implies is checked
         against a safe range, and calorie target is never recommended below your resting metabolic rate or 1500 kcal,
@@ -5044,7 +5088,7 @@ function renderProfile() {
       <div class="row">
         <div class="field"><label>Height (ft)</label><input class="input mono" id="calc_height_ft" type="number" value="${p.height_cm ? Math.floor(round(p.height_cm / 2.54 / 12, 0)) : ''}"></div>
         <div class="field"><label>Height (in)</label><input class="input mono" id="calc_height_in" type="number" min="0" max="11" value="${p.height_cm ? round((round(p.height_cm / 2.54, 1) % 12), 1) : ''}"></div>
-        <div class="field"><label>Weight (lb)</label><input class="input mono" id="calc_weight" type="number" value="${bs.weight_kg ? round(bs.weight_kg / 0.453592, 1) : ''}"></div>
+        <div class="field"><label>Weight (${weightUnitLabel()})</label><input class="input mono" id="calc_weight" type="number" value="${bs.weight_kg ? toDisplayWeight(bs.weight_kg / LB_PER_KG, 1).value : ''}"></div>
       </div>
       <div class="row">
         <div class="field"><label>Activity level</label>
@@ -5056,7 +5100,7 @@ function renderProfile() {
             <option value="very_active" ${p.activity_level === 'very_active' ? 'selected' : ''}>Very Active (2x/day training)</option>
           </select>
         </div>
-        <div class="field"><label>Target Weight (lb) <span class="muted">(optional)</span></label><input class="input mono" id="calc_goal_weight" type="number" placeholder="Leave blank to maintain current weight"></div>
+        <div class="field"><label>Target Weight (${weightUnitLabel()}) <span class="muted">(optional)</span></label><input class="input mono" id="calc_goal_weight" type="number" placeholder="Leave blank to maintain current weight"></div>
       </div>
       <div class="field">
         <label>Target Date <span class="muted">(optional)</span></label>
@@ -5113,6 +5157,12 @@ function renderProfile() {
     <div class="card">
       <h3>Friends</h3>
       <p class="muted">Add a friend using their referral code above to see streaks and PRs on a shared leaderboard. No feed, no posts — just the numbers.</p>
+      <div class="consent-line" style="margin-top:0;">
+        <input type="checkbox" id="leaderboard_opt_in_check" ${p.leaderboard_opt_in === false ? '' : 'checked'}>
+        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="leaderboard_opt_in_check">
+          Show me on the friend leaderboard.
+        </label>
+      </div>
       <div class="field">
         <div class="row" style="gap:0.5rem;">
           <input class="input mono" id="add_friend_code_input" placeholder="Their code, e.g. ABC123" style="text-transform:uppercase;">
@@ -5218,12 +5268,12 @@ function renderProfile() {
     const heightFt = Number($('#calc_height_ft').value) || 0;
     const heightIn = Number($('#calc_height_in').value) || 0;
     const totalHeightIn = heightFt * 12 + heightIn;
-    const weightLb = Number($('#calc_weight').value);
+    const weightLb = fromDisplayWeight($('#calc_weight').value);
     // Target weight only matters for deriving a pace from a target date — a
     // maintenance estimate needs no target at all, so it's no longer forced.
     // Defaulting to current weight makes weightDiffLb 0 if someone leaves it
     // blank, which is exactly "no change" for the pace math below.
-    const targetWeightLb = Number($('#calc_goal_weight').value) || weightLb;
+    const targetWeightLb = fromDisplayWeight($('#calc_goal_weight').value) || weightLb;
     const targetDateStr = $('#calc_target_date').value;
     const activity = $('#calc_activity').value;
 
@@ -5269,11 +5319,11 @@ function renderProfile() {
         const direction = weightDiffLb < 0 ? 'Losing' : 'Gaining';
         $('#calc_result').innerHTML = `
           <p class="muted" style="color:var(--danger);">
-            ${direction} ${Math.abs(weightDiffLb).toFixed(1)} lb by ${targetDate.toLocaleDateString()} works out to about
+            ${direction} ${toDisplayWeight(Math.abs(weightDiffLb), 1).value} ${weightUnitLabel()} by ${targetDate.toLocaleDateString()} works out to about
             ${Math.abs(weeklyRatePercent).toFixed(2)}% of your bodyweight per week — faster than the recommended
             ${maxSafePercent}%/week${age < 18 ? ' limit for under 18' : ''}.
           </p>
-          <p class="muted">At a safe pace, the earliest realistic date for ${targetWeightLb} lb is around
+          <p class="muted">At a safe pace, the earliest realistic date for ${toDisplayWeight(targetWeightLb).value} ${weightUnitLabel()} is around
             <strong>${earliestDate.toLocaleDateString()}</strong> (about ${Math.ceil(minWeeksNeeded)} weeks out).
             Try picking a later target date.</p>
         `;
@@ -5310,7 +5360,7 @@ function renderProfile() {
         <span class="badge">C ${carbsG}g</span>
         <span class="badge">F ${fatG}g</span>
       </div>
-      <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal · ${targetDateStr ? `Goal: ${goalModeLabel} (${Math.abs(weeklyRateLb).toFixed(2)} lb/week, ${Math.abs(weeklyRatePercent).toFixed(2)}% bodyweight/week)` : 'No target date set — maintenance-calorie estimate.'}${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
+      <p class="muted" style="margin-top:0.5rem;">BMR ${Math.round(bmr)} kcal · TDEE ${Math.round(tdee)} kcal · ${targetDateStr ? `Goal: ${goalModeLabel} (${toDisplayWeight(Math.abs(weeklyRateLb), 2).value} ${weightUnitLabel()}/week, ${Math.abs(weeklyRatePercent).toFixed(2)}% bodyweight/week)` : 'No target date set — maintenance-calorie estimate.'}${adjusted < safetyFloor ? ' · adjusted up to the safety floor' : ''}</p>
       <p class="muted">Healthy range: ${rangeLabel}. Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
       ${goalExplainerHtml(activity, goalMode)}
       <button class="btn btn-primary" id="calc_apply" style="margin-top:0.5rem;">Apply to My Goals</button>
@@ -5424,6 +5474,39 @@ function renderProfile() {
     if (error) { toast('Could not save preference: ' + error.message); return; }
     toast(e.target.checked ? 'Reminder emails on.' : 'Reminder emails off.');
     await loadProfile();
+  });
+
+  const setWeightUnit = async (unit) => {
+    if (weightUnitLabel() === unit) return;
+    const { error } = await supabase.from('profiles').upsert({ id: state.user.id, weight_unit: unit });
+    if (error) { toast('Could not save preference: ' + error.message); return; }
+    await loadProfile();
+    renderAll();
+  };
+  $('#unit_lb_btn')?.addEventListener('click', () => setWeightUnit('lb'));
+  $('#unit_kg_btn')?.addEventListener('click', () => setWeightUnit('kg'));
+
+  $('#export_data_btn')?.addEventListener('click', () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      lifts: state.lifts,
+      nutrition: state.historyLogs,
+      weight: state.weightLog,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `krafft-export-${localDateStr()}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  $('#leaderboard_opt_in_check')?.addEventListener('change', async (e) => {
+    const { error } = await supabase.from('profiles').upsert({ id: state.user.id, leaderboard_opt_in: e.target.checked });
+    if (error) { toast('Could not save preference: ' + error.message); return; }
+    toast(e.target.checked ? 'Showing you on the friend leaderboard.' : 'Hidden from the friend leaderboard.');
+    await Promise.all([loadProfile(), loadLeaderboard()]);
+    renderAll();
   });
 
   $('#signOutBtn')?.addEventListener('click', async () => {
@@ -5805,19 +5888,22 @@ const WARMUP_RAMP_STEPS = [
 ];
 function warmupRampFor(workingWeight) {
   if (!workingWeight || workingWeight <= 0) return [];
+  // Nearest 5 lb / 2.5 kg — a typical small-plate increment either way.
+  const roundTo = weightUnitLabel() === 'kg' ? 2.5 : 5;
   return WARMUP_RAMP_STEPS.map((step) => ({
     pct: Math.round(step.pct * 100),
-    weight: Math.max(5, Math.round((workingWeight * step.pct) / 5) * 5),
+    weight: Math.max(roundTo, Math.round((workingWeight * step.pct) / roundTo) * roundTo),
     reps: step.reps,
   }));
 }
 function warmupRampHtml(workingWeight) {
   const steps = warmupRampFor(workingWeight);
+  const unit = weightUnitLabel();
   if (!steps.length) return `<p class="muted small" style="margin:0;">Enter a working weight above first.</p>`;
   return `
     <ul class="cue-list" style="margin:0;">
-      ${steps.map((s) => `<li><strong>${s.pct}%:</strong> ${s.weight} lb × ${s.reps} rep${s.reps === 1 ? '' : 's'}</li>`).join('')}
-      <li><strong>100%:</strong> ${workingWeight} lb — your working sets (not warm-up)</li>
+      ${steps.map((s) => `<li><strong>${s.pct}%:</strong> ${s.weight} ${unit} × ${s.reps} rep${s.reps === 1 ? '' : 's'}</li>`).join('')}
+      <li><strong>100%:</strong> ${workingWeight} ${unit} — your working sets (not warm-up)</li>
     </ul>
     <p class="muted small" style="margin:0.4rem 0 0;">A general ramp-up pattern, not personalized — skip a step or two for lighter/isolation work, or adjust based on how you feel.</p>
   `;
@@ -5972,29 +6058,48 @@ function projectGoalDate(history, targetWeight) {
   return localDateStr(new Date(firstDate.getTime() + xTarget * 86400000));
 }
 
-// plate math — bar + plates needed per side for a given total weight
-const PLATE_DEFS = [
-  { lb: 45, color: 'var(--accent)', r: 46 },
-  { lb: 35, color: 'var(--text-dim)', r: 40 },
-  { lb: 25, color: 'var(--danger)', r: 35 },
-  { lb: 10, color: '#4A6FA5', r: 27 },
-  { lb: 5, color: 'var(--success)', r: 22 },
-  { lb: 2.5, color: '#8C8C8C', r: 17 },
+// plate math — bar + plates needed per side for a given total weight.
+// Real gyms load different plate denominations depending on unit (a kg gym
+// isn't just an lb gym with relabeled plates — 20kg bar, 25/20/15/10/5/2.5/
+// 1.25kg plates), so this picks a whole separate plate set per the weight
+// preference rather than converting lb plate sizes into odd kg fractions.
+const PLATE_DEFS_LB = [
+  { weight: 45, color: 'var(--accent)', r: 46 },
+  { weight: 35, color: 'var(--text-dim)', r: 40 },
+  { weight: 25, color: 'var(--danger)', r: 35 },
+  { weight: 10, color: '#4A6FA5', r: 27 },
+  { weight: 5, color: 'var(--success)', r: 22 },
+  { weight: 2.5, color: '#8C8C8C', r: 17 },
 ];
-function platesForWeight(totalLb, barLb = 45) {
-  let perSide = Math.max(0, (totalLb - barLb) / 2);
+const PLATE_DEFS_KG = [
+  { weight: 25, color: 'var(--accent)', r: 46 },
+  { weight: 20, color: 'var(--text-dim)', r: 40 },
+  { weight: 15, color: 'var(--danger)', r: 35 },
+  { weight: 10, color: '#4A6FA5', r: 27 },
+  { weight: 5, color: 'var(--success)', r: 22 },
+  { weight: 2.5, color: '#8C8C8C', r: 17 },
+  { weight: 1.25, color: '#6B5B95', r: 12 },
+];
+const STANDARD_BAR_WEIGHT = { lb: 45, kg: 20 };
+function platesForWeight(totalLb) {
+  const unit = weightUnitLabel();
+  const defs = unit === 'kg' ? PLATE_DEFS_KG : PLATE_DEFS_LB;
+  const bar = STANDARD_BAR_WEIGHT[unit];
+  let perSide = Math.max(0, (toDisplayWeight(totalLb).value - bar) / 2);
   const used = [];
-  for (const p of PLATE_DEFS) {
-    while (perSide >= p.lb - 0.001) {
+  for (const p of defs) {
+    while (perSide >= p.weight - 0.001) {
       used.push(p);
-      perSide -= p.lb;
+      perSide -= p.weight;
     }
   }
   return used;
 }
 
-function plateStackHtml(weight, barLb = 45) {
-  const plates = platesForWeight(weight, barLb);
+function plateStackHtml(weight) {
+  const unit = weightUnitLabel();
+  const bar = STANDARD_BAR_WEIGHT[unit];
+  const plates = platesForWeight(weight);
   const barY = 60;
   const platesSvg = plates.length === 0
     ? `<text x="160" y="${barY + 4}" text-anchor="middle" fill="var(--text-dim)" font-size="11" font-family="var(--font-mono)">bar only</text>`
@@ -6003,12 +6108,12 @@ function plateStackHtml(weight, barLb = 45) {
         return `<ellipse cx="${x}" cy="${barY}" rx="${p.r * 0.22}" ry="${p.r}" fill="${p.color}" stroke="var(--surface)" stroke-width="1.5"></ellipse>`;
       }).join('');
   const summary = plates.length === 0
-    ? `${barLb} lb bar`
+    ? `${bar} ${unit} bar`
     : plates.reduce((acc, p) => {
-        const found = acc.find((a) => a.lb === p.lb);
-        if (found) found.n++; else acc.push({ lb: p.lb, n: 1 });
+        const found = acc.find((a) => a.weight === p.weight);
+        if (found) found.n++; else acc.push({ weight: p.weight, n: 1 });
         return acc;
-      }, []).map((a) => `${a.n}×${a.lb}`).join('  ·  ');
+      }, []).map((a) => `${a.n}×${a.weight}`).join('  ·  ');
   return `<div class="plate-stack">
     <svg viewBox="0 0 320 140" class="plate-stack-svg">
       <rect x="10" y="${barY - 4}" width="300" height="8" rx="3" fill="var(--text-dim)"></rect>
@@ -6117,12 +6222,12 @@ function weightRepsComboChartSvg(history, weightLogEntries) {
     const top = repsBarTop(avgRepsArr[i]);
     const barH = Math.max((h - padBottom) - top, 0);
     const bw = bodyweightAsOf(l.date, weightLogEntries);
-    const title = `${fmtLiftDate(l.date)} — ${l.weight} lb, ${round(avgRepsArr[i], 1)} avg reps/set${bw ? ` (${(l.weight / bw.weight_lb).toFixed(2)}x bodyweight)` : ''}`;
+    const title = `${fmtLiftDate(l.date)} — ${toDisplayWeight(l.weight).value} ${weightUnitLabel()}, ${round(avgRepsArr[i], 1)} avg reps/set${bw ? ` (${(l.weight / bw.weight_lb).toFixed(2)}x bodyweight)` : ''}`;
     return `<rect x="${x + barW * 0.15}" y="${top}" width="${Math.max(barW * 0.7, 1)}" height="${barH}" fill="var(--success)" opacity="0.35" rx="2"><title>${esc(title)}</title></rect>`;
   }).join('');
 
   const linePts = history.map((l, i) => `${xAt(i)},${yWeight(l.weight)}`).join(' ');
-  const dots = history.map((l, i) => `<circle cx="${xAt(i)}" cy="${yWeight(l.weight)}" r="3" fill="var(--accent)"><title>${esc(fmtLiftDate(l.date))}: ${l.weight} lb</title></circle>`).join('');
+  const dots = history.map((l, i) => `<circle cx="${xAt(i)}" cy="${yWeight(l.weight)}" r="3" fill="var(--accent)"><title>${esc(fmtLiftDate(l.date))}: ${toDisplayWeight(l.weight).value} ${weightUnitLabel()}</title></circle>`).join('');
 
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
     ${bars}
@@ -6142,8 +6247,8 @@ function liveComparisonHtml(exercise, lifts) {
   const changeColor = totalChange > 0 ? 'var(--success)' : totalChange < 0 ? 'var(--danger)' : 'var(--text-dim)';
   return `<div class="live-comparison">
     <div class="live-comparison-head">
-      <div class="muted small">Last logged: <span class="mono" style="color:var(--text);">${last.weight}lb</span> on ${fmtLiftDate(last.date)}</div>
-      ${history.length > 1 ? `<div class="mono small" style="color:${changeColor};">${totalChange > 0 ? '+' : ''}${round(totalChange, 1)}lb (${totalPct > 0 ? '+' : ''}${totalPct}%) since ${fmtLiftDate(first.date)}</div>` : ''}
+      <div class="muted small">Last logged: <span class="mono" style="color:var(--text);">${toDisplayWeight(last.weight).value}${weightUnitLabel()}</span> on ${fmtLiftDate(last.date)}</div>
+      ${history.length > 1 ? `<div class="mono small" style="color:${changeColor};">${totalChange > 0 ? '+' : ''}${toDisplayWeight(totalChange, 1).value}${weightUnitLabel()} (${totalPct > 0 ? '+' : ''}${totalPct}%) since ${fmtLiftDate(first.date)}</div>` : ''}
     </div>
     ${history.length > 1 ? miniLineSvg(history.map((l) => l.weight)) : `<div class="muted small">Log one more session to start seeing a trend line here.</div>`}
   </div>`;
@@ -6154,7 +6259,7 @@ function prefillLiftFormFromLast(exercise) {
   if (history.length === 0) return;
   const last = history[0];
   const repsPerSet = last.reps_per_set && last.reps_per_set.length ? last.reps_per_set : Array(last.sets || 1).fill(last.reps);
-  liftForm.weight = String(last.weight);
+  liftForm.weight = String(toDisplayWeight(last.weight).value);
   liftForm.sets = repsPerSet.length;
   liftForm.repsPerSet = repsPerSet.map(String);
   // Warm-up status never carries over from a previous session's log —
@@ -6166,7 +6271,7 @@ function goalCardHtml(exercise, history, bestE1RM, goal) {
   if (goalCardEditing) {
     return `<div class="card">
       <h3>${goal ? 'Edit Goal' : 'Set a Goal'}</h3>
-      <div class="field"><input class="input mono" id="goal_weight" type="number" placeholder="Target weight (lb)" value="${goal ? goal.target_weight : ''}"></div>
+      <div class="field"><input class="input mono" id="goal_weight" type="number" placeholder="Target weight (${weightUnitLabel()})" value="${goal ? toDisplayWeight(goal.target_weight).value : ''}"></div>
       <div class="field"><input class="input" id="goal_date" type="date" value="${goal ? goal.target_date : ''}"></div>
       ${goalCardError ? `<div class="muted small" style="color:var(--danger);">${esc(goalCardError)}</div>` : ''}
       <div class="row" style="align-items:center;">
@@ -6192,9 +6297,9 @@ function goalCardHtml(exercise, history, bestE1RM, goal) {
       <h3>Goal</h3>
       <button class="btn btn-sm btn-ghost" id="goal_start">Edit</button>
     </div>
-    <p style="margin:0 0 0.5rem;"><span class="mono" style="color:var(--accent);">${goal.target_weight} lb</span> e1RM by ${fmtLiftDate(goal.target_date)}</p>
+    <p style="margin:0 0 0.5rem;"><span class="mono" style="color:var(--accent);">${toDisplayWeight(goal.target_weight).value} ${weightUnitLabel()}</span> e1RM by ${fmtLiftDate(goal.target_date)}</p>
     <div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${progress * 100}%;background:${achieved ? 'var(--success)' : 'var(--accent)'};"></div></div>
-    <p class="muted small">Current e1RM: <span class="mono" style="color:var(--text);">${bestE1RM || 0} lb</span> (${Math.round(progress * 100)}% of goal)</p>
+    <p class="muted small">Current e1RM: <span class="mono" style="color:var(--text);">${toDisplayWeight(bestE1RM || 0).value} ${weightUnitLabel()}</span> (${Math.round(progress * 100)}% of goal)</p>
     ${achieved ? `<p style="color:var(--success);margin:0;">🎉 Goal reached!</p>` :
       projectedDate ? `<p class="small" style="color:${onTrack ? 'var(--success)' : 'var(--text-dim)'};margin:0;">At your current rate of improvement, projected to hit this around <span style="color:var(--text);">${fmtLiftDate(projectedDate)}</span>${onTrack ? ' — on track!' : ' — behind your target date at this rate.'}</p>` :
       `<p class="muted small" style="margin:0;">Not enough of an upward trend in your history yet to project a date — keep logging sessions.</p>`}
@@ -6206,7 +6311,7 @@ function liftHistoryRowHtml(lift, isLast) {
     return `<div class="log-row"${isLast ? ' style="border-bottom:none;"' : ''}>
       <span class="muted">${fmtLiftDate(lift.date)}</span>
       <div class="btn-group">
-        <span class="mono">${lift.weight}lb · ${repsDisplay(lift)}</span>
+        <span class="mono">${toDisplayWeight(lift.weight).value}${weightUnitLabel()} · ${repsDisplay(lift)}</span>
         <button class="btn btn-sm btn-ghost" data-lift-edit="${lift.id}">Edit</button>
       </div>
     </div>`;
@@ -6214,7 +6319,7 @@ function liftHistoryRowHtml(lift, isLast) {
   const f = liftHistoryEditForm;
   return `<div style="padding:0.75rem;${isLast ? '' : 'border-bottom:1px solid var(--border);'}display:flex;flex-direction:column;gap:0.5rem;">
     <div class="row">
-      <input class="input mono" type="number" id="lhe_weight" value="${esc(f.weight)}" placeholder="Weight (lb)">
+      <input class="input mono" type="number" id="lhe_weight" value="${esc(f.weight)}" placeholder="Weight (${weightUnitLabel()})">
       <input class="input" type="date" id="lhe_date" value="${f.date}">
     </div>
     <div class="field" style="margin-bottom:0;"><label>Sets</label><input class="input mono" type="number" id="lhe_sets" value="${f.repsPerSet.length}" style="width:70px;"></div>
@@ -6675,20 +6780,21 @@ function buildSessionAnalysisDataSummary() {
   for (const [exercise, sets] of Object.entries(byExercise)) {
     const best = sets.reduce((max, l) => Math.max(max, l.weight), 0);
     const volume = sets.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
-    lines.push(`- ${exercise}: ${sets.length} set(s), best weight ${best}lb, session volume ${Math.round(volume)}lb`);
-    sets.forEach((l) => lines.push(`    ${l.weight}lb x ${repsDisplay(l)}`));
+    const unit = weightUnitLabel();
+    lines.push(`- ${exercise}: ${sets.length} set(s), best weight ${toDisplayWeight(best).value}${unit}, session volume ${toDisplayWeight(volume, 0).value}${unit}`);
+    sets.forEach((l) => lines.push(`    ${toDisplayWeight(l.weight).value}${unit} x ${repsDisplay(l)}`));
 
     const history = priorLifts.filter((l) => l.exercise === exercise).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
     if (history.length) {
       lines.push(`  Recent history for ${exercise} (most recent first):`);
-      history.forEach((l) => lines.push(`    ${l.date}: ${l.weight}lb x ${repsDisplay(l)}, estimated 1RM ~${e1RM(l.weight, l.reps)}lb`));
+      history.forEach((l) => lines.push(`    ${l.date}: ${toDisplayWeight(l.weight).value}${unit} x ${repsDisplay(l)}, estimated 1RM ~${toDisplayWeight(e1RM(l.weight, l.reps)).value}${unit}`));
       const combined = [...history, ...sets].sort((a, b) => a.date.localeCompare(b.date));
       lines.push(`  Plateau flag: ${detectPlateau(combined) ? 'yes — best estimated 1RM in the last 3 sessions has not beaten the prior best' : 'no'}`);
     } else {
       lines.push(`  No prior logged history for ${exercise}.`);
     }
     const prior = priorPRs[exercise];
-    lines.push(`  PR flag: ${!prior ? 'first time this exercise has been logged' : best > prior.weight ? `yes — new best, prior best was ${prior.weight}lb` : 'no'}`);
+    lines.push(`  PR flag: ${!prior ? 'first time this exercise has been logged' : best > prior.weight ? `yes — new best, prior best was ${toDisplayWeight(prior.weight).value}${unit}` : 'no'}`);
   }
 
   const yesterday = subtractDays(today, 1);
@@ -6809,8 +6915,8 @@ async function renderSessionTrendChart(exerciseName) {
     data: {
       labels: history.map((l) => fmtLiftDate(l.date)),
       datasets: [{
-        label: 'Estimated 1RM (lb)',
-        data: history.map((l) => e1RM(l.weight, l.reps)),
+        label: `Estimated 1RM (${weightUnitLabel()})`,
+        data: history.map((l) => toDisplayWeight(e1RM(l.weight, l.reps)).value),
         backgroundColor: history.map((l) => (l.date === today ? '#C6A15B' : 'rgba(198,161,91,0.35)')),
       }],
     },
@@ -6933,11 +7039,22 @@ function todaysLiftPanelHtml() {
       // higher than whatever it was before today.
       const cur = currentPRs[exercise];
       const isPR = !!cur && sets.some((l) => l.weight === cur.weight) && (!priorPRs[exercise] || cur.weight > priorPRs[exercise].weight);
+      // Optional per-exercise goal progress — same bestE1RM/target math as
+      // goalCardHtml() on the exercise detail page, just scoped to today's
+      // panel so the user sees it without drilling in.
+      const goal = state.exerciseGoals.find((g) => g.exercise === exercise);
+      const goalLine = (() => {
+        if (!goal) return '';
+        const allTimeBestE1RM = Math.max(...state.lifts.filter((l) => l.exercise === exercise).map((l) => e1RM(l.weight, l.reps)));
+        const pct = Math.min(100, Math.round((allTimeBestE1RM / goal.target_weight) * 100));
+        return `<div class="muted small">${toDisplayWeight(allTimeBestE1RM).value}/${toDisplayWeight(goal.target_weight).value} ${weightUnitLabel()} e1RM · ${pct}% to goal</div>`;
+      })();
       return `<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border);">
         <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;">
           <strong>${esc(exercise)}${isPR ? ' 🏆 PR' : ''}</strong>
-          <span class="muted small">${Math.round(volume).toLocaleString()} lb volume · e1RM ~${bestE1RMToday} lb</span>
+          <span class="muted small">${toDisplayWeight(volume, 0).value.toLocaleString()} ${weightUnitLabel()} volume · e1RM ~${toDisplayWeight(bestE1RMToday).value} ${weightUnitLabel()}</span>
         </div>
+        ${goalLine}
         ${sets.map((l, i) => liftHistoryRowHtml(l, i === sets.length - 1)).join('')}
       </div>`;
     }).join('')}
@@ -6957,7 +7074,7 @@ function wireTodaysLiftEditEvents(panel) {
     if (!lift) return;
     const repsPerSet = lift.reps_per_set && lift.reps_per_set.length ? lift.reps_per_set : [lift.reps];
     liftHistoryEditingId = lift.id;
-    liftHistoryEditForm = { weight: String(lift.weight), date: lift.date, repsPerSet: repsPerSet.map(String) };
+    liftHistoryEditForm = { weight: String(toDisplayWeight(lift.weight).value), date: lift.date, repsPerSet: repsPerSet.map(String) };
     liftHistoryError = '';
     liftHistoryConfirmDeleteId = null;
     renderLiftsTab();
@@ -6991,7 +7108,7 @@ function wireTodaysLiftEditEvents(panel) {
     liftHistoryError = '';
     renderLiftsTab();
     const { error } = await supabase.from('lifts').update({
-      weight: Number(liftHistoryEditForm.weight), sets: repsPerSet.length,
+      weight: fromDisplayWeight(liftHistoryEditForm.weight), sets: repsPerSet.length,
       reps_per_set: repsPerSet, reps, date: liftHistoryEditForm.date,
     }).eq('id', liftHistoryEditingId);
     liftHistorySaving = false;
@@ -7083,7 +7200,7 @@ function renderLiftLog(panel) {
       <div class="field" id="liftLiveComparison">${liveComparisonHtml(liftForm.exercise, lifts)}</div>
       ` : ''}
       <div class="row">
-        <div class="field"><label>Weight (lb)</label><input class="input mono" id="lift_weight" type="number" value="${esc(liftForm.weight)}"></div>
+        <div class="field"><label>Weight (${weightUnitLabel()})</label><input class="input mono" id="lift_weight" type="number" value="${esc(liftForm.weight)}"></div>
         <div class="field"><label>Sets</label><input class="input mono" id="lift_sets" type="number" min="1" max="20" value="${liftForm.sets}"></div>
       </div>
       <button type="button" class="btn btn-sm btn-ghost" id="warmupRampToggle" style="margin-bottom:0.75rem;">${showWarmupRamp ? 'Hide warm-up ramp' : 'Suggest a warm-up ramp'}</button>
@@ -7133,7 +7250,7 @@ function renderLiftLog(panel) {
             <div class="name">${esc(ex)}${isFocus ? `<span class="exercise-focus-tag">Today</span>` : ''}</div>
             <div class="macros">${mg ? `<span style="color:${MUSCLE_GROUP_COLORS[mg]};">${mg}</span>` : ''}${plateaued ? ' · <span style="color:var(--danger);">plateaued</span>' : ''}</div>
           </div>
-          <span class="mono" style="color:var(--accent);">${prs[ex] ? `${prs[ex].weight} lb PR` : ''}</span>
+          <span class="mono" style="color:var(--accent);">${prs[ex] ? `${toDisplayWeight(prs[ex].weight).value} ${weightUnitLabel()} PR` : ''}</span>
         </div>`).join('');
       })()}
     </div>` : ''}
@@ -7149,7 +7266,7 @@ function renderLiftLog(panel) {
       <div class="stat-grid-2">
         <div class="stat-card-sm">
           <h3>Bodyweight</h3>
-          <div class="stat-num">${latestBodyweightEntry(state.weightLog) ? round(latestBodyweightEntry(state.weightLog).weight_lb, 1) : '—'} <span class="muted small">lb</span></div>
+          <div class="stat-num">${latestBodyweightEntry(state.weightLog) ? toDisplayWeight(latestBodyweightEntry(state.weightLog).weight_lb, 1).value : '—'} <span class="muted small">${weightUnitLabel()}</span></div>
           <div class="muted small">${latestBodyweightEntry(state.weightLog) ? latestBodyweightEntry(state.weightLog).logged_date : 'no entries yet'}</div>
         </div>
         <div class="stat-card-sm">
@@ -7159,7 +7276,7 @@ function renderLiftLog(panel) {
         </div>
         <div class="stat-card-sm">
           <h3>Career Volume</h3>
-          <div class="stat-num">${Math.round(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)).toLocaleString()} <span class="muted small">lb</span></div>
+          <div class="stat-num">${toDisplayWeight(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0), 0).value.toLocaleString()} <span class="muted small">${weightUnitLabel()}</span></div>
           ${volumeFunFact(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)) ? `<div class="muted small" style="color:var(--accent);">${esc(volumeFunFact(lifts.reduce((sum, l) => sum + l.weight * totalReps(l), 0)))}</div>` : ''}
         </div>
       </div>
@@ -7176,7 +7293,7 @@ function renderLiftLog(panel) {
             return `
             <div class="card" style="min-width:150px;flex-shrink:0;margin-bottom:0;cursor:pointer;" data-pr-open="${esc(pr.exercise)}">
               <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin-bottom:0.25rem;">${esc(pr.exercise)}</div>
-              <div class="stat-num" style="font-size:1.2rem;">${pr.weight} <span class="muted small">lb</span></div>
+              <div class="stat-num" style="font-size:1.2rem;">${toDisplayWeight(pr.weight).value} <span class="muted small">${weightUnitLabel()}</span></div>
               <div class="muted small">${pr.date}</div>
               ${history.length > 1 ? `<div style="margin-top:0.35rem;">${miniLineSvg(history.map((l) => l.weight), 130, 32)}</div>` : ''}
             </div>`;
@@ -7194,7 +7311,7 @@ function renderLiftLog(panel) {
           ${recent.map((l) => `
             <div class="log-row">
               <span>${esc(l.exercise)}</span>
-              <span class="mono muted">${l.weight}lb · ${repsDisplay(l)} · ${l.date}</span>
+              <span class="mono muted">${toDisplayWeight(l.weight).value}${weightUnitLabel()} · ${repsDisplay(l)} · ${l.date}</span>
             </div>`).join('')}
         </div>
       </div>`;
@@ -7208,7 +7325,7 @@ function renderLiftLog(panel) {
   panel.innerHTML = `
     ${prBanner ? `
     <div class="card pr-banner">
-      <div class="small">🔥 New PR — <strong>${esc(prBanner.exercise)}</strong> at <span class="mono" style="color:var(--accent);">${prBanner.weight} lb</span> · +${prBanner.improvement} lb over your previous best</div>
+      <div class="small">🔥 New PR — <strong>${esc(prBanner.exercise)}</strong> at <span class="mono" style="color:var(--accent);">${toDisplayWeight(prBanner.weight).value} ${weightUnitLabel()}</span> · +${toDisplayWeight(prBanner.improvement, 1).value} ${weightUnitLabel()} over your previous best</div>
       <button class="btn btn-sm btn-ghost" id="prBannerDismiss">✕</button>
     </div>` : ''}
     ${cueCardBanner ? cueCardHtml(cueCardBanner) : ''}
@@ -7321,7 +7438,7 @@ async function addLiftFromForm() {
   const muscleGroup = liftForm.muscleGroup || exerciseDef?.muscle_group || DEFAULT_MUSCLE_GROUP[exercise] || 'Other';
   const bodyRegion = liftForm.bodyRegion || exerciseDef?.body_region || null;
   const reps = Math.round(avgReps(repsPerSet) * 10) / 10;
-  const weightNum = Number(liftForm.weight);
+  const weightNum = fromDisplayWeight(liftForm.weight);
   const priorBest = computeLiftPRs(state.lifts)[exercise];
 
   // Computed before the insert, against the lifts already loaded — first
@@ -7392,7 +7509,7 @@ function renderLiftDetail(panel) {
     </div>` : ''}
     ${bestE1RM > 0 ? `<div class="card">
       <h3>Estimated 1-Rep Max</h3>
-      <div class="stat-num">${bestE1RM} <span class="muted small">lb (Epley estimate)</span></div>
+      <div class="stat-num">${toDisplayWeight(bestE1RM).value} <span class="muted small">${weightUnitLabel()} (Epley estimate)</span></div>
       ${bestE1RMEntry.reps > 10 ? `<p class="muted small" style="margin-top:0.35rem;">Estimated from a ${bestE1RMEntry.reps}-rep set — 1RM estimates get less reliable above about 10 reps, so treat this as rough.</p>` : ''}
     </div>` : ''}
     ${strengthScore !== null ? `<div class="card">
@@ -7413,7 +7530,7 @@ function renderLiftDetail(panel) {
       <h3>Weight vs. reps over time</h3>
       ${weightRepsComboChartSvg(history, state.weightLog)}
       <div class="muted small" style="display:flex;gap:0.9rem;margin-top:0.4rem;">
-        <span style="color:var(--accent);">— weight (lb)</span>
+        <span style="color:var(--accent);">— weight (${weightUnitLabel()})</span>
         <span style="display:inline-flex;align-items:center;gap:0.25rem;"><span style="width:9px;height:9px;border-radius:2px;background:var(--success);opacity:0.5;display:inline-block;"></span>avg reps/set (hover a bar for details)</span>
       </div>
     </div>` : ''}
@@ -7436,7 +7553,7 @@ function wireLiftDetailEvents(panel, exercise, history, goal) {
     const lift = history.find((l) => l.id === btn.dataset.liftEdit);
     const repsPerSet = lift.reps_per_set && lift.reps_per_set.length ? lift.reps_per_set : [lift.reps];
     liftHistoryEditingId = lift.id;
-    liftHistoryEditForm = { weight: String(lift.weight), date: lift.date, repsPerSet: repsPerSet.map(String) };
+    liftHistoryEditForm = { weight: String(toDisplayWeight(lift.weight).value), date: lift.date, repsPerSet: repsPerSet.map(String) };
     liftHistoryError = '';
     liftHistoryConfirmDeleteId = null;
     renderLiftsTab();
@@ -7470,7 +7587,7 @@ function wireLiftDetailEvents(panel, exercise, history, goal) {
     liftHistoryError = '';
     renderLiftsTab();
     const { error } = await supabase.from('lifts').update({
-      weight: Number(liftHistoryEditForm.weight), sets: repsPerSet.length,
+      weight: fromDisplayWeight(liftHistoryEditForm.weight), sets: repsPerSet.length,
       reps_per_set: repsPerSet, reps, date: liftHistoryEditForm.date,
     }).eq('id', liftHistoryEditingId);
     liftHistorySaving = false;
@@ -7503,7 +7620,7 @@ function wireLiftDetailEvents(panel, exercise, history, goal) {
   if (goalCancelBtn) goalCancelBtn.addEventListener('click', () => { goalCardEditing = false; renderLiftsTab(); });
   const goalSaveBtn = $('#goal_save');
   if (goalSaveBtn) goalSaveBtn.addEventListener('click', async () => {
-    const weight = Number($('#goal_weight').value);
+    const weight = fromDisplayWeight($('#goal_weight').value);
     const target_date = $('#goal_date').value;
     if (!weight || !target_date) return;
     goalCardSaving = true;
@@ -8440,7 +8557,7 @@ function heatmapHtml(days) {
       ${week.map((day) => {
         if (!day) return `<div class="heatmap-cell heatmap-cell-empty"></div>`;
         const level = heatmapLevel(day.volume, thresholds);
-        const title = `${day.date}: ${day.volume ? Math.round(day.volume).toLocaleString() + ' lb' : 'no training'}`;
+        const title = `${day.date}: ${day.volume ? toDisplayWeight(day.volume, 0).value.toLocaleString() + ' ' + weightUnitLabel() : 'no training'}`;
         return `<div class="heatmap-cell" style="background:${HEATMAP_LEVELS[level]};" title="${esc(title)}" data-heatmap-date="${day.date}"></div>`;
       }).join('')}
     </div>`).join('');
@@ -8475,7 +8592,7 @@ function dailyVolumeBarSvg(chartData) {
     const barH = (d.volume / max) * (h - pad * 2);
     const x = pad + i * barW;
     const y = h - pad - barH;
-    return `<rect x="${x + barW * 0.15}" y="${y}" width="${Math.max(barW * 0.7, 1)}" height="${barH}" rx="2" fill="var(--accent)"><title>${esc(d.date)}: ${Math.round(d.volume).toLocaleString()} lb</title></rect>`;
+    return `<rect x="${x + barW * 0.15}" y="${y}" width="${Math.max(barW * 0.7, 1)}" height="${barH}" rx="2" fill="var(--accent)"><title>${esc(d.date)}: ${toDisplayWeight(d.volume, 0).value.toLocaleString()} ${weightUnitLabel()}</title></rect>`;
   }).join('');
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">${bars}</svg>`;
 }
@@ -8492,7 +8609,7 @@ function weeklyMuscleGroupBarSvg(weeklyData, activeMuscleGroups) {
       if (val <= 0) return '';
       const segH = (val / max) * (h - pad * 2);
       yCursor -= segH;
-      return `<rect x="${x + barW * 0.1}" y="${yCursor}" width="${Math.max(barW * 0.8, 1)}" height="${segH}" fill="${MUSCLE_GROUP_COLORS[mg]}"><title>${esc(wk.label)} — ${mg}: ${Math.round(val).toLocaleString()} lb</title></rect>`;
+      return `<rect x="${x + barW * 0.1}" y="${yCursor}" width="${Math.max(barW * 0.8, 1)}" height="${segH}" fill="${MUSCLE_GROUP_COLORS[mg]}"><title>${esc(wk.label)} — ${mg}: ${toDisplayWeight(val, 0).value.toLocaleString()} ${weightUnitLabel()}</title></rect>`;
     }).join('');
   }).join('');
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">${bars}</svg>`;
@@ -8562,9 +8679,9 @@ function renderDaysTab() {
           ${heatmapDayInfo.lifts.map((l) => `
             <div class="row" style="justify-content:space-between;">
               <span style="color:var(--accent);">${esc(l.exercise)}</span>
-              <span class="mono muted">${l.weight}lb · ${repsDisplay(l)}</span>
+              <span class="mono muted">${toDisplayWeight(l.weight).value}${weightUnitLabel()} · ${repsDisplay(l)}</span>
             </div>`).join('')}
-          <p class="muted small">Total volume: <span class="mono" style="color:var(--text);">${Math.round(heatmapDayInfo.volume).toLocaleString()} lb</span></p>
+          <p class="muted small">Total volume: <span class="mono" style="color:var(--text);">${toDisplayWeight(heatmapDayInfo.volume, 0).value.toLocaleString()} ${weightUnitLabel()}</span></p>
         ` : `<p class="muted small">No lifts logged this day.</p>`}
       </div>` : ''}
     </div>
@@ -8589,7 +8706,7 @@ function renderDaysTab() {
           <div class="day-card-head" data-day-toggle="${d.date}">
             <div>
               <div class="name">${fmtLiftDate(d.date)}</div>
-              <div class="muted small">${d.exerciseCount > 0 ? `${d.exerciseCount} exercise${d.exerciseCount === 1 ? '' : 's'}` : 'no lifts'}${d.bodyweight ? ` · ${d.bodyweight.weight_lb}lb bodyweight` : ''}${d.photos.length ? ` · ${d.photos.length} photo${d.photos.length === 1 ? '' : 's'}` : ''}</div>
+              <div class="muted small">${d.exerciseCount > 0 ? `${d.exerciseCount} exercise${d.exerciseCount === 1 ? '' : 's'}` : 'no lifts'}${d.bodyweight ? ` · ${toDisplayWeight(d.bodyweight.weight_lb).value}${weightUnitLabel()} bodyweight` : ''}${d.photos.length ? ` · ${d.photos.length} photo${d.photos.length === 1 ? '' : 's'}` : ''}</div>
             </div>
             <div class="btn-group">
               ${d.volume > 0 ? `<span class="mono" style="color:var(--accent);">${d.volume.toLocaleString()} vol</span>` : ''}
@@ -8601,17 +8718,17 @@ function renderDaysTab() {
             ${d.lifts.length ? groupLiftsForDisplay(d.lifts).map((item) => item.type === 'single' ? `
               <div class="day-lift-row" data-day-open-lift="${esc(item.lift.exercise)}">
                 <span style="color:var(--accent);">${esc(item.lift.exercise)}</span>
-                <span class="mono muted">${item.lift.weight}lb · ${repsDisplay(item.lift)}</span>
+                <span class="mono muted">${toDisplayWeight(item.lift.weight).value}${weightUnitLabel()} · ${repsDisplay(item.lift)}</span>
               </div>` : `
               <div class="superset-group">
                 <div class="superset-label">⚭ ${esc(item.name)}</div>
                 ${item.lifts.map((l) => `
                   <div class="day-lift-row" data-day-open-lift="${esc(l.exercise)}">
                     <span>${esc(l.exercise)}</span>
-                    <span class="mono muted">${l.weight}lb · ${repsDisplay(l)}</span>
+                    <span class="mono muted">${toDisplayWeight(l.weight).value}${weightUnitLabel()} · ${repsDisplay(l)}</span>
                   </div>`).join('')}
               </div>`).join('') : ''}
-            ${d.bodyweight ? `<div class="muted small day-extra-row">Bodyweight: <span class="mono" style="color:var(--text);">${d.bodyweight.weight_lb} lb</span></div>` : ''}
+            ${d.bodyweight ? `<div class="muted small day-extra-row">Bodyweight: <span class="mono" style="color:var(--text);">${toDisplayWeight(d.bodyweight.weight_lb).value} ${weightUnitLabel()}</span></div>` : ''}
             ${d.photos.length ? `<div class="day-photos-row">${d.photos.map((p) => `<img src="${p.signedUrl}" alt="${esc(p.note || 'progress')}" class="day-photo-thumb">`).join('')}</div>` : ''}
           </div>` : ''}
         </div>`;
@@ -8741,12 +8858,13 @@ function monthLabel(monthStr) {
 }
 
 function singleRecapHtml(recap) {
+  const unit = weightUnitLabel();
   const bwDelta = recap.bodyweight_start != null && recap.bodyweight_end != null
-    ? Math.round((recap.bodyweight_end - recap.bodyweight_start) * 10) / 10 : null;
+    ? toDisplayWeight(recap.bodyweight_end - recap.bodyweight_start, 1).value : null;
   return `
     <div class="hero-stat-card">
       <h3>Total Volume</h3>
-      <div class="stat-num">${Math.round(recap.total_volume).toLocaleString()} <span class="muted small">lb</span></div>
+      <div class="stat-num">${toDisplayWeight(recap.total_volume, 0).value.toLocaleString()} <span class="muted small">${unit}</span></div>
     </div>
     <div class="stat-grid-2">
       <div class="stat-card-sm">
@@ -8756,23 +8874,23 @@ function singleRecapHtml(recap) {
       <div class="stat-card-sm">
         <h3>Most Trained</h3>
         <div style="font-weight:600;color:${recap.most_trained_muscle_group ? MUSCLE_GROUP_COLORS[recap.most_trained_muscle_group] : 'var(--text-dim)'};">${recap.most_trained_muscle_group || '—'}</div>
-        ${recap.most_trained_muscle_group_volume != null ? `<div class="muted small">${Math.round(recap.most_trained_muscle_group_volume).toLocaleString()} lb volume</div>` : ''}
+        ${recap.most_trained_muscle_group_volume != null ? `<div class="muted small">${toDisplayWeight(recap.most_trained_muscle_group_volume, 0).value.toLocaleString()} ${unit} volume</div>` : ''}
       </div>
     </div>
     <div class="card">
       <h3>Biggest PR</h3>
       ${recap.biggest_pr_exercise ? `
         <div style="font-weight:600;color:var(--accent);">🔥 ${esc(recap.biggest_pr_exercise)}</div>
-        <div class="stat-num" style="font-size:1.3rem;margin-top:0.15rem;">${recap.biggest_pr_weight} <span class="muted small">lb</span></div>
-        <div class="small" style="color:var(--success);margin-top:0.15rem;">+${recap.biggest_pr_improvement} lb over prior best</div>
+        <div class="stat-num" style="font-size:1.3rem;margin-top:0.15rem;">${toDisplayWeight(recap.biggest_pr_weight).value} <span class="muted small">${unit}</span></div>
+        <div class="small" style="color:var(--success);margin-top:0.15rem;">+${toDisplayWeight(recap.biggest_pr_improvement, 1).value} ${unit} over prior best</div>
       ` : `<p class="muted small">No new PRs this month.</p>`}
     </div>
     <div class="card">
       <h3>Bodyweight Change</h3>
       ${recap.bodyweight_start != null && recap.bodyweight_end != null ? `
         <div class="row" style="align-items:baseline;gap:0.5rem;">
-          <span class="mono" style="font-size:1.2rem;">${recap.bodyweight_start} → ${recap.bodyweight_end} <span class="muted small">lb</span></span>
-          <span class="small" style="color:${bwDelta > 0 ? 'var(--success)' : bwDelta < 0 ? 'var(--danger)' : 'var(--text-dim)'};">(${bwDelta > 0 ? '+' : ''}${bwDelta} lb)</span>
+          <span class="mono" style="font-size:1.2rem;">${toDisplayWeight(recap.bodyweight_start, 1).value} → ${toDisplayWeight(recap.bodyweight_end, 1).value} <span class="muted small">${unit}</span></span>
+          <span class="small" style="color:${bwDelta > 0 ? 'var(--success)' : bwDelta < 0 ? 'var(--danger)' : 'var(--text-dim)'};">(${bwDelta > 0 ? '+' : ''}${bwDelta} ${unit})</span>
         </div>
       ` : `<p class="muted small">Not enough bodyweight data for this month.</p>`}
     </div>
@@ -8807,14 +8925,15 @@ function compareFactRowHtml(label, contentA, contentB) {
 }
 
 function compareRecapHtml(a, b) {
-  const bwChange = (r) => (r.bodyweight_start != null && r.bodyweight_end != null ? `${r.bodyweight_start} → ${r.bodyweight_end} lb` : null);
+  const unit = weightUnitLabel();
+  const bwChange = (r) => (r.bodyweight_start != null && r.bodyweight_end != null ? `${toDisplayWeight(r.bodyweight_start, 1).value} → ${toDisplayWeight(r.bodyweight_end, 1).value} ${unit}` : null);
   return `
     <div class="card" style="padding:0 0.9rem;">
-      ${compareMetricRowHtml('Total Volume (lb)', a.total_volume, b.total_volume)}
+      ${compareMetricRowHtml(`Total Volume (${unit})`, toDisplayWeight(a.total_volume, 0).value, toDisplayWeight(b.total_volume, 0).value)}
       ${compareMetricRowHtml('Training Days', a.training_days, b.training_days)}
       ${compareFactRowHtml('Biggest PR',
-        a.biggest_pr_exercise ? `<span style="color:var(--accent);">${esc(a.biggest_pr_exercise)}</span><br><span class="mono muted">${a.biggest_pr_weight} lb</span>` : `<span class="muted">None</span>`,
-        b.biggest_pr_exercise ? `<span style="color:var(--accent);">${esc(b.biggest_pr_exercise)}</span><br><span class="mono muted">${b.biggest_pr_weight} lb</span>` : `<span class="muted">None</span>`
+        a.biggest_pr_exercise ? `<span style="color:var(--accent);">${esc(a.biggest_pr_exercise)}</span><br><span class="mono muted">${toDisplayWeight(a.biggest_pr_weight).value} ${unit}</span>` : `<span class="muted">None</span>`,
+        b.biggest_pr_exercise ? `<span style="color:var(--accent);">${esc(b.biggest_pr_exercise)}</span><br><span class="mono muted">${toDisplayWeight(b.biggest_pr_weight).value} ${unit}</span>` : `<span class="muted">None</span>`
       )}
       ${compareFactRowHtml('Most Trained Muscle Group',
         `<span style="color:${a.most_trained_muscle_group ? MUSCLE_GROUP_COLORS[a.most_trained_muscle_group] : 'var(--text-dim)'};">${a.most_trained_muscle_group || '—'}</span>`,
@@ -8991,7 +9110,7 @@ function strengthRatiosHtml(lifts) {
     return `<div class="ratio-row">
       <div class="ratio-label">${esc(r.exerciseA)} : ${esc(r.exerciseB)}</div>
       <div class="row" style="align-items:baseline;gap:0.5rem;">
-        <span class="mono">${r.weightA} lb : ${r.weightB} lb</span>
+        <span class="mono">${toDisplayWeight(r.weightA).value} ${weightUnitLabel()} : ${toDisplayWeight(r.weightB).value} ${weightUnitLabel()}</span>
         <span class="mono small" style="color:${statusColor};">${r.ratio.toFixed(2)}x · ${statusLabel}</span>
       </div>
       <p class="muted small">${esc(r.note)}</p>
@@ -9029,10 +9148,11 @@ function progressLeaderboardHtml(lifts) {
       const color = r.lbPerWeek > 0.05 ? 'var(--success)' : r.lbPerWeek < -0.05 ? 'var(--danger)' : 'var(--text-dim)';
       const history = lifts.filter((l) => l.exercise === r.exercise).sort((a, b) => a.date.localeCompare(b.date));
       const e1rms = history.map((l) => e1RM(l.weight, l.reps));
+      const displayRate = toDisplayWeight(r.lbPerWeek, 2).value;
       return `<div class="leaderboard-row" data-insight-open="${esc(r.exercise)}">
         <span>${esc(r.exercise)}</span>
         ${e1rms.length > 1 ? `<span class="leaderboard-spark">${miniLineSvg(e1rms, 70, 22)}</span>` : ''}
-        <span class="mono small" style="color:${color};">${r.lbPerWeek > 0 ? '+' : ''}${r.lbPerWeek.toFixed(2)} lb e1RM/wk</span>
+        <span class="mono small" style="color:${color};">${displayRate > 0 ? '+' : ''}${displayRate} ${weightUnitLabel()} e1RM/wk</span>
       </div>`;
     }).join('')}
   </div>`;
@@ -9161,7 +9281,7 @@ function goalsOverviewHtml(lifts, exerciseGoals) {
     return `<div class="goal-overview-row" data-insight-open="${esc(g.exercise)}">
       <div class="row" style="justify-content:space-between;">
         <strong>${esc(g.exercise)}</strong>
-        <span class="mono small">${bestE1RM || 0} / ${g.target_weight} lb</span>
+        <span class="mono small">${toDisplayWeight(bestE1RM || 0).value} / ${toDisplayWeight(g.target_weight).value} ${weightUnitLabel()}</span>
       </div>
       <div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${progress * 100}%;background:${achieved ? 'var(--success)' : 'var(--accent)'};"></div></div>
     </div>`;
@@ -9227,7 +9347,7 @@ function correlationChartSvg(data) {
   const bars = data.map((d, i) => {
     const x = pad + i * barW;
     const top = yVolTop(d.volume);
-    return `<rect x="${x + barW * 0.15}" y="${top}" width="${Math.max(barW * 0.7, 1)}" height="${Math.max((h - pad) - top, 0)}" fill="var(--accent)" opacity="0.3" rx="2"><title>Week of ${fmtLiftDate(d.week)}: ${Math.round(d.volume).toLocaleString()} lb volume</title></rect>`;
+    return `<rect x="${x + barW * 0.15}" y="${top}" width="${Math.max(barW * 0.7, 1)}" height="${Math.max((h - pad) - top, 0)}" fill="var(--accent)" opacity="0.3" rx="2"><title>Week of ${fmtLiftDate(d.week)}: ${toDisplayWeight(d.volume, 0).value.toLocaleString()} ${weightUnitLabel()} volume</title></rect>`;
   }).join('');
 
   const proteinPoints = data.filter((d) => d.proteinPct != null);
@@ -9263,7 +9383,7 @@ function friendsLeaderboardHtml() {
     ${state.leaderboard.map((e, i) => `
       <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border-radius:8px;background:${e.isSelf ? 'var(--surface-2)' : 'transparent'};">
         <span>${i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}${esc(e.displayName)}${e.isSelf ? ' (you)' : ''}</span>
-        <span class="mono muted small">${e.streak}d streak · ${e.exercisesTracked} exercises · ${e.careerVolume.toLocaleString()} lb</span>
+        <span class="mono muted small">${e.streak}d streak · ${e.exercisesTracked} exercises · ${toDisplayWeight(e.careerVolume, 0).value.toLocaleString()} ${weightUnitLabel()}</span>
       </div>`).join('')}
   </div>`;
 }

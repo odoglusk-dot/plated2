@@ -84,14 +84,19 @@ exports.handler = withErrorReporting(async (event) => {
     );
     const outgoing = outgoingRes.ok ? await outgoingRes.json() : [];
 
-    const leaderboardUserIds = [auth.user.id, ...friendIds];
-    const allNamedIds = [...leaderboardUserIds, ...incoming.map((r) => r.requester_id)];
+    const candidateIds = [auth.user.id, ...friendIds];
+    const allNamedIds = [...candidateIds, ...incoming.map((r) => r.requester_id)];
     const profilesRes = await fetch(
-      `${base}/rest/v1/profiles?id=in.(${allNamedIds.join(',')})&select=id,display_name`,
+      `${base}/rest/v1/profiles?id=in.(${allNamedIds.join(',')})&select=id,display_name,leaderboard_opt_in`,
       { headers: serviceHeaders }
     );
     const profiles = profilesRes.ok ? await profilesRes.json() : [];
     const nameById = Object.fromEntries(profiles.map((p) => [p.id, p.display_name || 'Athlete']));
+    // Opting out removes a user from the leaderboard entirely, including
+    // their own view of it — defaults to true (opted in) so an existing
+    // profile row created before this column existed still shows up.
+    const optedInById = Object.fromEntries(profiles.map((p) => [p.id, p.leaderboard_opt_in !== false]));
+    const leaderboardUserIds = candidateIds.filter((id) => optedInById[id]);
 
     const incomingRequests = incoming.map((r) => ({ id: r.id, requesterId: r.requester_id, displayName: nameById[r.requester_id] || 'Athlete' }));
 

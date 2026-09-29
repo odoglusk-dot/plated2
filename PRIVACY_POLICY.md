@@ -1,6 +1,6 @@
 # Privacy Policy — Krafft
 
-**Last updated:** 2026-09-23
+**Last updated:** 2026-09-29
 
 *This is a starting draft, not legal advice. Have a lawyer review it —
 especially the children's-privacy section — before you let strangers sign
@@ -15,13 +15,15 @@ up.*
   power the goal calculator and are entirely optional beyond what's needed
   for core tracking.
 - **AI-related content**: text descriptions and photos you submit for macro
-  estimation, and questions you ask Ask AI, are sent to Anthropic's API (via
-  our server, never directly from your browser) to generate a response. We
-  don't use this content to train models, and Anthropic's own data-handling
-  terms govern how they process an API request (see anthropic.com's privacy
-  policy for their side of this). These features require an active
-  subscription; if you're on the free tier, nothing you log is ever sent to
-  Anthropic.
+  estimation, questions you ask Ask AI, and — after you end a workout — a
+  summary of that session's lifts plus light recent nutrition context (used
+  to generate your post-workout Session Analysis, including PR and plateau
+  callouts) are sent to Anthropic's API (via our server, never directly from
+  your browser) to generate a response. We don't use this content to train
+  models, and Anthropic's own data-handling terms govern how they process an
+  API request (see anthropic.com's privacy policy for their side of this).
+  These features require an active subscription; if you're on the free
+  tier, nothing you log is ever sent to Anthropic.
 - **Basic usage counters**: a per-day count of AI calls per account, used
   only to enforce the daily free-usage limit.
 - **Referral and friend codes**: your referral code, and — if you choose to
