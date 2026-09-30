@@ -6130,6 +6130,10 @@ function plateStackHtml(weight) {
 // state lives in module-level variables and every mutation re-renders the
 // whole panel from state, same as every other tab in this file.
 let liftsSelectedExercise = null;
+// Which exercises in the "Exercises" list (Lifts > Log) are inline-expanded
+// — starts empty (everything collapsed on load), multiple can be open at
+// once, same Set-based convention as expandedHistoryDays.
+let expandedLiftExercises = new Set();
 let liftForm = {
   exercise: '', muscleGroup: '', bodyRegion: '', weight: '', sets: 3,
   repsPerSet: ['5', '5', '5'], warmupPerSet: [false, false, false],
@@ -7244,14 +7248,32 @@ function renderLiftLog(panel) {
           return { ex, hist, plateaued, mg, isFocus };
         });
         if (todayFocusGroups.length) rows.sort((a, b) => (b.isFocus - a.isFocus));
-        return rows.map(({ ex, plateaued, mg, isFocus }) => `
-        <div class="log-row" style="cursor:pointer;" data-lift-exercise="${esc(ex)}">
-          <div>
-            <div class="name">${esc(ex)}${isFocus ? `<span class="exercise-focus-tag">Today</span>` : ''}</div>
-            <div class="macros">${mg ? `<span style="color:${MUSCLE_GROUP_COLORS[mg]};">${mg}</span>` : ''}${plateaued ? ' · <span style="color:var(--danger);">plateaued</span>' : ''}</div>
+        return rows.map(({ ex, hist, plateaued, mg, isFocus }) => {
+          const isExpanded = expandedLiftExercises.has(ex);
+          const recent = [...hist].reverse().slice(0, 5);
+          const e1rms = hist.map((l) => e1RM(l.weight, l.reps));
+          return `
+        <div class="history-day">
+          <button class="history-day-header" data-exercise-toggle="${esc(ex)}" aria-expanded="${isExpanded}">
+            <span class="chevron ${isExpanded ? 'expanded' : ''}">▸</span>
+            <div style="flex:1;">
+              <div class="name">${esc(ex)}${isFocus ? `<span class="exercise-focus-tag">Today</span>` : ''}</div>
+              <div class="macros">${mg ? `<span style="color:${MUSCLE_GROUP_COLORS[mg]};">${mg}</span>` : ''}${plateaued ? ' · <span style="color:var(--danger);">plateaued</span>' : ''}</div>
+            </div>
+            <span class="mono" style="color:var(--accent);">${prs[ex] ? `${toDisplayWeight(prs[ex].weight).value} ${weightUnitLabel()} PR` : ''}</span>
+          </button>
+          <div class="history-day-body" data-exercise-body="${esc(ex)}">
+            <div class="history-day-body-inner">
+              ${recent.map((l) => `<div class="log-row" style="padding:0.3rem 0;"><span class="muted small">${fmtLiftDate(l.date)}</span><span class="mono muted small">${toDisplayWeight(l.weight).value}${weightUnitLabel()} · ${repsDisplay(l)}</span></div>`).join('')}
+              ${e1rms.length > 1 ? `<div style="margin:0.4rem 0;">${miniLineSvg(e1rms, 260, 40)}</div>` : ''}
+              <div class="row" style="margin-top:0.4rem;">
+                <button class="btn btn-sm btn-ghost" data-lift-exercise-cue="${esc(ex)}">View cue card</button>
+                <button class="btn btn-sm btn-ghost" data-lift-exercise-open="${esc(ex)}">View full exercise page →</button>
+              </div>
+            </div>
           </div>
-          <span class="mono" style="color:var(--accent);">${prs[ex] ? `${toDisplayWeight(prs[ex].weight).value} ${weightUnitLabel()} PR` : ''}</span>
-        </div>`).join('');
+        </div>`;
+        }).join('');
       })()}
     </div>` : ''}
     ${suggestedExercisesHtml(exercises)}
@@ -7402,6 +7424,46 @@ function renderLiftLog(panel) {
   wireTodaysLiftEditEvents(panel);
   wireSessionAnalysisEvents(panel);
   $('#openGlossaryBtn')?.addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); });
+
+  // Exercises list accordion — mutate the existing DOM nodes directly
+  // (same technique as the History tab's day accordion) so the max-height
+  // transition can animate; a full re-render would destroy the node
+  // mid-transition and just snap.
+  $$('[data-exercise-body]', panel).forEach((body) => {
+    if (expandedLiftExercises.has(body.dataset.exerciseBody)) body.style.maxHeight = '2000px';
+  });
+  $$('[data-exercise-toggle]', panel).forEach((header) => {
+    header.addEventListener('click', () => {
+      const ex = header.dataset.exerciseToggle;
+      const body = header.parentElement.querySelector('[data-exercise-body]');
+      const chevron = header.querySelector('.chevron');
+      if (expandedLiftExercises.has(ex)) {
+        expandedLiftExercises.delete(ex);
+        body.style.maxHeight = '0px';
+        chevron.classList.remove('expanded');
+        header.setAttribute('aria-expanded', 'false');
+      } else {
+        expandedLiftExercises.add(ex);
+        body.style.maxHeight = body.scrollHeight + 'px';
+        chevron.classList.add('expanded');
+        header.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+  $$('[data-lift-exercise-open]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    liftsSelectedExercise = btn.dataset.liftExerciseOpen;
+    liftHistoryEditingId = null;
+    goalCardEditing = false;
+    renderLiftsTab();
+  }));
+  $$('[data-lift-exercise-cue]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const name = btn.dataset.liftExerciseCue;
+    glossaryFilter = { search: '', muscleGroup: '' };
+    glossaryExpandedName = name;
+    recordGlossaryView(name);
+    showExerciseGlossary = true;
+    renderLiftsTab();
+  }));
   const staleStillTraining = $('#staleStillTrainingBtn');
   if (staleStillTraining) staleStillTraining.addEventListener('click', () => { staleSessionPromptDismissed = true; renderLiftsTab(); });
   const staleEndWorkout = $('#staleEndWorkoutBtn');
@@ -7415,13 +7477,6 @@ function renderLiftLog(panel) {
     renderLiftsTab();
   }));
   $('#lift_save')?.addEventListener('click', addLiftFromForm);
-
-  $$('[data-lift-exercise]', panel).forEach((row) => row.addEventListener('click', () => {
-    liftsSelectedExercise = row.dataset.liftExercise;
-    liftHistoryEditingId = null;
-    goalCardEditing = false;
-    renderLiftsTab();
-  }));
 }
 
 // Days since a exercise was last logged before it counts as "a long gap" —
@@ -8011,6 +8066,57 @@ function blockExerciseEntry(ex, muscleKey, role, focus) {
   return { name: ex.name, muscle: muscleKey, sets, reps, tags, reason };
 }
 
+// ── Manual per-instance block edits (substitute/add/remove/sets-reps) ───
+// One-off adjustments to the current plan only — never touches
+// generateBlock()/blockExercisePool() or how future blocks get generated.
+// active_training_block is always read/written as one whole jsonb object
+// (see wireBlockBuilderStep3's Start handler), so an edit just mutates a
+// local copy of that same shape and saves it through the identical call.
+
+// A substitute keeps the original entry's sets/reps (a swap shouldn't
+// silently change programmed volume) but recomputes tags/reason for the
+// new exercise, mirroring blockExerciseEntry()'s own logic.
+function blockSubstituteEntry(oldEntry, newEx, block) {
+  const muscleKey = oldEntry.muscle;
+  const isPriority = (block.priorities || []).includes(muscleKey);
+  const tags = [];
+  if (isPriority) tags.push(`Priority: ${MUSCLE_MAP_KEY_LABELS[muscleKey]}`);
+  if (newEx.lengthened_bias) tags.push('Lengthened bias · emerging evidence');
+  const reason = isPriority
+    ? `Extra volume for ${MUSCLE_MAP_KEY_LABELS[muscleKey]}, since you flagged it as a priority area.`
+    : newEx.movement_type === 'compound'
+    ? `Primary compound movement for ${MUSCLE_MAP_KEY_LABELS[muscleKey]}.`
+    : `Accessory work for ${MUSCLE_MAP_KEY_LABELS[muscleKey]}.`;
+  return { name: newEx.name, muscle: muscleKey, sets: oldEntry.sets, reps: oldEntry.reps, tags, reason };
+}
+
+// A manual addition has no rule-engine "why" — the user picked it
+// directly, not the generator — so tags/reason stay empty (reason simply
+// isn't rendered when blank, see blockDayCardHtml).
+function blockManualAddEntry(newEx, block) {
+  const scheme = BLOCK_SCHEME[block.focus] || BLOCK_SCHEME.hypertrophy;
+  return { name: newEx.name, muscle: newEx.muscle_map_key || null, sets: scheme.accessorySets, reps: scheme.accessoryReps, tags: [], reason: '' };
+}
+
+function withUpdatedBlockDay(block, dayIndex, newExercises) {
+  const blockDays = block.blockDays.map((d, i) => (i === dayIndex ? { ...d, exercises: newExercises } : d));
+  return { ...block, blockDays };
+}
+
+// Pre-Start, edits only ever touch the in-memory preview (matches how
+// picking exercises during generation already works — nothing is saved
+// until Start). Once a block is active, every edit saves immediately
+// through the same whole-object update() the Start button itself uses.
+async function persistActiveBlockEdit(updatedBlock) {
+  if (blockBuilderViewingActive) {
+    const { error } = await supabase.from('profiles').update({ active_training_block: updatedBlock }).eq('id', state.user.id);
+    if (error) { toast('Could not save change: ' + error.message); return false; }
+    state.profile = { ...state.profile, active_training_block: updatedBlock };
+  }
+  blockBuilderPreview = updatedBlock;
+  return true;
+}
+
 function generateBlock({ focus, priorities, days, equipment, avoid }) {
   const filters = { equipment, avoid };
   const template = blockSplitTemplate(days);
@@ -8074,6 +8180,14 @@ let blockBuilderPreview = null;
 let blockBuilderExpandedDayIndex = 0;
 let blockBuilderViewingActive = false;
 let blockBuilderStarting = false;
+// Manual per-instance overrides UI state (substitute/add/remove exercise,
+// edit sets/reps) — a one-off adjustment to the current plan, never the
+// rule engine. Keyed by "dayIndex:exerciseIndex" so each lives independent
+// of which day is currently expanded.
+let blockSwapPickerFor = null; // "dayIndex:exIndex" | null
+let blockExerciseRemoveConfirm = null; // "dayIndex:exIndex" | null
+let blockAddPickerForDay = null; // dayIndex | null
+let blockPickerSearch = '';
 
 function resetBlockBuilderState() {
   blockBuilderStep = 1;
@@ -8085,6 +8199,10 @@ function resetBlockBuilderState() {
   blockBuilderPreview = null;
   blockBuilderExpandedDayIndex = 0;
   blockBuilderViewingActive = false;
+  blockSwapPickerFor = null;
+  blockExerciseRemoveConfirm = null;
+  blockAddPickerForDay = null;
+  blockPickerSearch = '';
 }
 
 function blockBuilderProgressHtml(step) {
@@ -8256,6 +8374,17 @@ function wireBlockBuilderStep2(panel) {
   });
 }
 
+// Read-only list of candidate exercises for either picker (swap or add) —
+// the container carries data-block-add-results/data-exercise-name so
+// callers can patch just this list's innerHTML (e.g. on search input)
+// without destroying the input field mid-typing.
+function blockPickerResultsHtml(candidates) {
+  if (!candidates.length) return `<p class="muted small" style="margin:0.4rem 0 0;">No matching exercises found.</p>`;
+  return candidates.map((e) => `<div class="log-row" style="cursor:pointer;" data-exercise-name="${esc(e.name)}">
+    <div><div class="name">${esc(e.name)}</div><div class="macros">${esc(e.equipment)}${e.movement_type ? ' · ' + esc(e.movement_type) : ''}</div></div>
+  </div>`).join('');
+}
+
 function blockDayCardHtml(day, index, isExpanded) {
   if (!isExpanded) {
     return `<div class="card" data-block-day-toggle="${index}" style="cursor:pointer;margin-bottom:0.6rem;">
@@ -8265,18 +8394,172 @@ function blockDayCardHtml(day, index, isExpanded) {
       </div>
     </div>`;
   }
+  const block = blockBuilderPreview;
   return `<div class="card" data-block-day-toggle="${index}" style="cursor:pointer;margin-bottom:0.6rem;">
     <strong>${esc(day.label)}</strong>
-    ${day.exercises.length ? day.exercises.map((ex) => `
+    <div data-block-exercises-zone="${index}">
+    ${day.exercises.length ? day.exercises.map((ex, exIndex) => {
+      const key = `${index}:${exIndex}`;
+      if (blockExerciseRemoveConfirm === key) {
+        return `<div style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <span class="muted small">Remove "${esc(ex.name)}"?</span>
+          <div class="row">
+            <button class="btn btn-sm" data-block-ex-remove-confirm="${key}" style="background:var(--danger);color:#FFFFFF;">Remove</button>
+            <button class="btn btn-sm btn-ghost" data-block-ex-remove-cancel="${key}">Cancel</button>
+          </div>
+        </div>`;
+      }
+      if (blockSwapPickerFor === key) {
+        const usedNames = new Set(day.exercises.filter((_, i) => i !== exIndex).map((e) => e.name));
+        const candidates = blockExercisePool(ex.muscle, block.focus, usedNames, { equipment: block.equipment, avoid: block.avoid });
+        return `<div style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid var(--border);">
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <strong class="small">Swap "${esc(ex.name)}" for…</strong>
+            <button class="btn btn-sm btn-ghost" data-block-ex-swap-cancel="${key}">Cancel</button>
+          </div>
+          <div data-block-ex-swap-pick="${key}" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-top:0.4rem;">${blockPickerResultsHtml(candidates)}</div>
+        </div>`;
+      }
+      return `
       <div style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid var(--border);">
-        <div class="row" style="justify-content:space-between;align-items:center;">
+        <div class="row" style="justify-content:space-between;align-items:center;cursor:pointer;" data-block-ex-substitute="${key}">
           <span>${esc(ex.name)}</span>
-          <span class="mono" style="color:var(--accent);">${ex.sets} x ${esc(ex.reps)}</span>
+          <span class="muted small">Tap to swap ▸</span>
+        </div>
+        <div class="row" style="align-items:center;margin-top:0.35rem;gap:0.4rem;">
+          <input class="input mono" type="number" min="1" value="${ex.sets}" data-block-ex-sets="${key}" style="width:52px;padding:0.3rem;">
+          <span class="muted small">sets ×</span>
+          <input class="input mono" value="${esc(ex.reps)}" data-block-ex-reps="${key}" style="width:64px;padding:0.3rem;">
+          <span class="muted small">reps</span>
+          <button class="btn btn-sm btn-ghost" data-block-ex-remove="${key}" aria-label="Remove ${esc(ex.name)}" style="margin-left:auto;">✕</button>
         </div>
         ${ex.tags.length ? `<div class="chip-row" style="margin-top:0.3rem;">${ex.tags.map((t) => `<span class="muted small" style="border:1px solid var(--border);border-radius:999px;padding:0.15rem 0.5rem;">${esc(t)}</span>`).join('')}</div>` : ''}
-        <p class="muted small" style="margin:0.3rem 0 0;font-style:italic;">${esc(ex.reason)}</p>
-      </div>`).join('') : `<p class="muted small" style="margin-top:0.5rem;">No exercises matched your filters for this day — try loosening equipment or avoid options.</p>`}
+        ${ex.reason ? `<p class="muted small" style="margin:0.3rem 0 0;font-style:italic;">${esc(ex.reason)}</p>` : ''}
+      </div>`;
+    }).join('') : `<p class="muted small" style="margin-top:0.5rem;">No exercises matched your filters for this day — try loosening equipment or avoid options.</p>`}
+    ${blockAddPickerForDay === index ? `
+    <div style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid var(--border);">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong class="small">Add an exercise</strong>
+        <button class="btn btn-sm btn-ghost" data-block-add-cancel="${index}">Cancel</button>
+      </div>
+      <input class="input" placeholder="Search exercises…" value="${esc(blockPickerSearch)}" data-block-add-search="${index}" style="margin-top:0.4rem;">
+      <div data-block-add-results="${index}" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-top:0.4rem;">${blockPickerResultsHtml(state.exercises.filter((e) => !day.exercises.some((d) => d.name === e.name) && (!blockPickerSearch.trim() || e.name.toLowerCase().includes(blockPickerSearch.trim().toLowerCase()))).slice(0, 30))}</div>
+    </div>` : `<button class="btn btn-sm btn-ghost" data-block-day-add="${index}" style="margin-top:0.6rem;">+ Add Exercise</button>`}
+    </div>
   </div>`;
+}
+
+// Wires every manual-edit control inside an expanded day card. The whole
+// exercises zone gets one stopPropagation listener since data-block-day-toggle
+// sits on the outer card and would otherwise collapse the day on every
+// click inside it (substitute, remove, sets/reps inputs, add picker).
+function wireBlockBuilderEditEvents(panel) {
+  $$('[data-block-exercises-zone]', panel).forEach((zone) => zone.addEventListener('click', (e) => e.stopPropagation()));
+
+  const parseKey = (key) => { const [d, i] = key.split(':'); return [Number(d), Number(i)]; };
+
+  $$('[data-block-ex-substitute]', panel).forEach((row) => row.addEventListener('click', () => {
+    blockSwapPickerFor = row.dataset.blockExSubstitute;
+    blockExerciseRemoveConfirm = null;
+    blockAddPickerForDay = null;
+    renderLiftsTab();
+  }));
+  $$('[data-block-ex-swap-cancel]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    blockSwapPickerFor = null;
+    renderLiftsTab();
+  }));
+  $$('[data-block-ex-swap-pick]', panel).forEach((container) => container.addEventListener('click', async (e) => {
+    const row = e.target.closest('[data-exercise-name]');
+    if (!row) return;
+    const [dayIdx, exIdx] = parseKey(container.dataset.blockExSwapPick);
+    const newEx = state.exercises.find((x) => x.name === row.dataset.exerciseName);
+    if (!newEx) return;
+    const block = blockBuilderPreview;
+    const day = block.blockDays[dayIdx];
+    const newEntry = blockSubstituteEntry(day.exercises[exIdx], newEx, block);
+    const newExercises = day.exercises.map((ex, i) => (i === exIdx ? newEntry : ex));
+    blockSwapPickerFor = null;
+    await persistActiveBlockEdit(withUpdatedBlockDay(block, dayIdx, newExercises));
+    renderLiftsTab();
+  }));
+
+  $$('[data-block-ex-remove]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    blockExerciseRemoveConfirm = btn.dataset.blockExRemove;
+    blockSwapPickerFor = null;
+    blockAddPickerForDay = null;
+    renderLiftsTab();
+  }));
+  $$('[data-block-ex-remove-cancel]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    blockExerciseRemoveConfirm = null;
+    renderLiftsTab();
+  }));
+  $$('[data-block-ex-remove-confirm]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    const [dayIdx, exIdx] = parseKey(btn.dataset.blockExRemoveConfirm);
+    const block = blockBuilderPreview;
+    const day = block.blockDays[dayIdx];
+    const newExercises = day.exercises.filter((_, i) => i !== exIdx);
+    blockExerciseRemoveConfirm = null;
+    await persistActiveBlockEdit(withUpdatedBlockDay(block, dayIdx, newExercises));
+    renderLiftsTab();
+  }));
+
+  $$('[data-block-ex-sets]', panel).forEach((input) => input.addEventListener('change', async () => {
+    const [dayIdx, exIdx] = parseKey(input.dataset.blockExSets);
+    const sets = Math.max(1, Number(input.value) || 1);
+    const block = blockBuilderPreview;
+    const day = block.blockDays[dayIdx];
+    const newExercises = day.exercises.map((ex, i) => (i === exIdx ? { ...ex, sets } : ex));
+    await persistActiveBlockEdit(withUpdatedBlockDay(block, dayIdx, newExercises));
+    renderLiftsTab();
+  }));
+  $$('[data-block-ex-reps]', panel).forEach((input) => input.addEventListener('change', async () => {
+    const [dayIdx, exIdx] = parseKey(input.dataset.blockExReps);
+    const reps = input.value.trim() || '1';
+    const block = blockBuilderPreview;
+    const day = block.blockDays[dayIdx];
+    const newExercises = day.exercises.map((ex, i) => (i === exIdx ? { ...ex, reps } : ex));
+    await persistActiveBlockEdit(withUpdatedBlockDay(block, dayIdx, newExercises));
+    renderLiftsTab();
+  }));
+
+  $$('[data-block-day-add]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    blockAddPickerForDay = Number(btn.dataset.blockDayAdd);
+    blockPickerSearch = '';
+    blockSwapPickerFor = null;
+    blockExerciseRemoveConfirm = null;
+    renderLiftsTab();
+  }));
+  $$('[data-block-add-cancel]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    blockAddPickerForDay = null;
+    renderLiftsTab();
+  }));
+  // Search patches just the results list's innerHTML rather than a full
+  // renderLiftsTab() — a full re-render on every keystroke would destroy
+  // and recreate this input, dropping focus/cursor mid-typing (the same
+  // lesson already learned for the Log-a-lift exercise field elsewhere).
+  $$('[data-block-add-search]', panel).forEach((input) => input.addEventListener('input', () => {
+    blockPickerSearch = input.value;
+    const dayIdx = Number(input.dataset.blockAddSearch);
+    const day = blockBuilderPreview.blockDays[dayIdx];
+    const q = blockPickerSearch.trim().toLowerCase();
+    const candidates = state.exercises.filter((e) => !day.exercises.some((d) => d.name === e.name) && (!q || e.name.toLowerCase().includes(q))).slice(0, 30);
+    const results = panel.querySelector(`[data-block-add-results="${dayIdx}"]`);
+    if (results) results.innerHTML = blockPickerResultsHtml(candidates);
+  }));
+  $$('[data-block-add-results]', panel).forEach((container) => container.addEventListener('click', async (e) => {
+    const row = e.target.closest('[data-exercise-name]');
+    if (!row) return;
+    const dayIdx = Number(container.dataset.blockAddResults);
+    const newEx = state.exercises.find((x) => x.name === row.dataset.exerciseName);
+    if (!newEx) return;
+    const block = blockBuilderPreview;
+    const day = block.blockDays[dayIdx];
+    const newEntry = blockManualAddEntry(newEx, block);
+    blockAddPickerForDay = null;
+    await persistActiveBlockEdit(withUpdatedBlockDay(block, dayIdx, [...day.exercises, newEntry]));
+    renderLiftsTab();
+  }));
 }
 
 function blockBuilderStep3Html() {
@@ -8310,8 +8593,12 @@ function wireBlockBuilderStep3(panel) {
   $$('[data-block-day-toggle]', panel).forEach((card) => card.addEventListener('click', () => {
     const idx = Number(card.dataset.blockDayToggle);
     blockBuilderExpandedDayIndex = blockBuilderExpandedDayIndex === idx ? -1 : idx;
+    blockSwapPickerFor = null;
+    blockExerciseRemoveConfirm = null;
+    blockAddPickerForDay = null;
     renderLiftsTab();
   }));
+  wireBlockBuilderEditEvents(panel);
   const backBtn = $('#blockBackStep3', panel);
   if (backBtn) backBtn.addEventListener('click', () => { blockBuilderStep = 2; renderLiftsTab(); });
   const closeBtn = $('#blockCloseBtn', panel);
