@@ -1001,6 +1001,7 @@ const state = {
   exerciseGoals: [],
   photos: [], // {id, storage_path, note, date, signedUrl} — signedUrl attached client-side after load, not a DB column
   trainingSplit: null, // {id, name, days, start_date} | null — one active split, see loadTrainingSplit()
+  plan: null, // {id, goal_description, goal_type, target_exercise, event_date, phases, current_phase_index, priorities, days, equipment, avoid, started_at} | null — one active Plan, see loadPlan()
   exercises: [], // reference data, same rows for every account — see loadExercises()
   achievements: [], // unlocked rows: {achievement_id, unlocked_at} — see loadAchievements()
   workoutSession: null, // today's row: {date, ended_at, analysis, analysis_generated_at} | null — see loadWorkoutSession()
@@ -2095,7 +2096,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadPlan(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus()]);
   renderAll();
 }
 
@@ -2256,6 +2257,11 @@ async function loadPhotos() {
 async function loadTrainingSplit() {
   const { data } = await supabase.from('training_splits').select('*').eq('user_id', state.user.id).maybeSingle();
   state.trainingSplit = data || null;
+}
+
+async function loadPlan() {
+  const { data } = await supabase.from('plans').select('*').eq('user_id', state.user.id).maybeSingle();
+  state.plan = data || null;
 }
 
 // Global reference data, same rows for every account — no user_id filter.
@@ -6380,7 +6386,8 @@ function liftHistoryRowHtml(lift, isLast) {
 function renderLiftsTab() {
   const panel = $('#panel-lifts');
   if (!panel) return;
-  if (showBlockBuilder) renderBlockBuilder(panel);
+  if (showPlanBuilder) renderPlanBuilder(panel);
+  else if (showBlockBuilder) renderBlockBuilder(panel);
   else if (showExerciseGlossary) renderExerciseGlossary(panel);
   else if (liftsSelectedExercise) renderLiftDetail(panel);
   else renderLiftLog(panel);
@@ -7313,6 +7320,7 @@ function renderLiftLog(panel) {
 
   const liftTrainingSubTabHtml = `
       ${todaysFocusHtml()}
+      ${planSummaryCardHtml()}
       ${blockBuilderSummaryCardHtml()}
       ${weeklyHardSetsHtml(lifts)}
       ${muscleMapHtml(lifts)}
@@ -7397,6 +7405,7 @@ function renderLiftLog(panel) {
   wireWeeklyHardSetsEvents(panel);
   wireMuscleMapEvents(panel);
   wireSplitEvents(panel);
+  wirePlanSummaryEvents(panel);
   wireBlockBuilderSummaryEvents(panel);
   $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => {
     liftsSubTab = btn.dataset.sub;
@@ -8015,7 +8024,21 @@ const BLOCK_GROUP_MUSCLES = {
 const BLOCK_SCHEME = {
   strength: { mainSets: 4, mainReps: '5', accessorySets: 3, accessoryReps: '8-10' },
   hypertrophy: { mainSets: 3, mainReps: '8-12', accessorySets: 3, accessoryReps: '10-15' },
+  // Plan Builder phase types (below) — not selectable directly in the
+  // standalone Block Builder wizard (see BLOCK_FOCUS_OPTIONS), only ever
+  // reached via a Plan's auto-sequencing. deload/maintenance draw their
+  // exercise pool from 'hypertrophy'-tagged data, peak/taper from
+  // 'strength'-tagged data — see PHASE_POOL below — since the exercise
+  // library itself is only tagged hypertrophy/strength/power_speed.
+  deload: { mainSets: 2, mainReps: '5', accessorySets: 1, accessoryReps: '10-12' },
+  maintenance: { mainSets: 2, mainReps: '8-10', accessorySets: 2, accessoryReps: '10-15' },
+  peak: { mainSets: 2, mainReps: '2-4', accessorySets: 0, accessoryReps: '' },
+  taper: { mainSets: 2, mainReps: '3-5', accessorySets: 1, accessoryReps: '8-10' },
 };
+// Which exercise-tag pool each phase type draws from when generating a
+// block (see blockExercisePool's e.block_types check) — distinct from
+// which BLOCK_SCHEME entry sets its sets/reps.
+const PHASE_POOL = { hypertrophy: 'hypertrophy', strength: 'strength', deload: 'hypertrophy', maintenance: 'hypertrophy', peak: 'strength', taper: 'strength' };
 const BLOCK_WEEK_STRIP = ['Base', '+Sets', '+Sets', 'Deload'];
 
 function blockSplitTemplate(days) {
@@ -8064,13 +8087,17 @@ function blockExercisePool(muscleKey, blockType, usedNames, filters) {
   );
 }
 
-// Strength-focused blocks fall back to the hypertrophy-tagged pool when a
-// muscle has no strength-tagged option — the library only tags true main
-// barbell/bodyweight lifts 'strength' (see phase18's comment), so most
-// muscles only have one or two candidates there.
-function pickMainExercise(muscleKey, focus, usedNames, filters) {
-  let pool = blockExercisePool(muscleKey, focus, usedNames, filters);
-  if (!pool.length && focus !== 'hypertrophy') pool = blockExercisePool(muscleKey, 'hypertrophy', usedNames, filters);
+// Strength-focused (and strength-pooled) blocks fall back to the
+// hypertrophy-tagged pool when a muscle has no strength-tagged option —
+// the library only tags true main barbell/bodyweight lifts 'strength'
+// (see phase18's comment), so most muscles only have one or two
+// candidates there. poolKey is which exercise-tag pool to draw from —
+// usually equal to the block's focus, but a Plan phase type (deload,
+// peak, etc.) passes a different poolKey via PHASE_POOL since those
+// types have no exercise tagging of their own.
+function pickMainExercise(muscleKey, poolKey, usedNames, filters) {
+  let pool = blockExercisePool(muscleKey, poolKey, usedNames, filters);
+  if (!pool.length && poolKey !== 'hypertrophy') pool = blockExercisePool(muscleKey, 'hypertrophy', usedNames, filters);
   pool = [...pool].sort((a, b) => (a.movement_type === b.movement_type ? 0 : a.movement_type === 'compound' ? -1 : 1));
   return pool[0] || null;
 }
@@ -8150,7 +8177,13 @@ async function persistActiveBlockEdit(updatedBlock) {
   return true;
 }
 
-function generateBlock({ focus, priorities, days, equipment, avoid }) {
+// poolKey is optional and defaults to focus — standalone Block Builder
+// never passes it, so its exercise pool and its BLOCK_SCHEME/display
+// identity stay the same key, exactly as before. Plan Builder passes
+// poolKey explicitly (via PHASE_POOL) for phase types that don't have
+// their own exercise tagging (deload/maintenance/peak/taper).
+function generateBlock({ focus, priorities, days, equipment, avoid, poolKey }) {
+  poolKey = poolKey || focus;
   const filters = { equipment, avoid };
   const template = blockSplitTemplate(days);
   const blockDays = template.map((day) => {
@@ -8177,14 +8210,14 @@ function generateBlock({ focus, priorities, days, equipment, avoid }) {
     const exercises = [];
     targetMuscles.forEach((muscle) => {
       if (addedByPriorityOnly.has(muscle)) {
-        const ex = pickMainExercise(muscle, focus, usedNames, filters);
+        const ex = pickMainExercise(muscle, poolKey, usedNames, filters);
         if (ex) {
           usedNames.add(ex.name);
           exercises.push(blockExerciseEntry(ex, muscle, 'priority', focus));
         }
         return;
       }
-      const main = pickMainExercise(muscle, focus, usedNames, filters);
+      const main = pickMainExercise(muscle, poolKey, usedNames, filters);
       if (main) {
         usedNames.add(main.name);
         exercises.push(blockExerciseEntry(main, muscle, 'main', focus));
@@ -8243,6 +8276,109 @@ function blockBuilderProgressHtml(step) {
     <p class="muted small" style="margin:0 0 0.75rem;">Step ${step} of 3</p>`;
 }
 
+let planAdvancing = false;
+let planEndConfirm = false;
+
+// Computed inline each render rather than stored — whether the current
+// phase's duration has elapsed, gating the (user-confirmed, never
+// automatic) "Start next phase" button.
+function planCanAdvance(plan) {
+  const currentPhase = plan.phases[plan.current_phase_index];
+  const phaseStart = new Date(`${plan.current_phase_started_at}T00:00:00`);
+  const today = new Date(`${localDateStr()}T00:00:00`);
+  const daysIntoPhase = Math.round((today - phaseStart) / 86400000);
+  return daysIntoPhase >= currentPhase.duration_weeks * 7;
+}
+
+function planSummaryCardHtml() {
+  const plan = state.plan;
+  if (!plan) {
+    return `<div class="card">
+      <h3>Plan <span class="muted small" style="font-weight:400;">(optional)</span></h3>
+      <p class="muted small">Set a goal and timeframe and let the app sequence multiple blocks toward it with real periodization — Hypertrophy, Strength, a planned Deload, a Peak or Taper — instead of the same block on repeat. From fixed rules. No AI.</p>
+      <button class="btn btn-sm" id="planBuilderOpenBtn">Build a Plan</button>
+    </div>`;
+  }
+  const isLastPhase = plan.current_phase_index === plan.phases.length - 1;
+  const nextPhaseType = isLastPhase ? (plan.goal_type === 'open_ended' ? plan.phases[0].type : null) : plan.phases[plan.current_phase_index + 1].type;
+  const canAdvance = planCanAdvance(plan);
+  return `<div class="card">
+    <h3 style="margin:0 0 0.25rem;">Plan</h3>
+    <p style="margin:0;">${esc(plan.goal_description)}</p>
+    <div style="margin-top:0.6rem;display:flex;flex-direction:column;gap:0.35rem;">
+      ${plan.phases.map((phase, i) => `<div class="row" style="justify-content:space-between;align-items:center;${i === plan.current_phase_index ? 'font-weight:600;' : 'opacity:0.65;'}">
+        <span>${i + 1}. ${esc(PLAN_PHASE_TYPES[phase.type].name)}${phase.status === 'completed' ? ' ✓' : i === plan.current_phase_index ? ' (current)' : ''}</span>
+        <span class="muted small">${phase.duration_weeks}wk</span>
+      </div>`).join('')}
+    </div>
+    ${canAdvance && nextPhaseType ? `
+    <p class="muted small" style="margin-top:0.6rem;margin-bottom:0;">This phase's ${plan.phases[plan.current_phase_index].duration_weeks} weeks are up — ready to move into ${esc(PLAN_PHASE_TYPES[nextPhaseType].name)}.</p>
+    <button class="btn btn-sm btn-primary" id="planAdvancePhaseBtn" style="width:100%;margin-top:0.4rem;" ${planAdvancing ? 'disabled' : ''}>${planAdvancing ? 'Starting…' : `Start next phase: ${esc(PLAN_PHASE_TYPES[nextPhaseType].name)}`}</button>
+    ` : canAdvance ? `<p class="muted small" style="margin-top:0.6rem;margin-bottom:0;">Final phase complete — nice work. End this plan or keep training the current block.</p>` : ''}
+    <div style="margin-top:0.5rem;">
+      ${planEndConfirm
+        ? `<p class="muted small" style="margin-bottom:0.4rem;">End this plan? Your current block stays in place as a standalone block — only the Plan's phase sequencing goes away.</p>
+           <div class="row"><button class="btn btn-sm btn-danger" id="planEndConfirmBtn">Yes, end plan</button><button class="btn btn-sm btn-ghost" id="planEndCancelBtn">Cancel</button></div>`
+        : `<button class="btn btn-sm btn-ghost" id="planEndBtn">End Plan</button>`}
+    </div>
+  </div>`;
+}
+
+function wirePlanSummaryEvents(panel) {
+  const openBtn = $('#planBuilderOpenBtn', panel);
+  if (openBtn) openBtn.addEventListener('click', () => {
+    resetPlanBuilderState();
+    showPlanBuilder = true;
+    renderLiftsTab();
+  });
+  const advanceBtn = $('#planAdvancePhaseBtn', panel);
+  if (advanceBtn) advanceBtn.addEventListener('click', async () => {
+    const plan = state.plan;
+    const isLastPhase = plan.current_phase_index === plan.phases.length - 1;
+    const nextIndex = isLastPhase ? (plan.goal_type === 'open_ended' ? 0 : null) : plan.current_phase_index + 1;
+    if (nextIndex == null) return;
+    planAdvancing = true;
+    renderLiftsTab();
+    const updatedPhases = plan.phases.map((p, i) => ({
+      ...p,
+      status: i === nextIndex ? 'active' : i === plan.current_phase_index ? 'completed' : p.status,
+    }));
+    const nextPhase = updatedPhases[nextIndex];
+    const nextBlock = generateBlock({
+      focus: nextPhase.type,
+      priorities: plan.priorities,
+      days: plan.days,
+      equipment: plan.equipment,
+      avoid: plan.avoid,
+      poolKey: PHASE_POOL[nextPhase.type],
+    });
+    const nextPhaseStartedAt = localDateStr();
+    const { error: planError } = await supabase.from('plans').update({
+      phases: updatedPhases, current_phase_index: nextIndex, current_phase_started_at: nextPhaseStartedAt, updated_at: new Date().toISOString(),
+    }).eq('user_id', state.user.id);
+    if (planError) { planAdvancing = false; toast('Could not advance phase: ' + planError.message); renderLiftsTab(); return; }
+    const { error: blockError } = await supabase.from('profiles').update({ active_training_block: nextBlock }).eq('id', state.user.id);
+    planAdvancing = false;
+    if (blockError) { toast('Could not advance phase: ' + blockError.message); renderLiftsTab(); return; }
+    state.plan = { ...plan, phases: updatedPhases, current_phase_index: nextIndex, current_phase_started_at: nextPhaseStartedAt };
+    state.profile = { ...state.profile, active_training_block: nextBlock };
+    toast(`${PLAN_PHASE_TYPES[nextPhase.type].name} phase started.`);
+    renderLiftsTab();
+  });
+  const endBtn = $('#planEndBtn', panel);
+  if (endBtn) endBtn.addEventListener('click', () => { planEndConfirm = true; renderLiftsTab(); });
+  const endCancelBtn = $('#planEndCancelBtn', panel);
+  if (endCancelBtn) endCancelBtn.addEventListener('click', () => { planEndConfirm = false; renderLiftsTab(); });
+  const endConfirmBtn = $('#planEndConfirmBtn', panel);
+  if (endConfirmBtn) endConfirmBtn.addEventListener('click', async () => {
+    const { error } = await supabase.from('plans').delete().eq('user_id', state.user.id);
+    if (error) return toast('Could not end plan: ' + error.message);
+    state.plan = null;
+    planEndConfirm = false;
+    renderLiftsTab();
+  });
+}
+
 function blockBuilderSummaryCardHtml() {
   const active = state.profile?.active_training_block;
   if (!active) {
@@ -8257,15 +8393,24 @@ function blockBuilderSummaryCardHtml() {
   const daysSince = Math.round((today - start) / 86400000);
   const weekNum = Math.min(4, Math.floor(Math.max(0, daysSince) / 7) + 1);
   const focusOpt = BLOCK_FOCUS_OPTIONS.find((o) => o.key === active.focus);
+  const focusName = focusOpt ? focusOpt.name : (PLAN_PHASE_TYPES[active.focus]?.name || active.focus);
+  // When a Plan is driving the current block, its phase index is the
+  // more meaningful progress indicator than the block's own Week X/4 —
+  // both are shown so the two cards read as connected. The block's own
+  // End button is hidden in this state (see planSummaryCardHtml's End
+  // Plan button below) so a user can't orphan the plan by ending just
+  // the block underneath it.
+  const plan = state.plan;
+  const planContext = plan ? ` · Phase ${plan.current_phase_index + 1} of ${plan.phases.length} (${esc(plan.goal_description)})` : '';
   return `<div class="card">
     <div class="row" style="justify-content:space-between;align-items:center;">
       <h3 style="margin:0;">Training Block</h3>
       <span class="muted small">Week ${weekNum}/4 · ${esc(BLOCK_WEEK_STRIP[weekNum - 1])}</span>
     </div>
-    <p class="muted small" style="margin-top:0.25rem;">${esc(focusOpt ? focusOpt.name : active.focus)} · ${esc(blockSplitName(active.days))}</p>
+    <p class="muted small" style="margin-top:0.25rem;">${esc(focusName)} · ${esc(blockSplitName(active.days))}${planContext}</p>
     <div class="row" style="margin-top:0.5rem;">
       <button class="btn btn-sm btn-ghost" id="blockBuilderViewBtn">View block</button>
-      <button class="btn btn-sm btn-ghost" id="blockBuilderEndBtn">End block</button>
+      ${plan ? '' : `<button class="btn btn-sm btn-ghost" id="blockBuilderEndBtn">End block</button>`}
     </div>
   </div>`;
 }
@@ -8665,6 +8810,418 @@ function renderBlockBuilder(panel) {
   } else {
     panel.innerHTML = blockBuilderStep3Html();
     wireBlockBuilderStep3(panel);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PLAN BUILDER (sequences multiple Training Blocks toward a longer-term
+// goal, using generateBlock()/BLOCK_SCHEME/PHASE_POOL above — deliberate,
+// rule-based periodization, no AI). A Plan only decides which block type
+// comes next and for how long; once a phase is active, its block is a
+// completely normal Training Block, editable through the exact same
+// substitute/add/remove/sets-edit functions as a standalone block.
+// ══════════════════════════════════════════════════════════════════
+
+const PLAN_GOAL_TYPES = [
+  { key: 'strength_target', name: 'Hit a strength number', description: 'e.g. "Add 30 lb to my bench in 4 months." Sequences toward a peak.' },
+  { key: 'event_prep', name: 'Prep for an event', description: 'e.g. "Get ready for soccer preseason in 10 weeks." Ends in a taper to a real date.' },
+  { key: 'open_ended', name: 'Ongoing, no end date', description: 'General long-term progress — the phase sequence repeats indefinitely.' },
+];
+
+// Display names/descriptions for phase types, including the 4 that are
+// only ever reached via Plan sequencing (not selectable in standalone
+// Block Builder — see BLOCK_FOCUS_OPTIONS). blockBuilderSummaryCardHtml
+// checks this as a fallback when a block's `focus` isn't a real
+// BLOCK_FOCUS_OPTIONS key.
+const PLAN_PHASE_TYPES = {
+  hypertrophy: { name: 'Hypertrophy', description: 'Build a base of muscle and work capacity.' },
+  strength: { name: 'Strength', description: 'Build maximal strength on your main lifts.' },
+  deload: { name: 'Deload', description: 'Planned lighter week so the next phase starts fresh.' },
+  maintenance: { name: 'Maintenance', description: 'Hold ground with less volume while other demands (season, life) are higher.' },
+  peak: { name: 'Peak', description: 'Low volume, near-max loads, sharpening for a specific number.' },
+  taper: { name: 'Taper', description: 'Sharply reduced volume with intensity held relatively high, timed to a specific event date.' },
+};
+
+// Relative-weight templates — scalePhasesToWeeks() below stretches these
+// to the user's actual timeframe. Deload is always pinned to exactly 1
+// week (a longer "planned deload" isn't really a deload); taper is
+// pinned to 1-2 weeks depending on how much room event_prep has to work
+// with. This is genuinely new sequencing logic — Krafft has no prior
+// multi-block periodization anywhere else in the app.
+const PLAN_TEMPLATES = {
+  strength_target: [
+    { type: 'hypertrophy', weight: 4 },
+    { type: 'strength', weight: 4 },
+    { type: 'deload', weight: 1, fixed: 1 },
+    { type: 'strength', weight: 4 },
+    { type: 'peak', weight: 2, fixed: 2 },
+  ],
+  event_prep: [
+    { type: 'strength', weight: 5 },
+    { type: 'maintenance', weight: 3 },
+    { type: 'taper', weight: 1, fixed: null }, // sized below to land on event_date
+  ],
+  open_ended: [
+    { type: 'hypertrophy', weight: 4 },
+    { type: 'strength', weight: 4 },
+    { type: 'deload', weight: 1, fixed: 1 },
+  ],
+};
+
+// Distributes totalWeeks across a template's phases proportionally to
+// their relative `weight`, respecting any `fixed` week count (deload,
+// and event_prep's taper once sized by the caller), with a 2-week floor
+// on every non-fixed work phase so a short timeframe doesn't degenerate
+// into a 1-week "Hypertrophy" phase that can't do anything. Any
+// remainder from rounding goes to the first non-fixed phase.
+function scalePhasesToWeeks(template, totalWeeks) {
+  const fixedTotal = template.reduce((sum, p) => sum + (p.fixed || 0), 0);
+  const flexPhases = template.filter((p) => !p.fixed);
+  const flexWeeksAvailable = Math.max(flexPhases.length * 2, totalWeeks - fixedTotal);
+  const flexWeightTotal = flexPhases.reduce((sum, p) => sum + p.weight, 0);
+  let assigned = 0;
+  const durations = template.map((p) => {
+    if (p.fixed) return p.fixed;
+    const weeks = Math.max(2, Math.round((p.weight / flexWeightTotal) * flexWeeksAvailable));
+    assigned += weeks;
+    return weeks;
+  });
+  const flexIndices = template.map((p, i) => (p.fixed ? -1 : i)).filter((i) => i >= 0);
+  if (flexIndices.length) {
+    const drift = flexWeeksAvailable - assigned;
+    durations[flexIndices[0]] += drift;
+  }
+  return durations;
+}
+
+// The one place Plan-level "why" copy is generated — short, plain-
+// language, states the concrete driver, never a command. Matches the
+// established voice from splitRationaleHtml()/the "Consider a Deload"
+// card rather than introducing a new tone.
+function planPhaseReasoning(phaseType, index, phases, goalType) {
+  const prev = index > 0 ? phases[index - 1] : null;
+  if (index === 0) {
+    return phaseType === 'hypertrophy'
+      ? 'Starting with hypertrophy to build a base of volume before shifting toward heavier, lower-rep work.'
+      : phaseType === 'strength'
+      ? 'Starting with strength work directly, since the goal is centered on a specific lift.'
+      : 'Starting here based on your goal and timeframe.';
+  }
+  if (phaseType === 'deload') return `A planned lighter week after ${prev.duration_weeks} weeks of ${PLAN_PHASE_TYPES[prev.type].name.toLowerCase()} work, so the next phase starts fresh rather than compounding fatigue.`;
+  if (phaseType === 'peak') return 'Cutting volume and pushing intensity up now that the base is built, to sharpen toward your target number.';
+  if (phaseType === 'maintenance') return 'Shifting to maintenance to hold your gains with less training demand as other priorities take over.';
+  if (phaseType === 'taper') return "Final taper before your event — volume drops sharply but intensity stays relatively high, so you arrive fresh without losing sharpness.";
+  if (phaseType === 'strength' && prev.type === 'hypertrophy') return `Shifting to strength once you've logged ${prev.duration_weeks} weeks of volume.`;
+  if (phaseType === 'strength' && prev.type === 'deload') return 'Back into strength work with the deload behind you.';
+  return `Moving into ${PLAN_PHASE_TYPES[phaseType].name.toLowerCase()} for this stretch of the plan.`;
+}
+
+// Builds the full phases[] array (unscheduled — no start dates, just
+// durations/reasoning/status) for a new plan. For event_prep, sizes the
+// taper (1 or 2 weeks) to fit however much room is left before
+// event_date after the other phases, and the earlier phases absorb
+// whatever's left over — never pushes the taper past the event.
+function buildPlanPhases(goalType, totalWeeks, eventWeeksAway) {
+  const template = PLAN_TEMPLATES[goalType];
+  let effectiveTemplate = template;
+  if (goalType === 'event_prep' && eventWeeksAway != null) {
+    const taperWeeks = eventWeeksAway >= 12 ? 2 : 1;
+    effectiveTemplate = template.map((p) => (p.type === 'taper' ? { ...p, fixed: taperWeeks } : p));
+    totalWeeks = eventWeeksAway;
+  }
+  // open_ended (and any caller that doesn't pass a real timeframe) has no
+  // user-chosen total to scale against — a repeating cycle's "length" is
+  // just its own template weights taken as weeks directly, so scaling is
+  // a no-op (sum of weights == totalWeeks).
+  if (totalWeeks == null) totalWeeks = effectiveTemplate.reduce((sum, p) => sum + (p.fixed || p.weight), 0);
+  const durations = scalePhasesToWeeks(effectiveTemplate, totalWeeks);
+  const phases = effectiveTemplate.map((p, i) => ({ type: p.type, duration_weeks: durations[i], reasoning: '', status: i === 0 ? 'active' : 'upcoming' }));
+  phases.forEach((phase, i) => { phase.reasoning = planPhaseReasoning(phase.type, i, phases, goalType); });
+  return phases;
+}
+
+// ── Plan Builder wizard (goal + timeframe → phase sequence) ────────────
+// Same state/step/wire conventions as the Block Builder wizard above,
+// including reusing blockBuilderProgressHtml() directly since both
+// wizards happen to be exactly 3 steps.
+let showPlanBuilder = false;
+let planBuilderStep = 1;
+let planBuilderGoalType = null;
+let planBuilderGoalDescription = '';
+let planBuilderTargetExercise = '';
+let planBuilderTargetWeight = '';
+let planBuilderTargetDate = '';
+let planBuilderEventDate = '';
+let planBuilderTimeframeWeeks = 16;
+let planBuilderPriorities = [];
+let planBuilderDays = 4;
+let planBuilderEquipment = [];
+let planBuilderAvoid = [];
+let planBuilderPreviewPhases = null;
+let planBuilderStarting = false;
+let planBuilderError = '';
+
+function resetPlanBuilderState() {
+  planBuilderStep = 1;
+  planBuilderGoalType = null;
+  planBuilderGoalDescription = '';
+  planBuilderTargetExercise = '';
+  planBuilderTargetWeight = '';
+  planBuilderTargetDate = '';
+  planBuilderEventDate = '';
+  planBuilderTimeframeWeeks = 16;
+  planBuilderPriorities = [];
+  planBuilderDays = 4;
+  planBuilderEquipment = [];
+  planBuilderAvoid = [];
+  planBuilderPreviewPhases = null;
+  planBuilderError = '';
+}
+
+function planBuilderStep1Html() {
+  const today = localDateStr();
+  return `<div class="card">
+    <h3>What's the goal?</h3>
+    ${blockBuilderProgressHtml(1)}
+    <div style="display:flex;flex-direction:column;gap:0.6rem;">
+      ${PLAN_GOAL_TYPES.map((opt) => {
+        const selected = planBuilderGoalType === opt.key;
+        return `<button class="card" data-plan-goal-type="${opt.key}"
+          style="display:block;width:100%;text-align:left;margin-bottom:0;cursor:pointer;border:1px solid ${selected ? 'var(--accent)' : 'var(--border)'};background:${selected ? 'var(--surface-2)' : 'var(--surface)'};">
+          <div class="display" style="text-transform:uppercase;font-weight:700;">${esc(opt.name)}</div>
+          <div class="muted small" style="margin-top:0.2rem;">${esc(opt.description)}</div>
+        </button>`;
+      }).join('')}
+    </div>
+    ${planBuilderGoalType ? `
+    <div class="field" style="margin-top:0.9rem;"><label>Describe your goal</label>
+      <input class="input" id="plan_goal_description" placeholder="e.g. Add 30 lb to my bench in 4 months" value="${esc(planBuilderGoalDescription)}">
+    </div>
+    ${planBuilderGoalType === 'strength_target' ? `
+    <div class="row">
+      <div class="field"><label>Target exercise (optional)</label>
+        <input class="input" id="plan_target_exercise" list="planExerciseList" placeholder="e.g. Bench Press" value="${esc(planBuilderTargetExercise)}">
+        <datalist id="planExerciseList">${state.exercises.map((e) => `<option value="${esc(e.name)}"></option>`).join('')}</datalist>
+      </div>
+      <div class="field"><label>Target weight (${weightUnitLabel()})</label>
+        <input class="input mono" id="plan_target_weight" type="number" value="${esc(planBuilderTargetWeight)}">
+      </div>
+    </div>
+    <div class="field"><label>Target date</label>
+      <input class="input" id="plan_target_date" type="date" min="${today}" value="${esc(planBuilderTargetDate)}">
+    </div>
+    <div class="field"><label>Total timeframe (weeks)</label>
+      <input class="input mono" id="plan_timeframe_weeks" type="number" min="6" max="52" value="${planBuilderTimeframeWeeks}">
+    </div>
+    ` : ''}
+    ${planBuilderGoalType === 'event_prep' ? `
+    <div class="field"><label>Event date</label>
+      <input class="input" id="plan_event_date" type="date" min="${today}" value="${esc(planBuilderEventDate)}">
+    </div>
+    ` : ''}
+    ${planBuilderError ? `<div class="muted small" style="color:var(--danger);">${esc(planBuilderError)}</div>` : ''}
+    ` : ''}
+    <button class="btn btn-primary" id="planNextStep1" style="width:100%;margin-top:0.9rem;" ${planBuilderGoalType ? '' : 'disabled'}>Next</button>
+    <button class="btn btn-ghost" id="planCancelBtn" style="width:100%;margin-top:0.5rem;">Cancel</button>
+  </div>`;
+}
+
+function wirePlanBuilderStep1(panel) {
+  $$('[data-plan-goal-type]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    planBuilderGoalType = btn.dataset.planGoalType;
+    renderLiftsTab();
+  }));
+  const descInput = $('#plan_goal_description', panel);
+  if (descInput) descInput.addEventListener('input', () => { planBuilderGoalDescription = descInput.value; });
+  const targetExInput = $('#plan_target_exercise', panel);
+  if (targetExInput) targetExInput.addEventListener('input', () => { planBuilderTargetExercise = targetExInput.value; });
+  const targetWeightInput = $('#plan_target_weight', panel);
+  if (targetWeightInput) targetWeightInput.addEventListener('input', () => { planBuilderTargetWeight = targetWeightInput.value; });
+  const targetDateInput = $('#plan_target_date', panel);
+  if (targetDateInput) targetDateInput.addEventListener('input', () => { planBuilderTargetDate = targetDateInput.value; });
+  const timeframeInput = $('#plan_timeframe_weeks', panel);
+  if (timeframeInput) timeframeInput.addEventListener('input', () => { planBuilderTimeframeWeeks = Number(timeframeInput.value) || 16; });
+  const eventDateInput = $('#plan_event_date', panel);
+  if (eventDateInput) eventDateInput.addEventListener('input', () => { planBuilderEventDate = eventDateInput.value; });
+  const nextBtn = $('#planNextStep1', panel);
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    if (!planBuilderGoalType) return;
+    if (!planBuilderGoalDescription.trim()) { planBuilderError = 'Add a short description of your goal.'; renderLiftsTab(); return; }
+    if (planBuilderGoalType === 'event_prep' && !planBuilderEventDate) { planBuilderError = 'Pick an event date.'; renderLiftsTab(); return; }
+    if (planBuilderGoalType === 'strength_target' && planBuilderTargetExercise && (!planBuilderTargetWeight || !planBuilderTargetDate)) {
+      planBuilderError = 'Add both a target weight and target date, or leave the exercise field blank.';
+      renderLiftsTab();
+      return;
+    }
+    planBuilderError = '';
+    planBuilderStep = 2;
+    renderLiftsTab();
+  });
+  const cancelBtn = $('#planCancelBtn', panel);
+  if (cancelBtn) cancelBtn.addEventListener('click', () => {
+    showPlanBuilder = false;
+    resetPlanBuilderState();
+    renderLiftsTab();
+  });
+}
+
+// Steps 2 (priorities/days/equipment/avoid) — identical markup/wiring
+// convention to blockBuilderStep2Html, just targeting the Plan's own
+// state vars, since these filters apply to every phase's block.
+function planBuilderStep2Html() {
+  return `<div class="card">
+    <h3>What do you want to bring up?</h3>
+    ${blockBuilderProgressHtml(2)}
+    <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.85rem;margin-bottom:0.4rem;">Priority areas (up to ${BLOCK_MAX_PRIORITIES})</div>
+    <div class="chip-row" style="margin-bottom:1rem;">
+      ${MUSCLE_MAP_KEYS.map((k) => `<button class="chip ${planBuilderPriorities.includes(k) ? 'chip-active' : ''}" data-plan-priority="${k}">${esc(MUSCLE_MAP_KEY_LABELS[k])}</button>`).join('')}
+    </div>
+    <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.85rem;margin-bottom:0.4rem;">Days per week</div>
+    <div class="chip-row" style="margin-bottom:1rem;">
+      ${BLOCK_DAYS_OPTIONS.map((d) => `<button class="chip ${planBuilderDays === d ? 'chip-active' : ''}" data-plan-days="${d}">${d}</button>`).join('')}
+    </div>
+    <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.85rem;margin-bottom:0.4rem;">Equipment</div>
+    <div class="chip-row" style="margin-bottom:1rem;">
+      ${BLOCK_EQUIPMENT_OPTIONS.map((eq) => `<button class="chip ${planBuilderEquipment.includes(eq) ? 'chip-active' : ''}" data-plan-equipment="${esc(eq)}">${esc(eq)}</button>`).join('')}
+    </div>
+    <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.85rem;margin-bottom:0.4rem;">Avoid (optional)</div>
+    <div class="chip-row">
+      ${BLOCK_AVOID_OPTIONS.map((a) => {
+        const selected = planBuilderAvoid.includes(a.key);
+        return `<button class="chip ${selected ? 'chip-active' : ''}" data-plan-avoid="${a.key}" style="${selected ? 'background:var(--danger);border-color:var(--danger);color:#fff;' : ''}">${esc(a.label)}</button>`;
+      }).join('')}
+    </div>
+    <p class="muted small" style="margin-top:0.6rem;">These apply to every block in the plan. Avoid options only filter exercises — not medical advice.</p>
+    <button class="btn btn-primary" id="planPreviewBtn" style="width:100%;margin-top:0.75rem;">Preview plan</button>
+    <button class="btn btn-ghost" id="planBackStep2" style="width:100%;margin-top:0.5rem;">Back</button>
+  </div>`;
+}
+
+function wirePlanBuilderStep2(panel) {
+  $$('[data-plan-priority]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const k = btn.dataset.planPriority;
+    const idx = planBuilderPriorities.indexOf(k);
+    if (idx >= 0) planBuilderPriorities.splice(idx, 1);
+    else if (planBuilderPriorities.length < BLOCK_MAX_PRIORITIES) planBuilderPriorities.push(k);
+    else return toast(`You can pick up to ${BLOCK_MAX_PRIORITIES} priority areas.`);
+    renderLiftsTab();
+  }));
+  $$('[data-plan-days]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    planBuilderDays = Number(btn.dataset.planDays);
+    renderLiftsTab();
+  }));
+  $$('[data-plan-equipment]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const eq = btn.dataset.planEquipment;
+    const idx = planBuilderEquipment.indexOf(eq);
+    if (idx >= 0) planBuilderEquipment.splice(idx, 1); else planBuilderEquipment.push(eq);
+    renderLiftsTab();
+  }));
+  $$('[data-plan-avoid]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const key = btn.dataset.planAvoid;
+    const idx = planBuilderAvoid.indexOf(key);
+    if (idx >= 0) planBuilderAvoid.splice(idx, 1); else planBuilderAvoid.push(key);
+    renderLiftsTab();
+  }));
+  const backBtn = $('#planBackStep2', panel);
+  if (backBtn) backBtn.addEventListener('click', () => { planBuilderStep = 1; renderLiftsTab(); });
+  const previewBtn = $('#planPreviewBtn', panel);
+  if (previewBtn) previewBtn.addEventListener('click', () => {
+    let eventWeeksAway = null;
+    if (planBuilderGoalType === 'event_prep' && planBuilderEventDate) {
+      const days = Math.round((new Date(`${planBuilderEventDate}T00:00:00`) - new Date(`${localDateStr()}T00:00:00`)) / 86400000);
+      eventWeeksAway = Math.max(1, Math.round(days / 7));
+    }
+    const totalWeeks = planBuilderGoalType === 'strength_target' ? planBuilderTimeframeWeeks : null;
+    planBuilderPreviewPhases = buildPlanPhases(planBuilderGoalType, totalWeeks, eventWeeksAway);
+    planBuilderStep = 3;
+    renderLiftsTab();
+  });
+}
+
+function planBuilderStep3Html() {
+  const phases = planBuilderPreviewPhases;
+  const totalWeeks = phases.reduce((sum, p) => sum + p.duration_weeks, 0);
+  return `<div class="card">
+    <h3>${esc(planBuilderGoalDescription)}</h3>
+    <p class="muted small" style="margin-top:-0.5rem;">${esc(PLAN_GOAL_TYPES.find((o) => o.key === planBuilderGoalType)?.name || '')} · ${totalWeeks} week${totalWeeks === 1 ? '' : 's'} total</p>
+  </div>
+  ${phases.map((phase, i) => `<div class="card" style="margin-bottom:0.6rem;">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <strong>${i + 1}. ${esc(PLAN_PHASE_TYPES[phase.type].name)}</strong>
+      <span class="muted small">${phase.duration_weeks} week${phase.duration_weeks === 1 ? '' : 's'}</span>
+    </div>
+    <p class="muted small" style="margin-top:0.3rem;margin-bottom:0;">${esc(phase.reasoning)}</p>
+  </div>`).join('')}
+  <div class="card">
+    <button class="btn btn-primary" id="planStartBtn" style="width:100%;" ${planBuilderStarting ? 'disabled' : ''}>${planBuilderStarting ? 'Starting…' : 'Start Plan'}</button>
+    <button class="btn btn-ghost" id="planBackStep3" style="width:100%;margin-top:0.5rem;">Back</button>
+    <p class="muted small" style="text-align:center;margin-top:0.6rem;margin-bottom:0;">Sequenced from your inputs using fixed rules. No AI.</p>
+  </div>`;
+}
+
+function wirePlanBuilderStep3(panel) {
+  const backBtn = $('#planBackStep3', panel);
+  if (backBtn) backBtn.addEventListener('click', () => { planBuilderStep = 2; renderLiftsTab(); });
+  const startBtn = $('#planStartBtn', panel);
+  if (startBtn) startBtn.addEventListener('click', async () => {
+    planBuilderStarting = true;
+    renderLiftsTab();
+    const phases = planBuilderPreviewPhases;
+    const firstPhase = phases[0];
+    const firstBlock = generateBlock({
+      focus: firstPhase.type,
+      priorities: planBuilderPriorities,
+      days: planBuilderDays,
+      equipment: planBuilderEquipment,
+      avoid: planBuilderAvoid,
+      poolKey: PHASE_POOL[firstPhase.type],
+    });
+    const { error: planError } = await supabase.from('plans').upsert({
+      user_id: state.user.id,
+      goal_description: planBuilderGoalDescription,
+      goal_type: planBuilderGoalType,
+      target_exercise: planBuilderGoalType === 'strength_target' && planBuilderTargetExercise ? planBuilderTargetExercise : null,
+      event_date: planBuilderGoalType === 'event_prep' ? planBuilderEventDate : null,
+      phases,
+      current_phase_index: 0,
+      current_phase_started_at: localDateStr(),
+      priorities: planBuilderPriorities,
+      days: planBuilderDays,
+      equipment: planBuilderEquipment,
+      avoid: planBuilderAvoid,
+      started_at: localDateStr(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+    if (planError) { planBuilderStarting = false; toast('Could not start plan: ' + planError.message); renderLiftsTab(); return; }
+    const { error: blockError } = await supabase.from('profiles').update({ active_training_block: firstBlock }).eq('id', state.user.id);
+    if (blockError) { planBuilderStarting = false; toast('Could not start plan: ' + blockError.message); renderLiftsTab(); return; }
+    if (planBuilderGoalType === 'strength_target' && planBuilderTargetExercise && planBuilderTargetWeight && planBuilderTargetDate) {
+      await supabase.from('exercise_goals').upsert({
+        user_id: state.user.id, exercise: planBuilderTargetExercise,
+        target_weight: fromDisplayWeight(planBuilderTargetWeight), target_date: planBuilderTargetDate,
+      }, { onConflict: 'user_id,exercise' });
+      await loadExerciseGoals();
+    }
+    state.profile = { ...state.profile, active_training_block: firstBlock };
+    await loadPlan();
+    planBuilderStarting = false;
+    showPlanBuilder = false;
+    resetPlanBuilderState();
+    toast('Plan started — check Training for your first phase.');
+    renderLiftsTab();
+  });
+}
+
+function renderPlanBuilder(panel) {
+  if (planBuilderStep === 1) {
+    panel.innerHTML = planBuilderStep1Html();
+    wirePlanBuilderStep1(panel);
+  } else if (planBuilderStep === 2) {
+    panel.innerHTML = planBuilderStep2Html();
+    wirePlanBuilderStep2(panel);
+  } else {
+    panel.innerHTML = planBuilderStep3Html();
+    wirePlanBuilderStep3(panel);
   }
 }
 
