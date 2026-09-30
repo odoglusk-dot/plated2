@@ -516,6 +516,85 @@ standalone Block already has none.
 
 ---
 
+### `groups` / `group_members` / `group_freeze_log` / `group_goals` — Group Mode
+```sql
+-- groups: one row per group
+id                          uuid primary key
+name                        text
+creator_id                  uuid
+current_streak              int (default 0)
+best_streak                 int (default 0)
+freezes_available           int (default 0, capped at 3 by evaluate-groups.js)
+last_evaluated_date         date
+last_achievement_check_at   timestamptz
+created_at                  timestamptz
+
+-- group_members: many rows per group, one per member/invitee
+id            uuid primary key
+group_id      uuid
+user_id       uuid (unique per (group_id, user_id))
+status        text ('invited' | 'joined')
+invited_at    timestamptz
+joined_at     timestamptz (nullable until accepted)
+
+-- group_freeze_log: append-only earn/spend ledger
+id          uuid primary key
+group_id    uuid
+kind        text ('milestone_earned' | 'achievement_earned' | 'spent')
+member_id   uuid (set only for achievement_earned — a compliment, not
+            blame; null for spent/milestone_earned so the log never
+            singles out who missed a day)
+created_at  timestamptz
+
+-- group_goals: a shared target, separate from the streak mechanic
+id            uuid primary key
+group_id      uuid
+description   text
+target_type   text ('total_sessions' — one type for v1)
+target_value  numeric
+period_start  date
+period_end    date
+created_by    uuid
+created_at    timestamptz
+```
+**Frontend reads:** all four tables, RLS-scoped to fellow group members
+(a self-referential subquery against `group_members`), via `get-group.js`.
+**Frontend writes:** only `group_members.status` (accepting/declining an
+invite, or leaving — self-row update/delete, same shape as accepting a
+friend request) and `group_goals` inserts (any joined member). Everything
+else — creating a group, inviting someone, the daily streak/freeze
+evaluation — only ever happens through a service-role Netlify function;
+there is no client insert policy on `groups`, `group_members`, or
+`group_freeze_log` at all.
+
+One active group per user (app-enforced in `create-group.js`/
+`invite-to-group.js`, not a DB constraint — same "no DB trigger, enforce
+limits in code" style as `BLOCK_MAX_PRIORITIES`). Built on the existing
+`friendships` table, not a new social graph — `invite-to-group.js` only
+lets a member invite someone who is already their accepted friend.
+
+"Hit your goal" reuses the *existing* protein-goal streak definition
+(`computeStreaks()` in `index.html` — daily `food_logs` protein sum `>=`
+`goals.protein_g`), ported server-side in `evaluate-groups.js`. This is
+deliberately **not** the same as the training-day streak the Friends
+Leaderboard already shows (`computeTrainingStreak()`) — two separate,
+pre-existing streak concepts in this app, and Group Mode uses the one
+actually branded "streak" on the dashboard.
+
+Bonus freezes for a member's achievement unlock can't be real-time —
+achievement unlocking is 100% client-side with no server code path — so
+`evaluate-groups.js` diffs `user_achievements.unlocked_at` against each
+group's `last_achievement_check_at` once daily, same known-limitation
+shape `send-reminder-emails.js` already accepts for its "evening" email
+timing.
+
+3 new notification toggles live as plain boolean columns on `profiles`
+(`group_streak_emails_opt_out`, `group_freeze_emails_opt_out`,
+`group_goal_emails_opt_out`), same `_opt_out`/default-false polarity as
+`email_reminders_opt_out`.
+
+---
+
 ### `exercises` — Exercise database (reference data, not user-scoped)
 ```sql
 id                                 uuid primary key
@@ -869,3 +948,18 @@ against an existing live database; fresh installs get it from
 client-side-only pattern as Block Builder, just backed by a real table
 instead of a jsonb column since it's multi-field metadata rather than a
 single generated-and-replaced blob.
+
+For the optional Group Mode (adds `groups`/`group_members`/
+`group_freeze_log`/`group_goals` plus 3 notification columns on
+`profiles`): run **`supabase-schema-phase26-group-mode.sql`** against an
+existing live database; fresh installs get it from `reset-schema.sql`.
+**Unlike every other optional feature above, this one does add new
+server-side pieces**: 4 new Netlify functions (`create-group.js`,
+`invite-to-group.js`, `get-group.js`, and the scheduled
+`evaluate-groups.js`) and a new `[functions."evaluate-groups"]` schedule
+block in `netlify.toml`, all reusing the existing `SUPABASE_SERVICE_ROLE_KEY`
+and `RESEND_API_KEY` environment variables the Friends Leaderboard and
+reminder emails already require — no new environment variables, but both
+of those must already be configured for group notification emails and
+the daily streak evaluation to actually run (both no-op safely, same as
+`send-reminder-emails.js` does today, if either key is missing).

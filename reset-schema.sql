@@ -8,6 +8,10 @@
 drop table if exists workout_sessions cascade;
 drop table if exists user_achievements cascade;
 drop table if exists exercises cascade;
+drop table if exists group_goals cascade;
+drop table if exists group_freeze_log cascade;
+drop table if exists group_members cascade;
+drop table if exists groups cascade;
 drop table if exists plans cascade;
 drop table if exists training_splits cascade;
 drop table if exists photos cascade;
@@ -74,6 +78,10 @@ create table profiles (
   -- supabase-schema-phase24-unit-and-leaderboard-prefs.sql.
   weight_unit text not null default 'lb' check (weight_unit in ('lb', 'kg')),
   leaderboard_opt_in boolean not null default true,
+  -- Group Mode notification toggles — see supabase-schema-phase26-group-mode.sql.
+  group_streak_emails_opt_out boolean not null default false,
+  group_freeze_emails_opt_out boolean not null default false,
+  group_goal_emails_opt_out boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -443,6 +451,88 @@ create policy "friendships_update_as_addressee" on friendships for update
 
 create policy "friendships_delete_own" on friendships for delete
   using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
+-- ── groups / group_members / group_freeze_log / group_goals (Group Mode) ──
+-- One active group per user, built on friendships (not a new social
+-- graph) — every invite requires an existing accepted friendship. See
+-- supabase-schema-phase26-group-mode.sql for the full rationale.
+create table groups (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  creator_id uuid not null references auth.users(id) on delete cascade,
+  current_streak int not null default 0,
+  best_streak int not null default 0,
+  freezes_available int not null default 0,
+  last_evaluated_date date,
+  last_achievement_check_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+alter table groups enable row level security;
+
+create policy "groups_select_member" on groups for select
+  using (id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
+
+create table group_members (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references groups(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'invited' check (status in ('invited', 'joined')),
+  invited_at timestamptz not null default now(),
+  joined_at timestamptz,
+  unique (group_id, user_id)
+);
+
+alter table group_members enable row level security;
+
+create policy "group_members_select_fellow_members" on group_members for select
+  using (user_id = auth.uid() or group_id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
+
+create policy "group_members_update_own" on group_members for update
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create policy "group_members_delete_own" on group_members for delete
+  using (user_id = auth.uid());
+
+-- Earn/spend ledger — member_id set only for achievement_earned (a
+-- compliment, not blame); left null for spent/milestone_earned so the log
+-- never singles out who missed a day.
+create table group_freeze_log (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references groups(id) on delete cascade,
+  kind text not null check (kind in ('milestone_earned', 'achievement_earned', 'spent')),
+  member_id uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index group_freeze_log_group_idx on group_freeze_log (group_id, created_at desc);
+
+alter table group_freeze_log enable row level security;
+
+create policy "group_freeze_log_select_member" on group_freeze_log for select
+  using (group_id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
+
+-- Separate from the streak mechanic. Progress computed live (like every
+-- other progress bar in this app), never stored on this row.
+create table group_goals (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references groups(id) on delete cascade,
+  description text not null,
+  target_type text not null check (target_type in ('total_sessions')),
+  target_value numeric not null,
+  period_start date not null,
+  period_end date not null,
+  created_by uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table group_goals enable row level security;
+
+create policy "group_goals_select_member" on group_goals for select
+  using (group_id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
+
+create policy "group_goals_insert_member" on group_goals for insert
+  with check (created_by = auth.uid() and group_id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- IRONLOG MERGE (supabase-schema-phase7-ironlog.sql)

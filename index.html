@@ -1002,6 +1002,8 @@ const state = {
   photos: [], // {id, storage_path, note, date, signedUrl} — signedUrl attached client-side after load, not a DB column
   trainingSplit: null, // {id, name, days, start_date} | null — one active split, see loadTrainingSplit()
   plan: null, // {id, goal_description, goal_type, target_exercise, event_date, phases, current_phase_index, priorities, days, equipment, avoid, started_at} | null — one active Plan, see loadPlan()
+  group: null, // {id, name, currentStreak, bestStreak, freezesAvailable, roster, freezeLog, goal} | null — one active Group, see loadGroup()
+  groupPendingInvites: [], // [{groupId, groupName, invitedAt}] — invites sent TO this user, see loadGroup()
   exercises: [], // reference data, same rows for every account — see loadExercises()
   achievements: [], // unlocked rows: {achievement_id, unlocked_at} — see loadAchievements()
   workoutSession: null, // today's row: {date, ended_at, analysis, analysis_generated_at} | null — see loadWorkoutSession()
@@ -2096,7 +2098,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadPlan(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadPlan(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadGroup(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus()]);
   renderAll();
 }
 
@@ -2318,6 +2320,21 @@ async function loadLeaderboard() {
     state.leaderboard = [];
     state.incomingFriendRequests = [];
     state.outgoingFriendRequestCount = 0;
+  }
+}
+
+// Group Mode — one active group per user, same "object or null" shape as
+// state.trainingSplit/state.plan. Silently empties on failure, same
+// reasoning as loadLeaderboard(): a nice-to-have, never worth blocking
+// the rest of the app over.
+async function loadGroup() {
+  try {
+    const result = await callFunction('get-group', {});
+    state.group = result.group || null;
+    state.groupPendingInvites = result.pendingInvites || [];
+  } catch {
+    state.group = null;
+    state.groupPendingInvites = [];
   }
 }
 
@@ -5153,6 +5170,23 @@ function renderProfile() {
         </label>
       </div>
     </div>
+    ${state.group ? `
+    <div class="card">
+      <h3>Group Notifications</h3>
+      <div class="consent-line" style="margin-top:0;">
+        <input type="checkbox" id="group_streak_emails_check" ${p.group_streak_emails_opt_out ? '' : 'checked'}>
+        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="group_streak_emails_check">Email me group streak updates.</label>
+      </div>
+      <div class="consent-line">
+        <input type="checkbox" id="group_freeze_emails_check" ${p.group_freeze_emails_opt_out ? '' : 'checked'}>
+        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="group_freeze_emails_check">Email me when a freeze is earned or spent.</label>
+      </div>
+      <div class="consent-line">
+        <input type="checkbox" id="group_goal_emails_check" ${p.group_goal_emails_opt_out ? '' : 'checked'}>
+        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="group_goal_emails_check">Email me group goal progress.</label>
+      </div>
+    </div>
+    ` : ''}
     <div class="card">
       <h3>Subscription</h3>
       <span class="badge ${hasAccess(state.subscription) ? 'on' : ''}">${hasAccess(state.subscription) ? '⭐ Paid — AI unlocked' : '🔓 Free tier'}</span>
@@ -5506,6 +5540,25 @@ function renderProfile() {
     await Promise.all([loadFriendships(), loadLeaderboard()]);
     renderProfile();
   }));
+
+  $('#group_streak_emails_check')?.addEventListener('change', async (e) => {
+    const { error } = await supabase.from('profiles').upsert({ id: state.user.id, group_streak_emails_opt_out: !e.target.checked });
+    if (error) { toast('Could not save preference: ' + error.message); return; }
+    toast(e.target.checked ? 'Group streak emails on.' : 'Group streak emails off.');
+    await loadProfile();
+  });
+  $('#group_freeze_emails_check')?.addEventListener('change', async (e) => {
+    const { error } = await supabase.from('profiles').upsert({ id: state.user.id, group_freeze_emails_opt_out: !e.target.checked });
+    if (error) { toast('Could not save preference: ' + error.message); return; }
+    toast(e.target.checked ? 'Freeze emails on.' : 'Freeze emails off.');
+    await loadProfile();
+  });
+  $('#group_goal_emails_check')?.addEventListener('change', async (e) => {
+    const { error } = await supabase.from('profiles').upsert({ id: state.user.id, group_goal_emails_opt_out: !e.target.checked });
+    if (error) { toast('Could not save preference: ' + error.message); return; }
+    toast(e.target.checked ? 'Group goal emails on.' : 'Group goal emails off.');
+    await loadProfile();
+  });
 
   $('#email_reminders_check')?.addEventListener('change', async (e) => {
     const { error } = await supabase.from('profiles').upsert({ id: state.user.id, email_reminders_opt_out: !e.target.checked });
@@ -10268,7 +10321,192 @@ function friendsLeaderboardHtml() {
   </div>`;
 }
 
-let insightsSubTab = 'training'; // 'training' | 'social'
+let insightsSubTab = 'training'; // 'training' | 'social' | 'group'
+
+// ── Group Mode UI state ─────────────────────────────────────────────────
+let groupCreateName = '';
+let groupCreating = false;
+let groupActionMessage = '';
+let groupGoalFormOpen = false;
+let groupGoalDescription = '';
+let groupGoalTargetValue = '';
+let groupGoalPeriodDays = 7;
+
+function groupFreezeLogText(entry) {
+  if (entry.kind === 'milestone_earned') return '🧊 Freeze earned — 7-day streak milestone.';
+  if (entry.kind === 'achievement_earned') return `🧊 Freeze earned — ${esc(entry.memberName)} unlocked an achievement.`;
+  if (entry.kind === 'spent') return '🧊 A freeze protected the streak that day.';
+  return '';
+}
+
+function groupTabHtml() {
+  if (!state.group) {
+    return `
+      ${state.groupPendingInvites.length ? `
+      <div class="card">
+        <h3>Group Invites</h3>
+        ${state.groupPendingInvites.map((inv) => `
+          <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+            <span>${esc(inv.groupName)}</span>
+            <div class="btn-group">
+              <button class="btn btn-sm btn-primary" data-group-invite-accept="${esc(inv.groupId)}">Accept</button>
+              <button class="btn btn-sm btn-ghost" data-group-invite-decline="${esc(inv.groupId)}">Decline</button>
+            </div>
+          </div>`).join('')}
+      </div>` : ''}
+      <div class="card">
+        <h3>Group <span class="muted small" style="font-weight:400;">(optional)</span></h3>
+        <p class="muted small">Form a group of up to 10 friends with a shared streak — it only ticks up on a day everyone hits their own goal, protected by freezes the group earns together. From fixed rules, evaluated once a day. No AI.</p>
+        <div class="field"><input class="input" id="group_name_input" placeholder="Group name" value="${esc(groupCreateName)}"></div>
+        <button class="btn btn-sm" id="groupCreateBtn" ${groupCreating ? 'disabled' : ''}>${groupCreating ? 'Creating…' : 'Create a Group'}</button>
+        ${groupActionMessage ? `<div class="muted small" style="margin-top:0.5rem;">${esc(groupActionMessage)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  const g = state.group;
+  const friendCandidates = state.leaderboard.filter((e) => !e.isSelf && !g.roster.some((m) => m.userId === e.userId));
+
+  return `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">${esc(g.name)}</h3>
+        <span class="muted small">🔥 ${g.currentStreak}d streak · best ${g.bestStreak}d</span>
+      </div>
+      <p class="muted small" style="margin-top:0.25rem;">🧊 ${g.freezesAvailable}/3 freezes banked</p>
+      <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.3rem;">
+        ${g.roster.map((m) => `
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <span>${esc(m.displayName)}${m.isSelf ? ' (you)' : ''}</span>
+            <span class="muted small">${m.hitToday ? '✓ hit today' : '— not yet'}</span>
+          </div>`).join('')}
+      </div>
+      <button class="btn btn-sm btn-ghost" id="groupLeaveBtn" style="margin-top:0.75rem;">Leave Group</button>
+    </div>
+
+    <div class="card">
+      <h3>Invite a Friend</h3>
+      ${friendCandidates.length ? `
+        <div class="chip-row">
+          ${friendCandidates.map((f) => `<button class="chip" data-group-invite="${esc(f.userId)}">${esc(f.displayName)}</button>`).join('')}
+        </div>
+      ` : `<p class="muted small">Add friends from the Friends card in your Profile to invite them here.</p>`}
+      ${groupActionMessage ? `<div class="muted small" style="margin-top:0.5rem;">${esc(groupActionMessage)}</div>` : ''}
+    </div>
+
+    <div class="card">
+      <h3>Activity</h3>
+      ${g.freezeLog.length ? g.freezeLog.map((entry) => `
+        <div class="row" style="padding:0.3rem 0;border-bottom:1px solid var(--border);">
+          <span class="small">${groupFreezeLogText(entry)}</span>
+        </div>`).join('') : `<p class="muted small">Nothing yet — check back after your first day together.</p>`}
+    </div>
+
+    <div class="card">
+      <h3>Group Goal <span class="muted small" style="font-weight:400;">(separate from the streak)</span></h3>
+      ${g.goal ? `
+        <p style="margin:0;">${esc(g.goal.description)}</p>
+        <div class="goal-progress-bar" style="margin-top:0.5rem;"><div class="goal-progress-fill" style="width:${Math.min(100, (g.goal.progress / g.goal.targetValue) * 100)}%;background:var(--accent);"></div></div>
+        <p class="muted small" style="margin-top:0.3rem;">${g.goal.progress}/${g.goal.targetValue} sessions · through ${fmtLiftDate(g.goal.periodEnd)}</p>
+      ` : `<p class="muted small">No group goal set yet.</p>`}
+      ${groupGoalFormOpen ? `
+        <div class="field" style="margin-top:0.75rem;"><label>Description</label><input class="input" id="group_goal_desc_input" placeholder="e.g. 5 total sessions logged this week" value="${esc(groupGoalDescription)}"></div>
+        <div class="row">
+          <div class="field"><label>Target sessions</label><input class="input mono" id="group_goal_target_input" type="number" value="${esc(groupGoalTargetValue)}"></div>
+          <div class="field"><label>Length (days)</label><input class="input mono" id="group_goal_days_input" type="number" value="${groupGoalPeriodDays}"></div>
+        </div>
+        <button class="btn btn-sm btn-primary" id="groupGoalSaveBtn">Save Goal</button>
+        <button class="btn btn-sm btn-ghost" id="groupGoalCancelBtn">Cancel</button>
+      ` : `<button class="btn btn-sm" id="groupGoalOpenBtn" style="margin-top:0.5rem;">Set a Group Goal</button>`}
+    </div>
+  `;
+}
+
+function wireGroupEvents(panel) {
+  const nameInput = $('#group_name_input', panel);
+  if (nameInput) nameInput.addEventListener('input', () => { groupCreateName = nameInput.value; });
+  const createBtn = $('#groupCreateBtn', panel);
+  if (createBtn) createBtn.addEventListener('click', async () => {
+    if (!groupCreateName.trim()) return;
+    groupCreating = true;
+    renderInsightsTab();
+    try {
+      await callFunction('create-group', { name: groupCreateName.trim() });
+      groupCreateName = '';
+      groupActionMessage = '';
+      await loadGroup();
+    } catch (err) {
+      groupActionMessage = err.message || 'Could not create group.';
+    }
+    groupCreating = false;
+    renderInsightsTab();
+  });
+
+  $$('[data-group-invite-accept]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    const { error } = await supabase.from('group_members')
+      .update({ status: 'joined', joined_at: new Date().toISOString() })
+      .eq('group_id', btn.dataset.groupInviteAccept).eq('user_id', state.user.id);
+    if (error) return toast('Could not join: ' + error.message);
+    await loadGroup();
+    renderInsightsTab();
+  }));
+  $$('[data-group-invite-decline]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    const { error } = await supabase.from('group_members').delete()
+      .eq('group_id', btn.dataset.groupInviteDecline).eq('user_id', state.user.id);
+    if (error) return toast('Could not decline: ' + error.message);
+    await loadGroup();
+    renderInsightsTab();
+  }));
+
+  const leaveBtn = $('#groupLeaveBtn', panel);
+  if (leaveBtn) leaveBtn.addEventListener('click', async () => {
+    if (!state.group) return;
+    const { error } = await supabase.from('group_members').delete()
+      .eq('group_id', state.group.id).eq('user_id', state.user.id);
+    if (error) return toast('Could not leave group: ' + error.message);
+    await loadGroup();
+    renderInsightsTab();
+  });
+
+  $$('[data-group-invite]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const result = await callFunction('invite-to-group', { groupId: state.group.id, friendUserId: btn.dataset.groupInvite });
+      const messages = { invited: 'Invite sent.', already_invited: 'Already invited.', already_member: 'Already in this group.' };
+      groupActionMessage = messages[result.status] || 'Done.';
+    } catch (err) {
+      groupActionMessage = err.message || 'Could not send invite.';
+    }
+    renderInsightsTab();
+  }));
+
+  const goalOpenBtn = $('#groupGoalOpenBtn', panel);
+  if (goalOpenBtn) goalOpenBtn.addEventListener('click', () => { groupGoalFormOpen = true; renderInsightsTab(); });
+  const goalCancelBtn = $('#groupGoalCancelBtn', panel);
+  if (goalCancelBtn) goalCancelBtn.addEventListener('click', () => { groupGoalFormOpen = false; renderInsightsTab(); });
+  const goalDescInput = $('#group_goal_desc_input', panel);
+  if (goalDescInput) goalDescInput.addEventListener('input', () => { groupGoalDescription = goalDescInput.value; });
+  const goalTargetInput = $('#group_goal_target_input', panel);
+  if (goalTargetInput) goalTargetInput.addEventListener('input', () => { groupGoalTargetValue = goalTargetInput.value; });
+  const goalDaysInput = $('#group_goal_days_input', panel);
+  if (goalDaysInput) goalDaysInput.addEventListener('input', () => { groupGoalPeriodDays = Number(goalDaysInput.value) || 7; });
+  const goalSaveBtn = $('#groupGoalSaveBtn', panel);
+  if (goalSaveBtn) goalSaveBtn.addEventListener('click', async () => {
+    if (!groupGoalDescription.trim() || !groupGoalTargetValue) return;
+    const periodStart = localDateStr();
+    const periodEnd = localDateStr(new Date(Date.now() + groupGoalPeriodDays * 86400000));
+    const { error } = await supabase.from('group_goals').insert({
+      group_id: state.group.id, description: groupGoalDescription.trim(), target_type: 'total_sessions',
+      target_value: Number(groupGoalTargetValue), period_start: periodStart, period_end: periodEnd, created_by: state.user.id,
+    });
+    if (error) return toast('Could not save goal: ' + error.message);
+    groupGoalFormOpen = false;
+    groupGoalDescription = '';
+    groupGoalTargetValue = '';
+    await loadGroup();
+    renderInsightsTab();
+  });
+}
 
 function renderInsightsTab() {
   const panel = $('#panel-insights');
@@ -10332,14 +10570,17 @@ function renderInsightsTab() {
     <div class="sub-nav">
       <button class="btn btn-sm ${insightsSubTab === 'training' ? 'btn-primary' : ''}" data-sub="training">Training</button>
       <button class="btn btn-sm ${insightsSubTab === 'social' ? 'btn-primary' : ''}" data-sub="social">Nutrition & Social</button>
+      <button class="btn btn-sm ${insightsSubTab === 'group' ? 'btn-primary' : ''}" data-sub="group">Group</button>
     </div>
-    ${insightsSubTab === 'training' ? insightsTrainingSubTabHtml : insightsSocialSubTabHtml}
+    ${insightsSubTab === 'training' ? insightsTrainingSubTabHtml : insightsSubTab === 'social' ? insightsSocialSubTabHtml : groupTabHtml()}
   `;
 
   $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => {
     insightsSubTab = btn.dataset.sub;
     renderInsightsTab();
   }));
+
+  if (insightsSubTab === 'group') wireGroupEvents(panel);
 
   $$('[data-insight-open]', panel).forEach((el) => el.addEventListener('click', () => {
     liftsSelectedExercise = el.dataset.insightOpen;

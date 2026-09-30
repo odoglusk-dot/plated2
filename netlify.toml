@@ -12,6 +12,12 @@
 [functions."send-reminder-emails"]
   schedule = "0 1 * * *"
 
+# Group Mode's daily streak/freeze evaluation — runs shortly after
+# send-reminder-emails so "yesterday" is unambiguously over for the same
+# fixed-UTC-day approximation. See the comment in evaluate-groups.js.
+[functions."evaluate-groups"]
+  schedule = "30 1 * * *"
+
 [[headers]]
   for = "/plated/*"
   [headers.values]
