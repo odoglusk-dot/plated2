@@ -470,9 +470,6 @@ create table groups (
 
 alter table groups enable row level security;
 
-create policy "groups_select_member" on groups for select
-  using (id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
-
 create table group_members (
   id uuid primary key default gen_random_uuid(),
   group_id uuid not null references groups(id) on delete cascade,
@@ -484,6 +481,11 @@ create table group_members (
 );
 
 alter table group_members enable row level security;
+
+-- groups' own select policy depends on group_members existing, so it's
+-- created here rather than right after `groups` above.
+create policy "groups_select_member" on groups for select
+  using (id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
 
 create policy "group_members_select_fellow_members" on group_members for select
   using (user_id = auth.uid() or group_id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));

@@ -37,9 +37,6 @@ create table if not exists groups (
 
 alter table groups enable row level security;
 
-create policy "groups_select_member" on groups for select
-  using (id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
-
 -- Many-rows-per-user shape, modeled on user_achievements — not
 -- friendships' directional-pair shape, and not training_splits'/plans'
 -- one-row-per-user shape. `status` mirrors friendships' pending/accepted
@@ -58,6 +55,11 @@ create table if not exists group_members (
 );
 
 alter table group_members enable row level security;
+
+-- groups' own select policy depends on group_members existing, so it's
+-- created here rather than right after `groups` above.
+create policy "groups_select_member" on groups for select
+  using (id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
 
 create policy "group_members_select_fellow_members" on group_members for select
   using (user_id = auth.uid() or group_id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
