@@ -18,7 +18,7 @@
 
 <!-- Add to Home Screen (Android + iOS) — manifest, icons, theme color -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#101112">
+<meta name="theme-color" content="#FFFFFF">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,7 +27,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 
 <!-- Error monitoring (Sentry free tier), errors-only (no tracing/replay) to
      keep this lightweight and avoid capturing extra session data for a
@@ -46,23 +46,26 @@
 </script>
 <style>
   :root {
-    --bg: #16181A;
-    --surface: #1D1F21;
-    --surface-2: #24262A;
-    --surface-3: #2C2E33;
-    --nav-bg: #101112;
-    --border: #33363B;
-    --text: #EDECE8;
-    --text-dim: #8F8C84;
-    --accent: #C6A15B;
-    --danger: #DC5B4A;
-    --success: #4E9A5A;
-    --macro-protein: #DC5B4A;
-    --macro-calories: #5B9BD9;
-    --macro-carbs: #C6A15B;
-    --macro-fat: #4E9A5A;
-    --macro-water: #4AA3C4;
-    --font-display: 'Oswald', sans-serif;
+    --bg: #F4F2ED;
+    --surface: #FFFFFF;
+    --surface-2: #FBFAF7;
+    --surface-3: #EFECE4;
+    --nav-bg: #FFFFFF;
+    --border: #E2DFD6;
+    --divider: #EFECE4;
+    --text: #17181B;
+    --text-dim: #6B6A64;
+    --text-faint: #8F8C84;
+    --accent: #8A6A3A;
+    --accent-soft: #F3E7D0;
+    --danger: #C4483A;
+    --success: #3F7A4A;
+    --macro-protein: #C4483A;
+    --macro-calories: #4A7FA8;
+    --macro-carbs: #8A6A3A;
+    --macro-fat: #3F7A4A;
+    --macro-water: #3A8BA8;
+    --font-display: 'Fraunces', serif;
     --font-body: 'Inter', sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
   }
@@ -70,12 +73,11 @@
   html, body { margin: 0; padding: 0; }
   body {
     background-color: var(--bg);
-    background-image: repeating-linear-gradient(135deg, rgba(0,0,0,0.08) 0 2px, transparent 2px 10px);
     color: var(--text);
     font-family: var(--font-body);
     min-height: 100vh;
   }
-  h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0.03em; font-weight: 500; }
+  h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0; font-weight: 600; }
   .mono { font-family: var(--font-mono); }
   label, .tab-btn { text-transform: uppercase; }
   a { color: var(--accent); }
@@ -103,20 +105,20 @@
   #initialLoadingScreen .display { font-size: 2rem; color: var(--accent); }
 
   /* ── Buttons / inputs ─────────────────────────────────────────── */
-  .btn { font-weight: 600; border-radius: 8px; padding: 0.65rem 1.1rem; border: 1px solid var(--border);
+  .btn { font-weight: 600; border-radius: 3px; padding: 0.65rem 1.1rem; border: 1px solid var(--border);
     background: var(--surface-2); color: var(--text); cursor: pointer; transition: filter .15s, border-color .15s; font-size: 0.92rem; }
   .btn:hover { border-color: var(--accent); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-primary { background: var(--accent); color: var(--nav-bg); border-color: var(--accent); }
-  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .btn-primary:hover { filter: brightness(1.2); }
   .btn-danger { background: transparent; border-color: var(--danger); color: var(--danger); }
-  .btn-danger:hover { background: rgba(220,91,74,0.1); }
+  .btn-danger:hover { background: rgba(196,72,58,0.08); }
   .btn-ghost { background: transparent; border-color: transparent; }
   .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
   .btn-block { width: 100%; }
   .input, select, textarea {
     background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 0.6rem 0.8rem; font-family: inherit; width: 100%; font-size: 0.92rem;
+    border-radius: 3px; padding: 0.6rem 0.8rem; font-family: inherit; width: 100%; font-size: 0.92rem;
   }
   textarea { resize: vertical; min-height: 4.5rem; }
   label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.3rem; font-weight: 600; }
@@ -129,15 +131,15 @@
      two-icon-button pair to 240px+ and starves the sibling text column. */
   .btn-group { display: flex; align-items: center; gap: 0.4rem; flex: none; min-width: 0; }
 
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 6px 16px rgba(23,24,27,0.04); }
   .card h3 { margin: 0 0 0.75rem; font-size: 1.3rem; }
   .muted { color: var(--text-dim); font-size: 0.85rem; }
-  .toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: var(--surface-3);
-    border: 1px solid var(--accent); color: var(--text); padding: 0.7rem 1.2rem; border-radius: 10px; z-index: 999;
-    font-size: 0.9rem; max-width: 90vw; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: var(--text);
+    border: 1px solid var(--text); color: var(--bg); padding: 0.7rem 1.2rem; border-radius: 10px; z-index: 999;
+    font-size: 0.9rem; max-width: 90vw; box-shadow: 0 8px 24px rgba(23,24,27,0.18); }
   .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700;
     letter-spacing: 0.03em; background: var(--surface-3); color: var(--text-dim); }
-  .badge.on { color: var(--nav-bg); background: var(--accent); }
+  .badge.on { color: var(--accent); background: var(--accent-soft); }
 
   /* ── Auth screen ──────────────────────────────────────────────── */
   #authScreen, #paywallScreen, #onboardingScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
@@ -155,12 +157,12 @@
   .auth-tagline { text-align: center; color: var(--text-dim); margin-bottom: 1.75rem; font-size: 0.9rem; }
   .auth-toggle { display: flex; margin-bottom: 1.25rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .auth-toggle button { flex: 1; padding: 0.6rem; background: var(--surface); border: none; color: var(--text-dim); cursor: pointer; font-weight: 600; }
-  .auth-toggle button.active { background: var(--accent); color: var(--nav-bg); }
+  .auth-toggle button.active { background: var(--text); color: var(--bg); }
   #authError { color: var(--danger); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
   #authNote { color: var(--success); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1em; }
   .consent-line { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.75rem; display: flex; gap: 0.4rem; align-items: flex-start; }
   .consent-line input { width: auto; margin-top: 0.2rem; }
-  #ageGateField .btn.active-choice { background: var(--accent); color: var(--nav-bg); border-color: var(--accent); }
+  #ageGateField .btn.active-choice { background: var(--text); color: var(--bg); border-color: var(--text); }
 
   .password-wrap { position: relative; }
   .password-wrap .input { padding-right: 2.6rem; }
@@ -213,34 +215,46 @@
   .streak-pill { font-family: var(--font-mono); font-size: 0.85rem; background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 999px; padding: 0.3rem 0.8rem; }
   .avatar-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2);
-    border: 1px solid var(--accent); color: var(--accent); display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); color: var(--accent); display: flex; align-items: center; justify-content: center;
     cursor: pointer; padding: 0; flex-shrink: 0; }
   .avatar-btn svg { width: 18px; height: 18px; display: block; }
 
   .tab-nav { padding: 0.5rem 0.6rem; background: var(--nav-bg);
     border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 19; }
   .tab-btn-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-  .tab-btn { flex: none; font-family: var(--font-display); letter-spacing: 0.02em; text-transform: uppercase;
-    font-size: 0.72rem; padding: 0.45rem 0.85rem; border-radius: 999px; background: var(--surface-2);
+  .tab-btn { flex: none; font-family: var(--font-body); letter-spacing: 0.02em; text-transform: uppercase;
+    font-size: 0.72rem; font-weight: 500; padding: 0.45rem 0.85rem; border-radius: 999px; background: var(--surface-2);
     border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; white-space: nowrap; }
-  .tab-btn.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+  .tab-btn.active { color: var(--bg); background: var(--text); border-color: var(--text); font-weight: 600; }
   .tab-btn.scope-hidden { display: none; }
 
   main.tab-panels { padding: 1.25rem; padding-bottom: calc(1.25rem + 64px + env(safe-area-inset-bottom, 0px)); max-width: 880px; margin: 0 auto; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
+  .pagehead { margin-bottom: 1rem; }
+  .pagetitle { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; color: var(--text); }
+  .profile-hero { text-align: center; padding: 0.5rem 0 1.25rem; }
+  .profile-avatar-circle { width: 64px; height: 64px; border-radius: 50%; background: var(--surface-2);
+    border: 2px solid var(--accent); margin: 0 auto 0.6rem; display: flex; align-items: center; justify-content: center;
+    color: var(--accent); }
+  .profile-avatar-circle svg { width: 30px; height: 30px; }
+  .profile-hero-name { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; color: var(--text); }
+  .profile-hero-tier { font-family: var(--font-body); font-size: 0.72rem; color: var(--accent); margin-top: 0.15rem;
+    letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600; }
 
   /* ── Bottom nav (primary) ─────────────────────────────────────── */
-  .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex;
-    background: var(--nav-bg); border-top: 1px solid var(--border);
+  .bottom-nav { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex;
+    background: var(--nav-bg); border: 1px solid var(--border); border-radius: 100px;
+    box-shadow: 0 6px 18px rgba(23,24,27,0.06);
     padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom, 0px)); }
   .bottom-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
-    background: transparent; border: none; color: var(--text-dim); cursor: pointer; padding: 0.35rem 0.2rem; }
+    background: transparent; border: none; border-radius: 100px; color: var(--text-faint); cursor: pointer; padding: 0.5rem 0.2rem; }
   .bottom-nav-icon { display: block; line-height: 0; }
   .bottom-nav-icon svg { display: block; width: 21px; height: 21px; }
-  .bottom-nav-label { font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.04em;
-    font-size: 0.65rem; }
-  .bottom-nav-btn.active { color: var(--accent); }
+  .bottom-nav-label { font-family: var(--font-body); text-transform: uppercase; letter-spacing: 0.04em;
+    font-size: 0.65rem; font-weight: 500; }
+  .bottom-nav-btn.active { color: var(--bg); background: var(--text); }
+  .bottom-nav-btn.active .bottom-nav-label { font-weight: 600; }
 
   /* ── Plate scoreboard ─────────────────────────────────────────── */
   .scoreboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
@@ -252,7 +266,7 @@
   .ring-inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .ring-value { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 600; }
   .ring-goal { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); }
-  .plate-label { font-family: var(--font-display); letter-spacing: 0.05em; color: var(--text-dim); font-size: 0.85rem; }
+  .plate-label { font-family: var(--font-body); font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-dim); font-size: 0.85rem; }
 
   /* ── Compact goal rings (Log tab, above the food-logging input) ─── */
   .card-compact { padding: 0.75rem 0.9rem; }
@@ -317,16 +331,25 @@
   .stat-num { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 500; }
   /* Hero stat card: one dominant number per screen — square corners, a
      brass left-border accent instead of a full outline, on the plain
-     dark surface (not a lighter "raised" card) so it reads as a callout. */
+     surface (not a nested/raised card) so it reads as a callout. Used on
+     standard (non-Home) pages — the Home screen has its own full-bleed
+     .hero treatment below. */
   .hero-stat-card { background: var(--surface); border: none; border-left: 3px solid var(--accent);
     border-radius: 0; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
   .hero-stat-card h3 { margin: 0 0 0.4rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 500; }
   .hero-stat-card .stat-num { font-size: 2.2rem; color: var(--accent); }
-  /* Two hero cards side by side (combined nutrition+training dashboard) —
-     same treatment, smaller number so both fit at half width. */
-  .hero-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
-  .hero-row .hero-stat-card { margin-bottom: 0; }
-  .hero-row .hero-stat-card .stat-num { font-size: 1.5rem; }
+  /* ── Home screen hero + floating card ────────────────────────────
+     Full-bleed cream hero with one big live stat, a white card of
+     secondary stats floating up over its bottom edge. */
+  .eyebrow-sm { font-family: var(--font-body); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 0.2rem; }
+  .hero { text-align: center; padding: 0.5rem 0 2.5rem; }
+  .hero .hero-num { font-family: var(--font-display); font-weight: 600; font-size: 2.7rem; color: var(--text); line-height: 1.05; margin-top: 0.35rem; }
+  .hero .hero-num .hero-unit { font-size: 0.95rem; font-weight: 500; color: var(--text-dim); margin-left: 0.35rem; }
+  .float-card { margin-top: -28px; position: relative; z-index: 1; box-shadow: 0 16px 34px rgba(23,24,27,0.08); }
+  .focus-inline { margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid var(--divider); }
+  .focus-label { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; color: var(--text); }
+  .float-card .stat-card-sm { background: var(--surface-2); box-shadow: none; }
   /* Secondary stat cards: small uppercase label, mono value, laid out 2-up */
   .stat-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   .stat-card-sm { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 0; }
@@ -410,13 +433,15 @@
      this, a long name next to a fixed-width button pair wraps one word
      per line down a squeezed column instead of filling the row. */
   .log-row > div:first-child { flex: 1; min-width: 0; }
-  .log-row .name { font-weight: 600; overflow-wrap: break-word; }
+  .log-row .name { font-family: var(--font-display); font-weight: 500; overflow-wrap: break-word; }
   .log-row .macros { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim); }
   .chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0.4rem 0.8rem;
     cursor: pointer; font-size: 0.85rem; }
   .chip:hover { border-color: var(--accent); }
-  .chip.chip-active { background: var(--accent); color: var(--nav-bg); border-color: var(--accent); font-weight: 600; }
+  .chip.chip-active { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
+  .pill-soft { display: inline-block; background: var(--accent-soft); color: var(--accent); border-radius: 999px;
+    padding: 0.15rem 0.55rem; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; }
 
   /* ── Quick Add grid ────────────────────────────────────────────── */
   .quick-add-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
@@ -458,7 +483,7 @@
   .autocomplete-wrap { position: relative; }
   .autocomplete-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; z-index: 30;
     background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; overflow-y: auto;
-    max-height: 280px; box-shadow: 0 10px 28px rgba(0,0,0,0.45); }
+    max-height: 280px; box-shadow: 0 10px 28px rgba(23,24,27,0.1); }
   .autocomplete-item { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
     padding: 0.55rem 0.8rem; cursor: pointer; border-bottom: 1px solid var(--border); }
   .autocomplete-item:last-child { border-bottom: none; }
@@ -477,7 +502,7 @@
   .guide-card { border-left: 3px solid var(--accent); }
   .guide-card.caution { border-left-color: var(--danger); }
   .guide-card .col-title { display: flex; align-items: center; gap: 0.6rem; }
-  .caution-box { background: rgba(220,91,74,0.1); border: 1px solid rgba(220,91,74,0.4); border-radius: 8px; padding: 0.6rem 0.8rem; margin-top: 0.6rem; font-size: 0.85rem; }
+  .caution-box { background: rgba(196,72,58,0.08); border: 1px solid rgba(196,72,58,0.35); border-radius: 8px; padding: 0.6rem 0.8rem; margin-top: 0.6rem; font-size: 0.85rem; }
 
   .ask-msg { padding: 0.75rem 0.9rem; border-radius: 10px; margin-bottom: 0.6rem; max-width: 90%; font-size: 0.9rem; line-height: 1.4; }
   .ask-msg.user { background: var(--surface-3); margin-left: auto; }
@@ -3248,17 +3273,17 @@ function achievementsGridHtml() {
 function todaysFocusHeroHtml() {
   const split = state.trainingSplit;
   if (!split) {
-    return `<div class="hero-stat-card">
-      <h3>Today's Focus</h3>
-      <div class="stat-num">No split set</div>
+    return `<div class="focus-inline">
+      <div class="eyebrow-sm">Today's Focus</div>
+      <div class="focus-label">No split set</div>
       <div class="muted small">Set one up in the Lifts tab</div>
     </div>`;
   }
   const idx = computeSplitDayIndex(split, localDateStr());
   const today = split.days[idx];
-  return `<div class="hero-stat-card">
-    <h3>${esc(split.name)} — Day ${idx + 1}/${split.days.length}</h3>
-    <div class="stat-num">${esc(today.label)}</div>
+  return `<div class="focus-inline">
+    <div class="eyebrow-sm">${esc(split.name)} — Day ${idx + 1}/${split.days.length}</div>
+    <div class="focus-label">${esc(today.label)}</div>
     ${today.muscle_groups?.length ? `<div class="muted small">${today.muscle_groups.join(', ')}</div>` : ''}
   </div>`;
 }
@@ -3323,12 +3348,39 @@ function renderDashboard() {
 
   const panel = $('#panel-dashboard');
   panel.innerHTML = `
-    <div class="hero-row">
-      <div class="hero-stat-card">
-        <h3>Today's Protein</h3>
-        <div class="stat-num">${round(totals.protein_g)}<span style="font-size:0.95rem;color:var(--text-dim);"> / ${round(g.protein_g)}g</span></div>
-      </div>
+    <div class="hero">
+      <div class="eyebrow-sm">Today</div>
+      <div class="hero-num">${round(totals.protein_g)}<span class="hero-unit">g protein</span></div>
+      <div class="muted small">of ${round(g.protein_g)}g goal</div>
+    </div>
+    <div class="card float-card">
       ${todaysFocusHeroHtml()}
+      <div class="stat-grid-2">
+        <div class="stat-card-sm">
+          <h3>Calories</h3>
+          <div class="stat-num" style="font-size:1.3rem;color:${calorieColor};">${round(totals.calories)}<span class="muted" style="font-size:0.72rem;"> / ${round(g.calories)}</span></div>
+        </div>
+        <div class="stat-card-sm">
+          <h3>Today's Volume</h3>
+          <div class="stat-num" style="font-size:1.3rem;">${toDisplayWeight(todaysLiftVolume, 0).value.toLocaleString()}<span class="muted" style="font-size:0.72rem;"> ${weightUnitLabel()}</span></div>
+        </div>
+        <div class="stat-card-sm">
+          <h3>Carbs</h3>
+          <div class="stat-num" style="font-size:1.3rem;">${round(totals.carbs_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.carbs_g)}g</span></div>
+        </div>
+        <div class="stat-card-sm">
+          <h3>Current Streak</h3>
+          <div class="stat-num" style="font-size:1.3rem;">${trainingStreak}<span class="muted" style="font-size:0.72rem;"> day${trainingStreak === 1 ? '' : 's'} training</span></div>
+        </div>
+        <div class="stat-card-sm">
+          <h3>Fat</h3>
+          <div class="stat-num" style="font-size:1.3rem;">${round(totals.fat_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.fat_g)}g</span></div>
+        </div>
+        <div class="stat-card-sm">
+          <h3>Water</h3>
+          <div class="stat-num" style="font-size:1.3rem;">${round(todayWaterOz)}oz<span class="muted" style="font-size:0.72rem;"> / ${round(g.water_oz || 64)}oz</span></div>
+        </div>
+      </div>
     </div>
     ${achievementUnlockBannerHtml()}
     ${showSpikeWarning ? `
@@ -3337,33 +3389,6 @@ function renderDashboard() {
       <button class="btn btn-sm btn-ghost" id="spikeDismiss">✕</button>
     </div>` : ''}
     ${tipsHtml(activeTips)}
-
-    <div class="stat-grid-2">
-      <div class="stat-card-sm">
-        <h3>Calories</h3>
-        <div class="stat-num" style="font-size:1.3rem;color:${calorieColor};">${round(totals.calories)}<span class="muted" style="font-size:0.72rem;"> / ${round(g.calories)}</span></div>
-      </div>
-      <div class="stat-card-sm">
-        <h3>Today's Volume</h3>
-        <div class="stat-num" style="font-size:1.3rem;">${toDisplayWeight(todaysLiftVolume, 0).value.toLocaleString()}<span class="muted" style="font-size:0.72rem;"> ${weightUnitLabel()}</span></div>
-      </div>
-      <div class="stat-card-sm">
-        <h3>Carbs</h3>
-        <div class="stat-num" style="font-size:1.3rem;">${round(totals.carbs_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.carbs_g)}g</span></div>
-      </div>
-      <div class="stat-card-sm">
-        <h3>Current Streak</h3>
-        <div class="stat-num" style="font-size:1.3rem;">${trainingStreak}<span class="muted" style="font-size:0.72rem;"> day${trainingStreak === 1 ? '' : 's'} training</span></div>
-      </div>
-      <div class="stat-card-sm">
-        <h3>Fat</h3>
-        <div class="stat-num" style="font-size:1.3rem;">${round(totals.fat_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.fat_g)}g</span></div>
-      </div>
-      <div class="stat-card-sm">
-        <h3>Water</h3>
-        <div class="stat-num" style="font-size:1.3rem;">${round(todayWaterOz)}oz<span class="muted" style="font-size:0.72rem;"> / ${round(g.water_oz || 64)}oz</span></div>
-      </div>
-    </div>
 
     <div class="card">
       <p class="muted" style="margin:0 0 0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
@@ -3625,6 +3650,7 @@ function renderLogTab() {
   const totals = sumMacros(state.todayLogs);
   const g = state.goals;
   panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">Today</div></div>
     <div class="card card-compact">
       <div class="mini-scoreboard">
         ${miniPlateHtml('CALORIES', totals.calories, g.calories, 'var(--macro-calories)')}
@@ -4332,7 +4358,7 @@ function weightChartSvg(sorted) {
 // ══════════════════════════════════════════════════════════════════
 // SUPPLEMENTS TAB
 // ══════════════════════════════════════════════════════════════════
-const EVIDENCE_RATING_COLORS = { Strong: 'var(--success)', Moderate: '#C6A15B', Limited: '#E8CB88', Weak: 'var(--text-dim)' };
+const EVIDENCE_RATING_COLORS = { Strong: 'var(--success)', Moderate: 'var(--accent)', Limited: '#B08D52', Weak: 'var(--text-dim)' };
 // Session-only — which supplement cards have their "Source" note expanded.
 // Not user data worth a database column, same as citationExpanded.
 const supplementSourceExpanded = new Set();
@@ -4340,6 +4366,7 @@ const supplementSourceExpanded = new Set();
 function renderSupplements() {
   const panel = $('#panel-supplements');
   panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">Supplements</div></div>
     <div class="card">
       <h3>Log a Supplement</h3>
       <div class="row">
@@ -4371,7 +4398,7 @@ function renderSupplements() {
           <div class="col-title"><h3 style="margin:0;">${esc(s.name)}</h3>${s.caution ? '<span class="badge" style="background:var(--danger);color:#fff;">CAUTION</span>' : ''}</div>
           ${s.evidenceRating ? `
           <div class="row" style="align-items:center;gap:0.5rem;margin:0.3rem 0 0.5rem;">
-            <span class="badge" style="background:${EVIDENCE_RATING_COLORS[s.evidenceRating]};color:#1A1A1A;">${esc(s.evidenceRating)} evidence</span>
+            <span class="badge" style="background:${EVIDENCE_RATING_COLORS[s.evidenceRating]};color:#fff;">${esc(s.evidenceRating)} evidence</span>
           </div>
           <p style="margin:0 0 0.5rem;font-size:0.88rem;">${esc(s.whatFor)}</p>
           <div style="margin-bottom:0.6rem;">
@@ -5217,6 +5244,11 @@ function renderProfile() {
   `;
 
   panel.innerHTML = `
+    <div class="profile-hero">
+      <div class="profile-avatar-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.5 20c1.2-3.6 4.2-5.5 7.5-5.5s6.3 1.9 7.5 5.5"></path></svg></div>
+      <div class="profile-hero-name">${esc(p.display_name || state.user.email)}</div>
+      <div class="profile-hero-tier">${hasAccess(state.subscription) ? 'Krafft Pro' : 'Free Tier'}</div>
+    </div>
     <div class="sub-nav">
       <button class="btn btn-sm ${profileSubTab === 'account' ? 'btn-primary' : ''}" data-sub="account">Account</button>
       <button class="btn btn-sm ${profileSubTab === 'settings' ? 'btn-primary' : ''}" data-sub="settings">Settings</button>
@@ -5596,7 +5628,7 @@ function getBodyRegion(l) {
 // ── Muscle map (body-region volume heatmap, shown on the Training Dashboard) ──
 // Increasing-intensity accent scale, shared with the Days tab's training
 // heatmap below — index 0 is "no training."
-const HEATMAP_LEVELS = ['var(--surface-2)', 'rgba(217,119,6,0.22)', 'rgba(217,119,6,0.45)', 'rgba(217,119,6,0.7)', 'var(--accent)'];
+const HEATMAP_LEVELS = ['var(--surface-2)', 'rgba(138,106,58,0.22)', 'rgba(138,106,58,0.45)', 'rgba(138,106,58,0.7)', 'var(--accent)'];
 
 // quartile thresholds over the nonzero volumes actually present, so the
 // color scale adapts to each user's own training intensity
@@ -5750,11 +5782,11 @@ const MUSCLE_MAP_BACK_PARTS = [
 ];
 
 const MUSCLE_MAP_LEGEND = [
-  { color: '#2B2E32', label: '0' },
-  { color: '#5A4F36', label: '1-5' },
-  { color: '#8A7443', label: '6-9' },
-  { color: '#C6A15B', label: '10-20' },
-  { color: '#E8CB88', label: '21+' },
+  { color: '#DDD9CD', label: '0' },
+  { color: '#D9C9A8', label: '1-5' },
+  { color: '#C2A06B', label: '6-9' },
+  { color: '#8A6A3A', label: '10-20' },
+  { color: '#5C4526', label: '21+' },
 ];
 function muscleMapHeatColor(sets) {
   const rounded = Math.round(sets);
@@ -5773,12 +5805,12 @@ function muscleMapPartSvg(part, totals, selectedKey) {
   // diagonal light/dark shading gradient on top, giving each muscle a
   // sculpted look instead of a flat color fill.
   return `
-    <path d="${part.d}" fill="${fill}" stroke="${isSelected ? 'var(--accent)' : '#0E0F10'}" stroke-width="${isSelected ? '1.6' : '0.9'}" stroke-linejoin="round" class="body-map-region" data-muscle-key="${part.key}"></path>
+    <path d="${part.d}" fill="${fill}" stroke="${isSelected ? 'var(--accent)' : '#D8D4C8'}" stroke-width="${isSelected ? '1.6' : '0.9'}" stroke-linejoin="round" class="body-map-region" data-muscle-key="${part.key}"></path>
     <path d="${part.d}" fill="url(#muscleMapShade)" pointer-events="none"></path>`;
 }
 
 function muscleMapBodySvg(parts, totals, selectedKey, viewName) {
-  const baseAttrs = 'fill="#1B1D20" stroke="#33373B" stroke-width="1"';
+  const baseAttrs = 'fill="#E7E4DC" stroke="#D8D4C8" stroke-width="1"';
   const base = `<path d="${MUSCLE_MAP_BASE_PATH}" ${baseAttrs}></path>`;
   const muscles = parts.map((part) => {
     const right = muscleMapPartSvg(part, totals, selectedKey);
@@ -5788,9 +5820,9 @@ function muscleMapBodySvg(parts, totals, selectedKey, viewName) {
   return `<svg viewBox="0 0 200 420" class="body-map-svg">
     <defs>
       <linearGradient id="muscleMapShade-${viewName}" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#fff" stop-opacity="0.22"></stop>
+        <stop offset="0" stop-color="#fff" stop-opacity="0.16"></stop>
         <stop offset="0.55" stop-color="#fff" stop-opacity="0"></stop>
-        <stop offset="1" stop-color="#000" stop-opacity="0.35"></stop>
+        <stop offset="1" stop-color="#3D2E1A" stop-opacity="0.22"></stop>
       </linearGradient>
     </defs>
     <ellipse cx="${MUSCLE_MAP_HEAD.cx}" cy="${MUSCLE_MAP_HEAD.cy}" rx="${MUSCLE_MAP_HEAD.rx}" ry="${MUSCLE_MAP_HEAD.ry}" ${baseAttrs}></ellipse>
@@ -6921,7 +6953,7 @@ async function renderSessionTrendChart(exerciseName) {
       datasets: [{
         label: `Estimated 1RM (${weightUnitLabel()})`,
         data: history.map((l) => toDisplayWeight(e1RM(l.weight, l.reps)).value),
-        backgroundColor: history.map((l) => (l.date === today ? '#C6A15B' : 'rgba(198,161,91,0.35)')),
+        backgroundColor: history.map((l) => (l.date === today ? '#8A6A3A' : 'rgba(138,106,58,0.35)')),
       }],
     },
     options: {
@@ -6929,7 +6961,7 @@ async function renderSessionTrendChart(exerciseName) {
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { color: '#8F8C84' }, grid: { display: false } },
-        y: { ticks: { color: '#8F8C84' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+        y: { ticks: { color: '#8F8C84' }, grid: { color: 'rgba(23,24,27,0.06)' } },
       },
     },
   });
@@ -6958,7 +6990,7 @@ async function renderSessionNutritionChart() {
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { color: '#8F8C84' }, grid: { display: false } },
-        y: { ticks: { color: '#8F8C84' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+        y: { ticks: { color: '#8F8C84' }, grid: { color: 'rgba(23,24,27,0.06)' } },
       },
     },
   });
@@ -7055,7 +7087,7 @@ function todaysLiftPanelHtml() {
       })();
       return `<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border);">
         <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;">
-          <strong>${esc(exercise)}${isPR ? ' 🏆 PR' : ''}</strong>
+          <strong>${esc(exercise)}${isPR ? ' <span class="pill-soft">🏆 PR</span>' : ''}</strong>
           <span class="muted small">${toDisplayWeight(volume, 0).value.toLocaleString()} ${weightUnitLabel()} volume · e1RM ~${toDisplayWeight(bestE1RMToday).value} ${weightUnitLabel()}</span>
         </div>
         ${goalLine}
@@ -7345,6 +7377,7 @@ function renderLiftLog(panel) {
   `;
 
   panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">${liftsSubTab === 'training' ? 'Training' : "Today's Lift"}</div></div>
     ${prBanner ? `
     <div class="card pr-banner">
       <div class="small">🔥 New PR — <strong>${esc(prBanner.exercise)}</strong> at <span class="mono" style="color:var(--accent);">${toDisplayWeight(prBanner.weight).value} ${weightUnitLabel()}</span> · +${toDisplayWeight(prBanner.improvement, 1).value} ${weightUnitLabel()} over your previous best</div>
@@ -8433,7 +8466,7 @@ function blockDayCardHtml(day, index, isExpanded) {
           <span class="muted small">reps</span>
           <button class="btn btn-sm btn-ghost" data-block-ex-remove="${key}" aria-label="Remove ${esc(ex.name)}" style="margin-left:auto;">✕</button>
         </div>
-        ${ex.tags.length ? `<div class="chip-row" style="margin-top:0.3rem;">${ex.tags.map((t) => `<span class="muted small" style="border:1px solid var(--border);border-radius:999px;padding:0.15rem 0.5rem;">${esc(t)}</span>`).join('')}</div>` : ''}
+        ${ex.tags.length ? `<div class="chip-row" style="margin-top:0.3rem;">${ex.tags.map((t) => `<span class="pill-soft">${esc(t)}</span>`).join('')}</div>` : ''}
         ${ex.reason ? `<p class="muted small" style="margin:0.3rem 0 0;font-style:italic;">${esc(ex.reason)}</p>` : ''}
       </div>`;
     }).join('') : `<p class="muted small" style="margin-top:0.5rem;">No exercises matched your filters for this day — try loosening equipment or avoid options.</p>`}
@@ -8693,6 +8726,7 @@ function renderPhotosTab() {
   const photos = state.photos;
 
   panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">Photos</div></div>
     <div class="card">
       <h3>Add progress photo</h3>
       <div class="field"><input class="input" id="photoNoteInput" placeholder="Note (optional)" value="${esc(photoNote)}"></div>
@@ -8924,7 +8958,7 @@ function renderDaysTab() {
   })).sort((a, b) => b.date.localeCompare(a.date));
 
   if (days.length === 0) {
-    panel.innerHTML = `<div class="card"><p class="muted" style="text-align:center;">No days logged yet. Add a lift or a weight entry to start building your daily log.</p></div>`;
+    panel.innerHTML = `<div class="pagehead"><div class="pagetitle">Days</div></div><div class="card"><p class="muted" style="text-align:center;">No days logged yet. Add a lift or a weight entry to start building your daily log.</p></div>`;
     return;
   }
 
@@ -8949,6 +8983,7 @@ function renderDaysTab() {
   const heatmapDayInfo = daysHeatmapDay ? days.find((d) => d.date === daysHeatmapDay) : null;
 
   panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">Days</div></div>
     <div class="row">
       <div class="card"><h3>Days Logged</h3><div class="stat-num">${days.length}</div></div>
       <div class="card"><h3>Current Streak</h3><div class="stat-num">${streak} <span class="muted small">day${streak === 1 ? '' : 's'}</span></div></div>
@@ -9305,7 +9340,7 @@ function renderRecapsTab() {
   const months = eligibleRecapMonths(state.lifts, state.weightLog);
 
   if (months.length === 0) {
-    panel.innerHTML = `<div class="card"><p class="muted" style="text-align:center;">No completed months yet — recaps show up once a full calendar month has passed since your first entry.</p></div>`;
+    panel.innerHTML = `<div class="pagehead"><div class="pagetitle">Recaps</div></div><div class="card"><p class="muted" style="text-align:center;">No completed months yet — recaps show up once a full calendar month has passed since your first entry.</p></div>`;
     return;
   }
   if (!recapsSelectedMonth || !months.includes(recapsSelectedMonth)) recapsSelectedMonth = months[0];
@@ -9313,6 +9348,7 @@ function renderRecapsTab() {
   if (!recapsCompareB || !months.includes(recapsCompareB)) recapsCompareB = months[0];
 
   panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">Recaps</div></div>
     <div class="row">
       <button class="btn btn-sm ${recapsMode === 'single' ? 'btn-primary' : ''}" data-recap-mode="single">Single Month</button>
       <button class="btn btn-sm ${recapsMode === 'compare' ? 'btn-primary' : ''}" data-recap-mode="compare">Compare</button>
@@ -9735,6 +9771,7 @@ function renderInsightsTab() {
   `;
 
   panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">Insights</div></div>
     <div class="sub-nav">
       <button class="btn btn-sm ${insightsSubTab === 'training' ? 'btn-primary' : ''}" data-sub="training">Training</button>
       <button class="btn btn-sm ${insightsSubTab === 'social' ? 'btn-primary' : ''}" data-sub="social">Nutrition & Social</button>
