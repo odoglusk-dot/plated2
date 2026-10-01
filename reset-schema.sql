@@ -1662,7 +1662,10 @@ create index events_created_at_idx on events (created_at);
 
 alter table events enable row level security;
 
-create policy "events_insert_own" on events for insert with check (auth.uid() = user_id);
+create policy "events_insert_own_or_anonymous" on events
+  for insert with check (user_id is null or auth.uid() = user_id);
+-- null user_id covers signup_started, which fires pre-auth (anon role,
+-- no auth.uid() to match yet) — see supabase-schema-phase32-events-and-admin.sql
 
 -- ── admin_users (founder-only allowlist, founder dashboard) ──────────────
 -- Deliberately not a boolean column on profiles: that table's own

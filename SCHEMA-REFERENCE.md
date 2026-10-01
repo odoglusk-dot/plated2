@@ -758,7 +758,10 @@ Built for the founder-only growth dashboard — see
 funnel/DAU-WAU-MAU/cohort-retention can't be computed from them; this is
 an intentionally generic log (one row per action, a jsonb properties bag
 instead of per-event columns) so a new event kind never needs a
-migration. RLS is insert-own only — no select/update/delete policy for
+migration. RLS allows inserting your own `user_id`, or a null `user_id`
+from anyone including the pre-auth anon role (needed for
+`signup_started`, which fires before an account exists — there's no
+`auth.uid()` yet to match against). No select/update/delete policy for
 the `authenticated` role at all, so event history can't be read back or
 tampered with by the client that wrote it, only by server-side code
 holding the service role key.
