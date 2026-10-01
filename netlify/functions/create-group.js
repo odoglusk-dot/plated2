@@ -13,7 +13,7 @@
 // arbitrary group_id, bypassing invite-to-group.js's friendship check
 // entirely. Same reasoning as add-friend.js keeping friendships inserts
 // service-role only.
-const { jsonResponse, verifyUser, captureError, withErrorReporting } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, captureError, withErrorReporting } = require('./_shared');
 
 exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -26,6 +26,10 @@ exports.handler = withErrorReporting(async (event) => {
 
   const auth = await verifyUser(event);
   if (!auth) return jsonResponse(401, { error: 'Sign in required.' });
+
+  if (!(await hasPaidAccess(auth.user.id, auth.token))) {
+    return jsonResponse(402, { error: 'Group Mode is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
+  }
 
   let payload;
   try {

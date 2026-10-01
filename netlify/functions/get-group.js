@@ -14,7 +14,7 @@
 // returns a member's actual food_logs/lifts rows, only that one boolean
 // per member plus the group-level aggregates — same philosophy as
 // get-leaderboard.js never returning a friend's raw lift rows.
-const { jsonResponse, verifyUser, captureError, withErrorReporting } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, captureError, withErrorReporting } = require('./_shared');
 
 // Mirrors sumMacros(dayLogs).protein_g >= proteinGoal from computeStreaks()
 // in index.html — "hit your goal today" is protein-only, not calories/
@@ -44,6 +44,10 @@ exports.handler = withErrorReporting(async (event) => {
 
   const auth = await verifyUser(event);
   if (!auth) return jsonResponse(401, { error: 'Sign in required.' });
+
+  if (!(await hasPaidAccess(auth.user.id, auth.token))) {
+    return jsonResponse(402, { error: 'Group Mode is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
+  }
 
   const base = process.env.SUPABASE_URL;
   const serviceHeaders = {
@@ -107,11 +111,26 @@ exports.handler = withErrorReporting(async (event) => {
     todayStart.setUTCHours(0, 0, 0, 0);
     const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
+    // Leaderboard rank — distinct lift-dates in the trailing 7 days (today
+    // inclusive). One bulk query across the whole roster, same shape as the
+    // group-goal progress query below, rather than N per-member calls.
+    const sevenDaysAgoStr = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const weekSessionsRes = await fetch(
+      `${base}/rest/v1/lifts?user_id=in.(${joinedMembers.map((m) => m.user_id).join(',')})&date=gte.${sevenDaysAgoStr}&select=user_id,date`,
+      { headers: serviceHeaders }
+    );
+    const weekSessionRows = weekSessionsRes.ok ? await weekSessionsRes.json() : [];
+    const sessionDatesByUser = {};
+    for (const row of weekSessionRows) {
+      (sessionDatesByUser[row.user_id] || (sessionDatesByUser[row.user_id] = new Set())).add(row.date);
+    }
+
     const roster = await Promise.all(joinedMembers.map(async (m) => ({
       userId: m.user_id,
       displayName: nameById[m.user_id] || 'Athlete',
       isSelf: m.user_id === auth.user.id,
       hitToday: await hitGoalToday(base, serviceHeaders, m.user_id, proteinGoalById[m.user_id], todayStart.toISOString(), tomorrowStart.toISOString()),
+      sessionsThisWeek: sessionDatesByUser[m.user_id] ? sessionDatesByUser[m.user_id].size : 0,
     })));
 
     const freezeLogOut = freezeLog.map((entry) => ({

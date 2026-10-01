@@ -874,6 +874,7 @@
     <section class="tab-panel" data-tab="photos" id="panel-photos"></section>
     <section class="tab-panel" data-tab="recaps" id="panel-recaps"></section>
     <section class="tab-panel" data-tab="insights" id="panel-insights"></section>
+    <section class="tab-panel" data-tab="group" id="panel-group"></section>
   </main>
 
   <footer class="legal">
@@ -893,6 +894,10 @@
     <button class="bottom-nav-btn" data-bottom="lift" aria-label="Lift">
       <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><rect x="1.5" y="9" width="3" height="6" rx="1"/><rect x="19.5" y="9" width="3" height="6" rx="1"/><rect x="6" y="7" width="2.4" height="10" rx="1"/><rect x="15.6" y="7" width="2.4" height="10" rx="1"/></svg></span>
       <span class="bottom-nav-label">Lift</span>
+    </button>
+    <button class="bottom-nav-btn" data-bottom="group" aria-label="Group">
+      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3.3 2.9-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><circle cx="17" cy="9" r="2.3"/><path d="M14.5 14.3c.9-.4 1.9-.6 2.5-.6 2.5 0 4.6 1.8 4.8 4.3"/></svg></span>
+      <span class="bottom-nav-label">Group</span>
     </button>
     <button class="bottom-nav-btn" data-bottom="profile" aria-label="Profile">
       <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg></span>
@@ -1004,6 +1009,7 @@ const state = {
   plan: null, // {id, goal_description, goal_type, target_exercise, event_date, phases, current_phase_index, priorities, days, equipment, avoid, started_at} | null — one active Plan, see loadPlan()
   group: null, // {id, name, currentStreak, bestStreak, freezesAvailable, roster, freezeLog, goal} | null — one active Group, see loadGroup()
   groupPendingInvites: [], // [{groupId, groupName, invitedAt}] — invites sent TO this user, see loadGroup()
+  groupLoadFailed: false, // true on a genuine load error (not the expected 402 for a free user), see loadGroup()
   exercises: [], // reference data, same rows for every account — see loadExercises()
   achievements: [], // unlocked rows: {achievement_id, unlocked_at} — see loadAchievements()
   workoutSession: null, // today's row: {date, ended_at, analysis, analysis_generated_at} | null — see loadWorkoutSession()
@@ -2328,13 +2334,17 @@ async function loadLeaderboard() {
 // reasoning as loadLeaderboard(): a nice-to-have, never worth blocking
 // the rest of the app over.
 async function loadGroup() {
+  state.groupLoadFailed = false;
   try {
     const result = await callFunction('get-group', {});
     state.group = result.group || null;
     state.groupPendingInvites = result.pendingInvites || [];
-  } catch {
+  } catch (err) {
     state.group = null;
     state.groupPendingInvites = [];
+    // A 402 here just means a free user — expected, not a real failure, and
+    // already fully handled by groupTabHtml()'s own hasAccess() gate.
+    if (!err.upgradeRequired) state.groupLoadFailed = true;
   }
 }
 
@@ -2352,6 +2362,7 @@ function renderAll() {
   renderPhotosTab();
   renderRecapsTab();
   renderInsightsTab();
+  renderGroupTab();
   updateStreakPill();
   updateBottomNav();
   checkAndUnlockAchievements();
@@ -2372,6 +2383,7 @@ const BOTTOM_NAV_ACTIONS = {
   home: () => setActiveTab('dashboard'),
   log: () => setActiveTab('log'),
   lift: () => setActiveTab('lifts'),
+  group: () => setActiveTab('group'),
   profile: () => setActiveTab('profile'),
 };
 $$('.bottom-nav-btn').forEach((btn) => btn.addEventListener('click', () => BOTTOM_NAV_ACTIONS[btn.dataset.bottom]()));
@@ -2386,15 +2398,16 @@ function updateBottomNav() {
   let active = 'home';
   if (state.activeTab === 'log') active = 'log';
   else if (TRAINING_SUB_TABS.has(state.activeTab)) active = 'lift';
+  else if (state.activeTab === 'group') active = 'group';
   else if (state.activeTab === 'profile') active = 'profile';
   $$('.bottom-nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.bottom === active));
 }
 
-// Home and Profile are endpoint screens — nothing to jump laterally to from
-// either one — so they rely on the bottom nav alone; every other screen
-// (History, Weight, Lifts, Days, etc.) genuinely benefits from the secondary
-// row's quick lateral movement, so it stays for those.
-const TABS_WITHOUT_SECONDARY_NAV = new Set(['dashboard', 'profile']);
+// Home, Group, and Profile are endpoint screens — nothing to jump laterally
+// to from any of them — so they rely on the bottom nav alone; every other
+// screen (History, Weight, Lifts, Days, etc.) genuinely benefits from the
+// secondary row's quick lateral movement, so it stays for those.
+const TABS_WITHOUT_SECONDARY_NAV = new Set(['dashboard', 'profile', 'group']);
 
 function setActiveTab(tab) {
   // Navigating away from Log Food while the barcode camera is running
@@ -10321,9 +10334,9 @@ function friendsLeaderboardHtml() {
   </div>`;
 }
 
-let insightsSubTab = 'training'; // 'training' | 'social' | 'group'
+let insightsSubTab = 'training'; // 'training' | 'social'
 
-// ── Group Mode UI state ─────────────────────────────────────────────────
+// ── Group Mode (own top-level tab — see renderGroupTab() below) ─────────
 let groupCreateName = '';
 let groupCreating = false;
 let groupActionMessage = '';
@@ -10340,6 +10353,19 @@ function groupFreezeLogText(entry) {
 }
 
 function groupTabHtml() {
+  if (!hasAccess(state.subscription)) {
+    return `<div class="card">
+      <h3>Group</h3>
+      <p class="muted">Form a group of up to 10 friends with a shared streak and a leaderboard ranking everyone's weekly sessions — protected by a freeze pool the group earns together. Unlock it on the paid tier.</p>
+      <button class="btn btn-primary" id="unlockGroupBtn">Upgrade — Unlock Group Mode</button>
+    </div>`;
+  }
+  if (state.groupLoadFailed) {
+    return `<div class="card">
+      <h3>Group</h3>
+      <p class="muted small">Couldn't load your group right now — try again in a moment.</p>
+    </div>`;
+  }
   if (!state.group) {
     return `
       ${state.groupPendingInvites.length ? `
@@ -10366,6 +10392,7 @@ function groupTabHtml() {
 
   const g = state.group;
   const friendCandidates = state.leaderboard.filter((e) => !e.isSelf && !g.roster.some((m) => m.userId === e.userId));
+  const ranked = [...g.roster].sort((a, b) => b.sessionsThisWeek - a.sessionsThisWeek);
 
   return `
     <div class="card">
@@ -10375,10 +10402,10 @@ function groupTabHtml() {
       </div>
       <p class="muted small" style="margin-top:0.25rem;">🧊 ${g.freezesAvailable}/3 freezes banked</p>
       <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.3rem;">
-        ${g.roster.map((m) => `
-          <div class="row" style="justify-content:space-between;align-items:center;">
-            <span>${esc(m.displayName)}${m.isSelf ? ' (you)' : ''}</span>
-            <span class="muted small">${m.hitToday ? '✓ hit today' : '— not yet'}</span>
+        ${ranked.map((m, i) => `
+          <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border-radius:8px;background:${m.isSelf ? 'var(--surface-2)' : 'transparent'};">
+            <span>${i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}${esc(m.displayName)}${m.isSelf ? ' (you)' : ''}</span>
+            <span class="mono muted small">${m.sessionsThisWeek} this wk · ${m.hitToday ? '✓ hit today' : '— not yet'}</span>
           </div>`).join('')}
       </div>
       <button class="btn btn-sm btn-ghost" id="groupLeaveBtn" style="margin-top:0.75rem;">Leave Group</button>
@@ -10423,23 +10450,27 @@ function groupTabHtml() {
 }
 
 function wireGroupEvents(panel) {
+  const unlockBtn = $('#unlockGroupBtn', panel);
+  if (unlockBtn) unlockBtn.addEventListener('click', () => showUpgradeScreen());
+
   const nameInput = $('#group_name_input', panel);
   if (nameInput) nameInput.addEventListener('input', () => { groupCreateName = nameInput.value; });
   const createBtn = $('#groupCreateBtn', panel);
   if (createBtn) createBtn.addEventListener('click', async () => {
     if (!groupCreateName.trim()) return;
     groupCreating = true;
-    renderInsightsTab();
+    renderGroupTab();
     try {
       await callFunction('create-group', { name: groupCreateName.trim() });
       groupCreateName = '';
       groupActionMessage = '';
       await loadGroup();
     } catch (err) {
+      if (err.upgradeRequired) { groupCreating = false; showUpgradeScreen(); return; }
       groupActionMessage = err.message || 'Could not create group.';
     }
     groupCreating = false;
-    renderInsightsTab();
+    renderGroupTab();
   });
 
   $$('[data-group-invite-accept]', panel).forEach((btn) => btn.addEventListener('click', async () => {
@@ -10448,14 +10479,14 @@ function wireGroupEvents(panel) {
       .eq('group_id', btn.dataset.groupInviteAccept).eq('user_id', state.user.id);
     if (error) return toast('Could not join: ' + error.message);
     await loadGroup();
-    renderInsightsTab();
+    renderGroupTab();
   }));
   $$('[data-group-invite-decline]', panel).forEach((btn) => btn.addEventListener('click', async () => {
     const { error } = await supabase.from('group_members').delete()
       .eq('group_id', btn.dataset.groupInviteDecline).eq('user_id', state.user.id);
     if (error) return toast('Could not decline: ' + error.message);
     await loadGroup();
-    renderInsightsTab();
+    renderGroupTab();
   }));
 
   const leaveBtn = $('#groupLeaveBtn', panel);
@@ -10465,7 +10496,7 @@ function wireGroupEvents(panel) {
       .eq('group_id', state.group.id).eq('user_id', state.user.id);
     if (error) return toast('Could not leave group: ' + error.message);
     await loadGroup();
-    renderInsightsTab();
+    renderGroupTab();
   });
 
   $$('[data-group-invite]', panel).forEach((btn) => btn.addEventListener('click', async () => {
@@ -10475,15 +10506,16 @@ function wireGroupEvents(panel) {
       const messages = { invited: 'Invite sent.', already_invited: 'Already invited.', already_member: 'Already in this group.' };
       groupActionMessage = messages[result.status] || 'Done.';
     } catch (err) {
+      if (err.upgradeRequired) { showUpgradeScreen(); return; }
       groupActionMessage = err.message || 'Could not send invite.';
     }
-    renderInsightsTab();
+    renderGroupTab();
   }));
 
   const goalOpenBtn = $('#groupGoalOpenBtn', panel);
-  if (goalOpenBtn) goalOpenBtn.addEventListener('click', () => { groupGoalFormOpen = true; renderInsightsTab(); });
+  if (goalOpenBtn) goalOpenBtn.addEventListener('click', () => { groupGoalFormOpen = true; renderGroupTab(); });
   const goalCancelBtn = $('#groupGoalCancelBtn', panel);
-  if (goalCancelBtn) goalCancelBtn.addEventListener('click', () => { groupGoalFormOpen = false; renderInsightsTab(); });
+  if (goalCancelBtn) goalCancelBtn.addEventListener('click', () => { groupGoalFormOpen = false; renderGroupTab(); });
   const goalDescInput = $('#group_goal_desc_input', panel);
   if (goalDescInput) goalDescInput.addEventListener('input', () => { groupGoalDescription = goalDescInput.value; });
   const goalTargetInput = $('#group_goal_target_input', panel);
@@ -10504,8 +10536,18 @@ function wireGroupEvents(panel) {
     groupGoalDescription = '';
     groupGoalTargetValue = '';
     await loadGroup();
-    renderInsightsTab();
+    renderGroupTab();
   });
+}
+
+function renderGroupTab() {
+  const panel = $('#panel-group');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">Group</div></div>
+    ${groupTabHtml()}
+  `;
+  wireGroupEvents(panel);
 }
 
 function renderInsightsTab() {
@@ -10570,17 +10612,14 @@ function renderInsightsTab() {
     <div class="sub-nav">
       <button class="btn btn-sm ${insightsSubTab === 'training' ? 'btn-primary' : ''}" data-sub="training">Training</button>
       <button class="btn btn-sm ${insightsSubTab === 'social' ? 'btn-primary' : ''}" data-sub="social">Nutrition & Social</button>
-      <button class="btn btn-sm ${insightsSubTab === 'group' ? 'btn-primary' : ''}" data-sub="group">Group</button>
     </div>
-    ${insightsSubTab === 'training' ? insightsTrainingSubTabHtml : insightsSubTab === 'social' ? insightsSocialSubTabHtml : groupTabHtml()}
+    ${insightsSubTab === 'training' ? insightsTrainingSubTabHtml : insightsSocialSubTabHtml}
   `;
 
   $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => {
     insightsSubTab = btn.dataset.sub;
     renderInsightsTab();
   }));
-
-  if (insightsSubTab === 'group') wireGroupEvents(panel);
 
   $$('[data-insight-open]', panel).forEach((el) => el.addEventListener('click', () => {
     liftsSelectedExercise = el.dataset.insightOpen;
