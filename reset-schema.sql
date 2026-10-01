@@ -1681,6 +1681,28 @@ create table admin_users (
 
 alter table admin_users enable row level security;
 
+-- ── dashboard_infra_costs / dashboard_one_time_costs (founder dashboard) ──
+-- Manually-edited cost tracking for the margin section. Same zero-policy
+-- pattern as admin_users — see supabase-schema-phase33-dashboard-costs.sql.
+create table dashboard_infra_costs (
+  month date primary key,
+  amount_usd numeric not null,
+  note text,
+  updated_at timestamptz not null default now()
+);
+
+alter table dashboard_infra_costs enable row level security;
+
+create table dashboard_one_time_costs (
+  id uuid primary key default gen_random_uuid(),
+  incurred_on date not null,
+  description text not null,
+  amount_usd numeric not null,
+  created_at timestamptz not null default now()
+);
+
+alter table dashboard_one_time_costs enable row level security;
+
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE
 -- All tables created fresh with consistent naming:

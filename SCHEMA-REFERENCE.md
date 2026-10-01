@@ -800,6 +800,35 @@ to their own row. A separate, policy-less table closes that off
 entirely rather than relying on remembering to scope an RLS `with check`
 correctly.
 
+---
+
+### `dashboard_infra_costs` / `dashboard_one_time_costs` — Manual cost tracking (founder dashboard)
+```sql
+-- dashboard_infra_costs: one row per month of fixed recurring costs
+month        date primary key  -- first day of the month
+amount_usd   numeric not null
+note         text
+updated_at   timestamptz
+
+-- dashboard_one_time_costs: append-only log of irregular costs
+id            uuid primary key
+incurred_on   date not null
+description   text not null
+amount_usd    numeric not null
+created_at    timestamptz
+```
+**No frontend access at all** — same zero-RLS-policy pattern as
+`admin_users` (see `supabase-schema-phase33-dashboard-costs.sql`). Only
+the dashboard's Netlify functions, themselves gated behind
+`requireAdmin()`, can read or write these.
+
+`dashboard_infra_costs` covers fixed monthly costs you enter by hand
+(Supabase, Netlify, Resend, domain, Apple Developer fee) since nothing
+in this app bills those automatically. `dashboard_one_time_costs` is a
+simple log for non-recurring costs (LLC filing, trademark search, etc.)
+— both feed into the dashboard's net-margin calculation alongside real
+AI cost (`ai_usage`) and real Stripe fees.
+
 
 ## Naming Rules — CONSISTENT across ALL tables
 
