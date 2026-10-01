@@ -265,11 +265,6 @@
   .profile-avatar-circle svg { width: 30px; height: 30px; }
   .profile-hero-name { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; color: var(--text); }
 
-  /* ── Tier status card — first thing on Profile, above the avatar. The
-     Pro state gets the warm accent treatment (same tokens as .badge.on)
-     so it reads as a small reward rather than an identical free-tier card. */
-  .tier-status-card.pro { border-color: var(--accent); background: var(--accent-soft); }
-
   /* ── Bottom nav (primary) ─────────────────────────────────────── */
   .bottom-nav { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex;
     background: var(--nav-bg); border: 1px solid var(--border); border-radius: 100px;
@@ -5371,7 +5366,7 @@ function renderHealthSyncSetup(panel) {
 // home, not a duplicate of a second subscription-management UI.
 function tierStatusCardHtml() {
   const pro = hasAccess(state.subscription);
-  return `<div class="card tier-status-card ${pro ? 'pro' : ''}">
+  return `<div class="card tier-status-card">
     <span class="badge ${pro ? 'on' : ''}">${pro ? '⭐ Krafft Pro' : '🔓 Free Tier'}</span>
     <p class="muted" style="margin-top:0.5rem;">${subscriptionStatusLabel(state.subscription)}</p>
     ${pro
