@@ -10,7 +10,7 @@
 // place in the app allowed to write to that table (see reset-schema.sql):
 // RLS gives every user select-own but no insert/update policy at all.
 const crypto = require('crypto');
-const { jsonResponse, captureError, withErrorReporting, callStripe } = require('./_shared');
+const { jsonResponse, captureError, withErrorReporting, callStripe, logServerEvent } = require('./_shared');
 
 // Shared, idempotently-created 100%-off-once coupon used for every referral
 // reward — one Stripe object reused by everyone rather than minting a new
@@ -81,6 +81,37 @@ async function rewardReferrerIfConverted(stripeEvent, subscription, referredUser
   } catch (err) {
     // Bonus logic — must never affect the primary subscription upsert's response.
     await captureError(err, { function: 'stripe-webhook:referral-reward', referredUserId });
+  }
+}
+
+// Server-side source of truth for the founder dashboard's revenue events —
+// fired from Stripe's actual webhook payload, never from client-side
+// assumptions about what a user's subscription state is. `status` is the
+// already-normalized value the handler below computes (it maps the
+// .deleted event to 'canceled' itself); previous_attributes.status is
+// only present on .updated events.
+function logSubscriptionTransitionEvents(stripeEvent, status, userId) {
+  const prevStatus = stripeEvent.data?.previous_attributes?.status;
+
+  if (stripeEvent.type === 'customer.subscription.created') {
+    if (status === 'trialing') logServerEvent('trial_started', userId);
+    else if (status === 'active') logServerEvent('subscribed', userId, { trial: false });
+    return;
+  }
+
+  if (stripeEvent.type === 'customer.subscription.updated') {
+    if (status === 'active' && prevStatus && prevStatus !== 'active') {
+      // trialing -> active is a trial converting (counts toward the
+      // signup funnel's "subscribed" step); anything else -> active
+      // (past_due, canceled-but-not-yet-expired) is a reactivation for
+      // MRR-breakdown purposes, not a fresh funnel conversion.
+      logServerEvent(prevStatus === 'trialing' ? 'subscribed' : 'subscription_reactivated', userId, { from_status: prevStatus });
+    }
+    return;
+  }
+
+  if (stripeEvent.type === 'customer.subscription.deleted') {
+    logServerEvent('subscription_canceled', userId, { from_status: prevStatus || status });
   }
 }
 
@@ -207,6 +238,7 @@ exports.handler = withErrorReporting(async (event) => {
   }
 
   await rewardReferrerIfConverted(stripeEvent, subscription, userId);
+  logSubscriptionTransitionEvents(stripeEvent, status, userId);
 
   return jsonResponse(200, { received: true });
 }, 'stripe-webhook');

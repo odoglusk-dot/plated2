@@ -206,6 +206,28 @@ async function checkAndIncrementRateLimit(userId, token) {
   return { ok: true, remaining: DAILY_AI_LIMIT - (currentCount + 1) };
 }
 
+// Fire-and-forget event logging for server-side-only events (subscription
+// transitions from stripe-webhook.js — these must reflect Stripe's actual
+// truth, not a client-side guess). Uses the service role key since this
+// runs with no user session to attach a JWT to. Never throws or rejects
+// the caller — same contract as logEvent() in index.html.
+async function logServerEvent(eventName, userId, properties = {}) {
+  try {
+    await fetch(`${process.env.SUPABASE_URL}/rest/v1/events`, {
+      method: 'POST',
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ user_id: userId || null, event_name: eventName, properties }),
+    });
+  } catch {
+    // Event logging must never affect the webhook's actual job (recording
+    // the subscription state Stripe told us about).
+  }
+}
+
 async function callAnthropic({ system, messages, maxTokens = 500 }) {
   const model = 'claude-sonnet-5';
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -405,4 +427,5 @@ module.exports = {
   getPhotoCacheKey,
   checkFoodCache,
   cacheFood,
+  logServerEvent,
 };

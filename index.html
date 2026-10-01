@@ -998,6 +998,51 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const round = (n, d = 0) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
 
+// ── Event logging (founder-only growth dashboard) ───────────────────────
+// Fire-and-forget: never awaited by callers, never throws, never blocks or
+// delays the action it's logging. Writes to `events` (see
+// supabase-schema-phase32-events-and-admin.sql) — insert-only from the
+// client, read only by the dashboard's server-side service-role code.
+// userId defaults to state.user.id; pass it explicitly for the brief
+// window right after signUp() succeeds but before state.user is set
+// (no session yet if email confirmation is pending), or omit it
+// entirely for the one genuinely pre-auth event (signup_started).
+function logEvent(eventName, properties = {}, userId = state.user?.id) {
+  supabase
+    .from('events')
+    .insert({ user_id: userId || null, event_name: eventName, properties })
+    .then(({ error }) => {
+      // Missing table (phase32 not yet run) or any other failure is
+      // silently swallowed — event logging must never surface an error to
+      // the user or affect the action it's attached to.
+      if (error && error.code !== '42P01') console.warn('logEvent failed:', eventName, error.message);
+    });
+}
+
+// Once-per-calendar-day activity heartbeat, the broad signal DAU/WAU/MAU
+// are computed from (on top of the more specific milestone events below).
+// Throttled via localStorage, not a server check, so it costs nothing
+// extra and still works offline-first (a missed day just doesn't log,
+// same as the user not having used the app that day).
+function logDailyActiveEvent() {
+  if (!state.user) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const key = 'lastAppOpenedEventDate';
+  if (localStorage.getItem(key) === today) return;
+  localStorage.setItem(key, today);
+  logEvent('app_opened');
+}
+
+// Cheap existence check (count only, no rows fetched) used right before
+// an insert to tell whether this is about to be a user's first-ever row
+// in a table — can't rely on client-side history state for this since
+// that's windowed (e.g. loadHistory() only loads the last 90 days), which
+// would misfire "first ever" for an old, recently-inactive account.
+async function isFirstEverRow(table, userId) {
+  const { count } = await supabase.from(table).select('id', { count: 'exact', head: true }).eq('user_id', userId);
+  return (count || 0) === 0;
+}
+
 // ── Weight unit preference ──────────────────────────────────────────────
 // Every table keeps storing weight exactly as it always has (lifts.weight
 // and exercise_goals.target_weight in lb, weight_log.weight_lb in lb,
@@ -1749,6 +1794,7 @@ $('#authForm').addEventListener('submit', async (e) => {
       const referralCode = $('#referralCode').value.trim().toUpperCase();
       if (referralCode) localStorage.setItem('pendingReferralCode', referralCode);
       const ageGateShownAt = new Date().toISOString();
+      logEvent('signup_started', {}, null);
       const { data, error } = await supabase.auth.signUp({
         email, password, options: { data: {
           display_name: displayName,
@@ -1758,6 +1804,7 @@ $('#authForm').addEventListener('submit', async (e) => {
         } },
       });
       if (error) throw error;
+      logEvent('signup_completed', {}, data.user?.id);
       // Only write profile/goals rows here if sign-up produced an active
       // session (email confirmation disabled). If confirmation is required,
       // auth.uid() is null until the user confirms + signs in, so an insert
@@ -1970,6 +2017,7 @@ async function finishOnboarding() {
     return;
   }
   state.profile = { ...state.profile, onboarded_at: new Date().toISOString() };
+  logEvent('onboarding_completed');
 }
 
 function renderOnboarding() {
@@ -2181,6 +2229,7 @@ async function enterApp(session) {
     showAppLoading(true);
     await bootstrapApp();
     showAppLoading(false);
+    logDailyActiveEvent();
     if (!state.profile?.onboarded_at) showOnboarding();
   } catch (err) {
     // Never leave the user staring at a blank screen — fall back to
@@ -2301,7 +2350,7 @@ async function ensureProfileAndGoals(user, displayNameHint) {
     try {
       const result = await callFunction('join-group-by-code', { code: pendingGroupCode, confirm: true });
       localStorage.removeItem('pendingGroupInviteCode');
-      if (result.status === 'joined') toast(`You joined ${result.groupName}!`);
+      if (result.status === 'joined') { toast(`You joined ${result.groupName}!`); logEvent('group_mode_used', { action: 'joined' }); }
       else toast(groupInviteStatusMessage(result.status, result.groupName));
     } catch (err) {
       reportError(err);
@@ -3789,11 +3838,13 @@ async function deleteLog(id) {
 }
 
 async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source, photo_path, sugar_g, barcode }) {
+  const wasFirstEver = await isFirstEverRow('food_logs', state.user.id);
   const { error } = await supabase.from('food_logs').insert({
     user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source, photo_path: photo_path || null,
     sugar_g: sugar_g ?? null, barcode: barcode || null,
   });
   if (error) return toast('Could not log food: ' + error.message);
+  if (wasFirstEver) logEvent('first_food_log');
   await loadHistory();
   renderAll();
 }
@@ -5838,6 +5889,7 @@ function renderProfile() {
         already_friends: "You're already friends.",
       };
       addFriendMessage = messages[result.status] || 'Done.';
+      if (result.status === 'accepted' || result.status === 'requested') logEvent('leaderboard_used', { action: result.status });
       await Promise.all([loadFriendships(), loadLeaderboard()]);
       renderProfile();
     } catch (err) {
@@ -5885,6 +5937,7 @@ function renderProfile() {
       renderProfile();
       return;
     }
+    logEvent('athlete_mode_used');
     const firstTime = !state.profile.athlete_mode_unlocked_at;
     if (firstTime) {
       await supabase.from('profiles').update({ athlete_mode_unlocked_at: new Date().toISOString() }).eq('id', state.user.id);
@@ -7966,6 +8019,7 @@ async function addLiftFromForm() {
   liftFormError = '';
   renderLiftsTab();
   const warmupPerSet = liftForm.warmupPerSet.slice(0, repsPerSet.length);
+  const wasFirstEverLift = state.lifts.length === 0; // state.lifts is the full history, not windowed
   const { error } = await supabase.from('lifts').insert({
     user_id: state.user.id,
     exercise, muscle_group: muscleGroup, body_region: bodyRegion,
@@ -7975,6 +8029,7 @@ async function addLiftFromForm() {
   });
   liftFormSaving = false;
   if (error) { liftFormError = error.message || 'Failed to save lift.'; renderLiftsTab(); return; }
+  if (wasFirstEverLift) logEvent('first_lift_log');
   liftForm.weight = '';
   liftForm.warmupPerSet = liftForm.warmupPerSet.map(() => false);
   if (priorBest && weightNum > priorBest.weight) {
@@ -9214,6 +9269,7 @@ function wireBlockBuilderStep3(panel) {
     showBlockBuilder = false;
     resetBlockBuilderState();
     toast('Block started — check Training for your Week 1 plan.');
+    logEvent('block_builder_used');
     renderLiftsTab();
   });
 }
@@ -9626,6 +9682,7 @@ function wirePlanBuilderStep3(panel) {
     showPlanBuilder = false;
     resetPlanBuilderState();
     toast('Plan started — check Training for your first phase.');
+    logEvent('plan_builder_used');
     renderLiftsTab();
   });
 }
@@ -11563,6 +11620,7 @@ function wireGroupEvents(panel) {
         groupInviteActionMessage = '';
         resetGroupTransientState();
         toast(`You joined ${result.groupName}!`);
+        logEvent('group_mode_used', { action: 'joined' });
         await loadGroup();
       } else {
         groupInvitePreview = { ...groupInvitePreview, status: result.status, groupName: result.groupName || groupInvitePreview.groupName };
@@ -11620,6 +11678,7 @@ function wireGroupEvents(panel) {
     renderGroupTab();
     try {
       await callFunction('create-group', { name: groupCreateName.trim() });
+      logEvent('group_mode_used', { action: 'created' });
       groupCreateName = '';
       groupActionMessage = '';
       resetGroupTransientState();

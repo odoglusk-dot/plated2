@@ -766,11 +766,19 @@ the `authenticated` role at all, so event history can't be read back or
 tampered with by the client that wrote it, only by server-side code
 holding the service role key.
 
-Fired from: signup started/completed, onboarding completed, first food
-log, first lift log, trial started/subscribed (from `stripe-webhook.js`,
-server-side), feature-adoption usage (Block Builder, Plan Builder,
-Athlete Mode, public feed, leaderboard, Group Mode), and a throttled
-once-per-day `app_opened` heartbeat for DAU/WAU/MAU.
+Event names: `signup_started`, `signup_completed`, `onboarding_completed`,
+`first_food_log`, `first_lift_log`, `block_builder_used`,
+`plan_builder_used`, `athlete_mode_used`, `leaderboard_used` (friend
+added/requested — there is deliberately no public feed in this app, see
+the "No feed, no posts" copy in index.html, so that adoption metric
+doesn't apply here), `group_mode_used`, and a throttled once-per-day
+`app_opened` heartbeat for DAU/WAU/MAU.
+
+Fired server-side only, from `stripe-webhook.js` using the real Stripe
+event (never a client-side guess): `trial_started`, `subscribed` (trial
+converting, or a direct paid signup with no trial), and for MRR-breakdown
+purposes, `subscription_reactivated` (past_due/canceled → active) and
+`subscription_canceled`.
 
 ---
 
