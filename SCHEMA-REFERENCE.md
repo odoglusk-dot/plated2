@@ -738,6 +738,57 @@ with Chart.js, loaded lazily from a CDN only when this screen opens — the
 one deliberate exception to the rest of the app's hand-rolled-SVG chart
 convention, per the product spec for this feature specifically.
 
+---
+
+### `events` — Append-only activity log (founder dashboard)
+```sql
+id            uuid primary key
+user_id       uuid, nullable
+event_name    text not null
+properties    jsonb (default: '{}')
+created_at    timestamptz
+```
+**Frontend writes:** fire-and-forget inserts only (`event_name`,
+`properties`) — never reads. **Backend reads:** the IronLog-repurposed
+dashboard's Netlify functions, using the service role key.
+
+Built for the founder-only growth dashboard — see
+`supabase-schema-phase32-events-and-admin.sql`. Existing tables
+(`profiles`, `subscriptions`) hold only current state, not history, so
+funnel/DAU-WAU-MAU/cohort-retention can't be computed from them; this is
+an intentionally generic log (one row per action, a jsonb properties bag
+instead of per-event columns) so a new event kind never needs a
+migration. RLS is insert-own only — no select/update/delete policy for
+the `authenticated` role at all, so event history can't be read back or
+tampered with by the client that wrote it, only by server-side code
+holding the service role key.
+
+Fired from: signup started/completed, onboarding completed, first food
+log, first lift log, trial started/subscribed (from `stripe-webhook.js`,
+server-side), feature-adoption usage (Block Builder, Plan Builder,
+Athlete Mode, public feed, leaderboard, Group Mode), and a throttled
+once-per-day `app_opened` heartbeat for DAU/WAU/MAU.
+
+---
+
+### `admin_users` — Founder-only allowlist (founder dashboard)
+```sql
+user_id  uuid primary key
+```
+**No frontend access at all.** Zero RLS policies for `authenticated`/
+`anon` — RLS defaults to deny, so this table is unreachable through the
+public API in either direction, full stop. Only the service role key
+(used exclusively by the dashboard's Netlify functions, never shipped to
+a browser) can read or write it.
+
+Deliberately not a boolean column on `profiles`: that table's existing
+`"profiles: update own"` policy (`using (auth.uid() = id)`) has no
+column-level restriction, so a hypothetical `is_admin` flag there would
+let any authenticated user grant themselves admin via a direct `PATCH`
+to their own row. A separate, policy-less table closes that off
+entirely rather than relying on remembering to scope an RLS `with check`
+correctly.
+
 
 ## Naming Rules — CONSISTENT across ALL tables
 

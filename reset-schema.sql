@@ -1641,6 +1641,43 @@ create policy "workout_sessions_insert_own" on workout_sessions for insert
 create policy "workout_sessions_update_own" on workout_sessions for update
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- ── events (append-only activity log, founder dashboard) ─────────────────
+-- Existing tables only hold current state, not history, so funnel/DAU-
+-- WAU-MAU/cohort-retention questions can't be answered from them. See
+-- supabase-schema-phase32-events-and-admin.sql for the full rationale.
+-- RLS is insert-only for a user's own rows — nobody, including the user
+-- who wrote them, can select/update/delete through the public API; reads
+-- only happen server-side via the service role key (dashboard backend).
+create table events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  event_name text not null,
+  properties jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index events_user_id_idx on events (user_id);
+create index events_name_created_at_idx on events (event_name, created_at);
+create index events_created_at_idx on events (created_at);
+
+alter table events enable row level security;
+
+create policy "events_insert_own" on events for insert with check (auth.uid() = user_id);
+
+-- ── admin_users (founder-only allowlist, founder dashboard) ──────────────
+-- Deliberately not a boolean column on profiles: that table's own
+-- "update own" policy has no column-level restriction, so a flag there
+-- would let any user grant themselves admin via a direct PATCH. A
+-- separate table with zero RLS policies for authenticated/anon has no
+-- such gap — RLS defaults to deny-all, so this is unreachable through the
+-- public API in either direction. Only the service role (dashboard
+-- backend only) can read or write it.
+create table admin_users (
+  user_id uuid primary key references auth.users(id) on delete cascade
+);
+
+alter table admin_users enable row level security;
+
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE
 -- All tables created fresh with consistent naming:
