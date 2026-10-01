@@ -281,6 +281,26 @@
   .bottom-nav-btn.active { color: var(--bg); background: var(--text); }
   .bottom-nav-btn.active .bottom-nav-label { font-weight: 600; }
 
+  /* ── Quick-log FAB — always reachable, same two destinations (Log Food /
+     Log a Lift) regardless of which tab is active. Sits just above the
+     bottom nav, never inside a tab-panel, so it survives every navigation. */
+  .quick-log-fab { position: fixed; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 32;
+    width: 52px; height: 52px; border-radius: 50%; background: var(--text); color: var(--bg); border: none;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    box-shadow: 0 6px 16px rgba(23,24,27,0.22); transition: transform .15s; }
+  .quick-log-fab:active { transform: scale(0.94); }
+  .quick-log-fab svg { width: 24px; height: 24px; }
+  .quick-log-backdrop { position: fixed; inset: 0; z-index: 29; background: transparent; }
+  .quick-log-sheet { position: fixed; right: 16px; bottom: calc(144px + env(safe-area-inset-bottom, 0px)); z-index: 32;
+    display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end; }
+  .quick-log-sheet-item { display: flex; align-items: center; gap: 0.5rem; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 100px; padding: 0.6rem 1rem 0.6rem 0.8rem;
+    font-weight: 600; font-size: 0.85rem; color: var(--text); cursor: pointer;
+    box-shadow: 0 4px 12px rgba(23,24,27,0.12); white-space: nowrap; }
+  .quick-log-sheet-icon { display: flex; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft);
+    color: var(--accent); align-items: center; justify-content: center; flex: none; }
+  .quick-log-sheet-icon svg { width: 14px; height: 14px; }
+
   /* ── Plate scoreboard ─────────────────────────────────────────── */
   .scoreboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
   .plate { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
@@ -368,6 +388,9 @@
      secondary stats floating up over its bottom edge. */
   .eyebrow-sm { font-family: var(--font-body); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--accent); margin-bottom: 0.2rem; }
+  .settings-section-label { font-family: var(--font-body); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-faint); margin: 1.5rem 0 0.5rem; }
+  .settings-section-label:first-child { margin-top: 0; }
   .hero { text-align: center; padding: 0.5rem 0 2.5rem; }
   .hero .hero-num { font-family: var(--font-display); font-weight: 600; font-size: 2.7rem; color: var(--text); line-height: 1.05; margin-top: 0.35rem; }
   .hero .hero-num .hero-unit { font-size: 0.95rem; font-weight: 500; color: var(--text-dim); margin-left: 0.35rem; }
@@ -874,15 +897,9 @@
   <nav class="tab-nav hidden" id="tabNav">
     <div class="tab-btn-row">
       <button class="tab-btn" data-tab="history">History</button>
-      <button class="tab-btn" data-tab="weight">Weight</button>
-      <button class="tab-btn" data-tab="supplements">Supplements</button>
-      <button class="tab-btn" data-tab="meals">Meals</button>
-      <button class="tab-btn" data-tab="ask">Ask AI</button>
+      <button class="tab-btn" data-tab="more">More</button>
       <button class="tab-btn" data-tab="lifts">Lifts</button>
-      <button class="tab-btn" data-tab="days">Days</button>
-      <button class="tab-btn" data-tab="photos">Photos</button>
-      <button class="tab-btn" data-tab="recaps">Recaps</button>
-      <button class="tab-btn" data-tab="insights">Insights</button>
+      <button class="tab-btn" data-tab="progress">Progress</button>
     </div>
   </nav>
 
@@ -894,12 +911,14 @@
     <section class="tab-panel" data-tab="supplements" id="panel-supplements"></section>
     <section class="tab-panel" data-tab="meals" id="panel-meals"></section>
     <section class="tab-panel" data-tab="ask" id="panel-ask"></section>
+    <section class="tab-panel" data-tab="more" id="panel-more"></section>
     <section class="tab-panel" data-tab="profile" id="panel-profile"></section>
     <section class="tab-panel" data-tab="lifts" id="panel-lifts"></section>
     <section class="tab-panel" data-tab="days" id="panel-days"></section>
     <section class="tab-panel" data-tab="photos" id="panel-photos"></section>
     <section class="tab-panel" data-tab="recaps" id="panel-recaps"></section>
     <section class="tab-panel" data-tab="insights" id="panel-insights"></section>
+    <section class="tab-panel" data-tab="progress" id="panel-progress"></section>
     <section class="tab-panel" data-tab="group" id="panel-group"></section>
     <section class="tab-panel" data-tab="athlete" id="panel-athlete"></section>
   </main>
@@ -935,6 +954,24 @@
       <span class="bottom-nav-label">Profile</span>
     </button>
   </nav>
+
+  <!-- Always-reachable quick-log action — same two destinations
+       regardless of which tab you're currently on (see item 2 of the IA
+       streamlining pass). -->
+  <div class="quick-log-sheet hidden" id="quickLogSheet">
+    <button class="quick-log-sheet-item" id="quickLogFoodBtn">
+      <span class="quick-log-sheet-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>
+      Log Food
+    </button>
+    <button class="quick-log-sheet-item" id="quickLogLiftBtn">
+      <span class="quick-log-sheet-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><rect x="1.5" y="9" width="3" height="6" rx="1"/><rect x="19.5" y="9" width="3" height="6" rx="1"/><rect x="6" y="7" width="2.4" height="10" rx="1"/><rect x="15.6" y="7" width="2.4" height="10" rx="1"/></svg></span>
+      Log a Lift
+    </button>
+  </div>
+  <div class="quick-log-backdrop hidden" id="quickLogBackdrop"></div>
+  <button class="quick-log-fab" id="quickLogFab" aria-label="Quick log">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
 </div>
 
 <script type="module">
@@ -2436,12 +2473,14 @@ function renderAll() {
   renderSupplements();
   renderMeals();
   renderAsk();
+  renderMoreTab();
   renderProfile();
   renderLiftsTab();
   renderDaysTab();
   renderPhotosTab();
   renderRecapsTab();
   renderInsightsTab();
+  renderProgressTab();
   renderGroupTab();
   renderAthleteTab();
   applyAthleteModeVisualState();
@@ -2471,11 +2510,40 @@ const BOTTOM_NAV_ACTIONS = {
 };
 $$('.bottom-nav-btn').forEach((btn) => btn.addEventListener('click', () => BOTTOM_NAV_ACTIONS[btn.dataset.bottom]()));
 
+// Quick-log FAB — same two destinations (Log Food / Log a Lift) reachable
+// from anywhere, not scoped to any one tab. Log a Lift resets every
+// Lifts-tab sub-state (Block/Plan Builder, exercise glossary, exercise
+// detail) so it always lands on the actual log form, not whatever the
+// Lifts tab happened to be showing last.
+function closeQuickLogSheet() {
+  $('#quickLogSheet').classList.add('hidden');
+  $('#quickLogBackdrop').classList.add('hidden');
+}
+$('#quickLogFab').addEventListener('click', () => {
+  $('#quickLogSheet').classList.toggle('hidden');
+  $('#quickLogBackdrop').classList.toggle('hidden');
+});
+$('#quickLogBackdrop').addEventListener('click', closeQuickLogSheet);
+$('#quickLogFoodBtn').addEventListener('click', () => {
+  closeQuickLogSheet();
+  setActiveTab('log');
+});
+$('#quickLogLiftBtn').addEventListener('click', () => {
+  closeQuickLogSheet();
+  showPlanBuilder = false;
+  showBlockBuilder = false;
+  showExerciseGlossary = false;
+  liftsSelectedExercise = null;
+  liftsSubTab = 'log';
+  setActiveTab('lifts');
+  renderLiftsTab();
+});
+
 // Screens reachable from the tab-btn-row loosely group under whichever
 // bottom-nav icon they're conceptually part of, purely for the bottom nav's
 // own active-state highlight — Days/Photos/Recaps/Insights are training
 // sub-screens, so viewing one still shows Lift as the active bottom-nav tab.
-const TRAINING_SUB_TABS = new Set(['lifts', 'days', 'photos', 'recaps', 'insights']);
+const TRAINING_SUB_TABS = new Set(['lifts', 'progress', 'days', 'photos', 'recaps', 'insights']);
 
 function updateBottomNav() {
   let active = 'home';
@@ -3409,6 +3477,33 @@ function todaysFocusHeroHtml() {
   </div>`;
 }
 
+// Condensed, read-only Block/Plan summary for the dashboard — only shown
+// when a block is actually active, per the IA streamlining pass' "Today's
+// planned workout, if a Block or Plan is active" requirement. Reuses
+// active_training_block exactly as blockBuilderSummaryCardHtml() does;
+// the full card (with View/End actions) still lives in Lift → Training —
+// this is a glance stat, not a second place to manage the block.
+function todaysPlanCardHtml() {
+  const active = state.profile?.active_training_block;
+  if (!active) return '';
+  const start = new Date(`${active.createdDate}T00:00:00`);
+  const today = new Date(`${localDateStr()}T00:00:00`);
+  const daysSince = Math.round((today - start) / 86400000);
+  const weekNum = Math.min(4, Math.floor(Math.max(0, daysSince) / 7) + 1);
+  const focusOpt = BLOCK_FOCUS_OPTIONS.find((o) => o.key === active.focus);
+  const focusName = focusOpt ? focusOpt.name : (PLAN_PHASE_TYPES[active.focus]?.name || active.focus);
+  const plan = state.plan;
+  const planContext = plan ? ` · Phase ${plan.current_phase_index + 1}/${plan.phases.length}` : '';
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">Today's Plan</h3>
+      <span class="muted small">Week ${weekNum}/4${planContext}</span>
+    </div>
+    <p class="muted small" style="margin-top:0.25rem;">${esc(focusName)} · ${esc(blockSplitName(active.days))}</p>
+    <button class="btn btn-sm" id="dashboardViewPlanBtn">View in Lift tab</button>
+  </div>`;
+}
+
 // ── Protein by meal ───────────────────────────────────────────────────────
 // food_logs has no meal-type column (breakfast/lunch/dinner) — each row is
 // its own timestamped entry, so "per meal" here means each logged entry
@@ -3503,6 +3598,7 @@ function renderDashboard() {
         </div>
       </div>
     </div>
+    ${todaysPlanCardHtml()}
     ${achievementUnlockBannerHtml()}
     ${showSpikeWarning ? `
     <div class="card pr-banner">
@@ -3580,6 +3676,17 @@ function renderDashboard() {
 
   const spikeDismiss = $('#spikeDismiss');
   if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderDashboard(); });
+
+  const viewPlanBtn = $('#dashboardViewPlanBtn', panel);
+  if (viewPlanBtn) viewPlanBtn.addEventListener('click', () => {
+    showPlanBuilder = false;
+    showBlockBuilder = false;
+    showExerciseGlossary = false;
+    liftsSelectedExercise = null;
+    liftsSubTab = 'training';
+    setActiveTab('lifts');
+    renderLiftsTab();
+  });
 
   wireAchievementBanner(panel);
 
@@ -4614,6 +4721,32 @@ function renderAsk() {
   $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAsk(); });
 }
 
+// A directory, not a rewrite — Weight/Supplements/Meals/Ask AI keep their
+// own panels/render functions exactly as they were; this just shortens
+// the path to reach them (one tap into More, then one tap to the actual
+// screen) instead of each sitting as its own peer in the lateral nav row,
+// since none of them are daily-use.
+const MORE_TAB_DESTINATIONS = [
+  { tab: 'weight', title: 'Weight Log', desc: 'Track bodyweight over time with a trend chart.' },
+  { tab: 'supplements', title: 'Supplement Guide', desc: 'Evidence ratings (Strong/Moderate/Limited/Weak) for common supplements.' },
+  { tab: 'meals', title: 'Budget-Optimized Protein', desc: 'Foods ranked by cost per gram of protein.' },
+  { tab: 'ask', title: 'Ask Your Data', desc: 'Ask questions about your own logged history.' },
+];
+function renderMoreTab() {
+  const panel = $('#panel-more');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">More</div></div>
+    ${MORE_TAB_DESTINATIONS.map((d) => `
+      <div class="card">
+        <h3>${esc(d.title)}</h3>
+        <p class="muted small">${esc(d.desc)}</p>
+        <button class="btn btn-sm" data-more-open="${d.tab}">Open</button>
+      </div>`).join('')}
+  `;
+  $$('[data-more-open]', panel).forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.moreOpen)));
+}
+
 async function buildDataSummary() {
   const lines = [];
   lines.push(`Goals: ${round(state.goals.calories)} kcal, P${round(state.goals.protein_g)}g C${round(state.goals.carbs_g)}g F${round(state.goals.fat_g)}g`);
@@ -5175,6 +5308,21 @@ function renderProfile() {
     </div>
 
     <div class="card">
+      <h3>Achievements</h3>
+      <p class="muted">${state.achievements.length} of ${ACHIEVEMENT_LIBRARY.length} unlocked.</p>
+      ${achievementsGridHtml()}
+    </div>
+
+    <div class="card">
+      <h3>Account</h3>
+      <p class="muted">Signed in as ${esc(state.user.email)}</p>
+      <button class="btn btn-sm" id="signOutBtn">Sign Out</button>
+    </div>
+  `;
+
+  const profileSettingsSubTabHtml = `
+    <div class="settings-section-label">Goals & Macros</div>
+    <div class="card">
       <h3>Goals</h3>
       <div class="row">
         <div class="field"><label>Calories</label><input class="input mono" id="goal_cal" type="number" value="${round(state.goals.calories)}"></div>
@@ -5184,40 +5332,6 @@ function renderProfile() {
         <div class="field"><label>Water (oz)</label><input class="input mono" id="goal_water" type="number" value="${round(state.goals.water_oz || 64)}"></div>
       </div>
       <button class="btn btn-primary" id="goal_save">Save Goals</button>
-    </div>
-
-    <div class="card">
-      <h3>Achievements</h3>
-      <p class="muted">${state.achievements.length} of ${ACHIEVEMENT_LIBRARY.length} unlocked.</p>
-      ${achievementsGridHtml()}
-    </div>
-
-    <div class="card">
-      <h3>Account</h3>
-      <p class="muted">Signed in as ${esc(state.user.email)}</p>
-      <button class="btn btn-sm" id="signOutBtn" style="margin-bottom:0.75rem;">Sign Out</button>
-      <button class="btn btn-danger" id="delete_account_btn">Delete My Account</button>
-      <div id="delete_confirm" class="hidden" style="margin-top:0.75rem;">
-        <p class="muted">This permanently deletes your account and all logged data. Type DELETE to confirm.</p>
-        <input class="input" id="delete_confirm_input" style="margin-bottom:0.5rem;">
-        <button class="btn btn-danger" id="delete_confirm_btn">Permanently Delete</button>
-      </div>
-    </div>
-  `;
-
-  const profileSettingsSubTabHtml = `
-    <div class="card">
-      <h3>Units</h3>
-      <p class="muted">Switches how weight is shown everywhere in the app — nothing about how it's stored changes, so switching back and forth is always safe.</p>
-      <div class="row">
-        <button class="btn btn-sm ${weightUnitLabel() === 'lb' ? 'btn-primary' : ''}" id="unit_lb_btn">Pounds (lb)</button>
-        <button class="btn btn-sm ${weightUnitLabel() === 'kg' ? 'btn-primary' : ''}" id="unit_kg_btn">Kilograms (kg)</button>
-      </div>
-    </div>
-    <div class="card">
-      <h3>Your Data</h3>
-      <p class="muted">Download everything you've logged — nutrition, lifts, and weight history — as a JSON file.</p>
-      <button class="btn btn-sm" id="export_data_btn">Export My Data</button>
     </div>
     <div class="card">
       <h3>Goal Calculator</h3>
@@ -5259,6 +5373,17 @@ function renderProfile() {
       <div id="calc_result" style="margin-top:1rem;"></div>
     </div>
 
+    <div class="settings-section-label">Units & Display</div>
+    <div class="card">
+      <h3>Units</h3>
+      <p class="muted">Switches how weight is shown everywhere in the app — nothing about how it's stored changes, so switching back and forth is always safe.</p>
+      <div class="row">
+        <button class="btn btn-sm ${weightUnitLabel() === 'lb' ? 'btn-primary' : ''}" id="unit_lb_btn">Pounds (lb)</button>
+        <button class="btn btn-sm ${weightUnitLabel() === 'kg' ? 'btn-primary' : ''}" id="unit_kg_btn">Kilograms (kg)</button>
+      </div>
+    </div>
+
+    <div class="settings-section-label">Notifications</div>
     <div class="card">
       <h3>Email Reminders</h3>
       <div class="consent-line" style="margin-top:0;">
@@ -5266,14 +5391,6 @@ function renderProfile() {
         <label style="margin:0;color:var(--text-dim);font-weight:400;" for="email_reminders_check">
           Email me a reminder in the evening if I haven't logged any food that day.
         </label>
-      </div>
-    </div>
-    <div class="card">
-      <h3>Krafft Athlete Mode</h3>
-      <p class="muted small" style="margin-top:-0.3rem;">Unlocks plyometrics, speed/agility logging, and the Power & Speed / Functional-Athletic Block Builder categories. Nutrition, general lifting, and everything else stay exactly as they are.</p>
-      <div class="consent-line" style="margin-top:0;">
-        <input type="checkbox" id="athlete_mode_check" ${p.athlete_mode_enabled ? 'checked' : ''}>
-        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="athlete_mode_check">Turn on Athlete Mode.</label>
       </div>
     </div>
     ${state.group ? `
@@ -5293,6 +5410,36 @@ function renderProfile() {
       </div>
     </div>
     ` : ''}
+
+    <div class="settings-section-label">Data & Privacy</div>
+    <div class="card">
+      <h3>Your Data</h3>
+      <p class="muted">Download everything you've logged — nutrition, lifts, and weight history — as a JSON file.</p>
+      <button class="btn btn-sm" id="export_data_btn">Export My Data</button>
+      <p class="muted small" style="margin-top:0.75rem;"><a href="PRIVACY_POLICY.md">Privacy Policy</a> · <a href="TERMS_OF_SERVICE.md">Terms of Service</a></p>
+    </div>
+    <div class="card">
+      <h3>Delete Account</h3>
+      <p class="muted">Permanently deletes your account and all logged data. This can't be undone.</p>
+      <button class="btn btn-danger" id="delete_account_btn">Delete My Account</button>
+      <div id="delete_confirm" class="hidden" style="margin-top:0.75rem;">
+        <p class="muted">Type DELETE to confirm.</p>
+        <input class="input" id="delete_confirm_input" style="margin-bottom:0.5rem;">
+        <button class="btn btn-danger" id="delete_confirm_btn">Permanently Delete</button>
+      </div>
+    </div>
+
+    <div class="settings-section-label">Krafft Athlete Mode</div>
+    <div class="card">
+      <h3>Krafft Athlete Mode</h3>
+      <p class="muted small" style="margin-top:-0.3rem;">Unlocks plyometrics, speed/agility logging, and the Power & Speed / Functional-Athletic Block Builder categories. Nutrition, general lifting, and everything else stay exactly as they are.</p>
+      <div class="consent-line" style="margin-top:0;">
+        <input type="checkbox" id="athlete_mode_check" ${p.athlete_mode_enabled ? 'checked' : ''}>
+        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="athlete_mode_check">Turn on Athlete Mode.</label>
+      </div>
+    </div>
+
+    <div class="settings-section-label">Subscription</div>
     <div class="card">
       <h3>Subscription</h3>
       <span class="badge ${hasAccess(state.subscription) ? 'on' : ''}">${hasAccess(state.subscription) ? '⭐ Paid — AI unlocked' : '🔓 Free tier'}</span>
@@ -5303,6 +5450,7 @@ function renderProfile() {
       <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
     </div>
 
+    <div class="settings-section-label">Social</div>
     <div class="card">
       <h3>Refer a Friend</h3>
       <p class="muted">Share your code — once someone signs up with it and their trial converts to paid, you get a month free.</p>
@@ -5368,6 +5516,7 @@ function renderProfile() {
       ` : `<p class="muted small">No friends yet — add one above.</p>`}
     </div>
 
+    <div class="settings-section-label">Help & Support</div>
     <div class="card">
       <h3>Guide</h3>
       <p class="muted">A browsable how-to for every feature — logging, training splits, PRs, AI analysis, tiers, and more.</p>
@@ -9683,6 +9832,31 @@ function weeklyMuscleGroupBarSvg(weeklyData, activeMuscleGroups) {
     }).join('');
   }).join('');
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">${bars}</svg>`;
+}
+
+// A directory, not a rewrite — Days/Photos/Recaps/Insights keep their own
+// panels/render functions exactly as they were; this just shortens the
+// path to reach them from the Lift tab's lateral nav instead of each
+// sitting as its own peer there, since none of them are daily-use.
+const PROGRESS_TAB_DESTINATIONS = [
+  { tab: 'days', title: 'Training Days & Volume', desc: 'A training heatmap, volume per day, and weekly volume by muscle group.' },
+  { tab: 'photos', title: 'Progress Photos', desc: 'Track physique changes over time with your own photos.' },
+  { tab: 'recaps', title: 'Monthly Recaps', desc: 'A month-by-month summary, or compare two months side by side.' },
+  { tab: 'insights', title: 'Training Insights', desc: 'Muscle balance, strength ratios, progress trends, recovery, and the Friends Leaderboard.' },
+];
+function renderProgressTab() {
+  const panel = $('#panel-progress');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="pagehead"><div class="pagetitle">Progress</div></div>
+    ${PROGRESS_TAB_DESTINATIONS.map((d) => `
+      <div class="card">
+        <h3>${esc(d.title)}</h3>
+        <p class="muted small">${esc(d.desc)}</p>
+        <button class="btn btn-sm" data-progress-open="${d.tab}">Open</button>
+      </div>`).join('')}
+  `;
+  $$('[data-progress-open]', panel).forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.progressOpen)));
 }
 
 let daysExpandedDate = null;
