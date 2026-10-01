@@ -299,6 +299,45 @@
     color: var(--accent); align-items: center; justify-content: center; flex: none; }
   .quick-log-sheet-icon svg { width: 14px; height: 14px; }
 
+  /* ── Post-log calorie breakdown popup ─────────────────────────────
+     First true full-screen bottom-sheet modal in the app (everything
+     else — quick-log, sub-nav toggles — is an inline panel swap or a
+     small floating menu). The stacked-bar segment colors are a
+     deliberate monochromatic warm-brown ramp from the mockup, distinct
+     from the app's existing semantic macro colors (--macro-protein is
+     red, --macro-fat is green, used on the dashboard rings) — this is
+     one popup's own palette, not a redefinition of those tokens. */
+  .calorie-breakdown-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(23,24,27,0.4); }
+  .calorie-breakdown-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: var(--surface);
+    border-radius: 20px 20px 0 0; padding: 1.35rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.15); max-height: 85vh; overflow-y: auto; }
+  .calorie-breakdown-handle { width: 36px; height: 4px; background: var(--border); border-radius: 3px; margin: 0 auto 1rem; }
+  .cb-eyebrow { font-family: var(--font-body); font-weight: 600; font-size: 0.66rem; letter-spacing: 0.1em;
+    color: var(--accent); text-transform: uppercase; }
+  .cb-title { font-family: var(--font-display); font-weight: 600; font-size: 1.4rem; color: var(--text); margin-top: 0.25rem; }
+  .cb-sub { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.1rem; }
+  .cb-hero { text-align: center; padding: 1rem 0 0.4rem; }
+  .cb-hero-num { font-family: var(--font-display); font-weight: 700; font-size: 2.5rem; color: var(--text); }
+  .cb-hero-label { font-size: 0.72rem; color: var(--text-faint); margin-top: 0.1rem; }
+  .cb-stack-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; margin: 0.6rem 0; }
+  .cb-seg.protein, .cb-legend-dot.protein { background: #8A6A3A; }
+  .cb-seg.carb, .cb-legend-dot.carb { background: #C9A86A; }
+  .cb-seg.fat, .cb-legend-dot.fat { background: #E4D4B0; }
+  .cb-legend { display: flex; justify-content: space-between; margin-bottom: 1.1rem; }
+  .cb-legend-item { text-align: center; flex: 1; }
+  .cb-legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 0.25rem; }
+  .cb-legend-label { font-size: 0.66rem; color: var(--text-dim); }
+  .cb-legend-pct { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text); font-weight: 600; display: block; margin-top: 0.1rem; }
+  .cb-legend-cals { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-faint); }
+  .cb-section-label { font-weight: 600; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--accent); margin: 1rem 0 0.5rem; }
+  .cb-ing-row { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid var(--divider); }
+  .cb-ing-row:last-child { border-bottom: none; }
+  .cb-ing-name { font-size: 0.82rem; color: var(--text); }
+  .cb-ing-sub { font-size: 0.66rem; color: var(--text-faint); margin-top: 0.05rem; }
+  .cb-ing-cal { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .cb-done-btn { margin-top: 1.1rem; }
+
   /* ── Plate scoreboard ─────────────────────────────────────────── */
   .scoreboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
   .plate { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
@@ -970,6 +1009,11 @@
   <button class="quick-log-fab" id="quickLogFab" aria-label="Quick log">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
   </button>
+
+  <!-- Post-log calorie source breakdown — filled in by
+       showCalorieBreakdownPopup() right after a food log succeeds, never
+       as a gate before it. Empty/hidden the rest of the time. -->
+  <div id="calorieBreakdownOverlay" class="hidden"></div>
 </div>
 
 <script type="module">
@@ -3788,6 +3832,110 @@ async function deleteLog(id) {
   renderAll();
 }
 
+// ── Post-log calorie breakdown popup ────────────────────────────────────
+// Straightforward math on the macro grams already captured at logging
+// (protein/carbs 4 cal/g, fat 9 cal/g) — no new data needed for this part.
+// Percentages are of the macro-derived calorie sum, not the stored
+// `calories` field, so the three bar segments always add up to exactly
+// 100% even when an AI estimate's rounding leaves calories a touch off
+// from protein*4 + carbs*4 + fat*9.
+//
+// `entry.ingredients` is never populated by any current logging path —
+// confirmed by checking food_logs' schema and every logging method's
+// response shape (manual, AI photo, AI text, barcode, Quick Add, common
+// foods search): none return or store per-ingredient data today. So the
+// "By Ingredient" section below is live code, not a stub — it'll render
+// the moment a logging path starts attaching an `ingredients` array, but
+// stays correctly absent until then rather than showing something empty
+// or fabricated.
+function calorieBreakdownPopupHtml(entry) {
+  const proteinCals = (entry.protein_g || 0) * 4;
+  const carbCals = (entry.carbs_g || 0) * 4;
+  const fatCals = (entry.fat_g || 0) * 9;
+  const macroCalsSum = proteinCals + carbCals + fatCals;
+  const loggedTime = new Date(entry.logged_at || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  const barHtml = macroCalsSum > 0 ? `
+    <div class="cb-stack-bar">
+      <div class="cb-seg protein" style="width:${round((proteinCals / macroCalsSum) * 100, 1)}%"></div>
+      <div class="cb-seg carb" style="width:${round((carbCals / macroCalsSum) * 100, 1)}%"></div>
+      <div class="cb-seg fat" style="width:${round((fatCals / macroCalsSum) * 100, 1)}%"></div>
+    </div>
+    <div class="cb-legend">
+      <div class="cb-legend-item"><span class="cb-legend-dot protein"></span><span class="cb-legend-label">Protein</span><span class="cb-legend-pct">${round((proteinCals / macroCalsSum) * 100)}%</span><span class="cb-legend-cals">${round(proteinCals)} cal</span></div>
+      <div class="cb-legend-item"><span class="cb-legend-dot carb"></span><span class="cb-legend-label">Carbs</span><span class="cb-legend-pct">${round((carbCals / macroCalsSum) * 100)}%</span><span class="cb-legend-cals">${round(carbCals)} cal</span></div>
+      <div class="cb-legend-item"><span class="cb-legend-dot fat"></span><span class="cb-legend-label">Fat</span><span class="cb-legend-pct">${round((fatCals / macroCalsSum) * 100)}%</span><span class="cb-legend-cals">${round(fatCals)} cal</span></div>
+    </div>
+  ` : `<p class="muted small" style="text-align:center;margin:0.5rem 0 1rem;">No macro breakdown available for this entry.</p>`;
+
+  const ingredientsHtml = Array.isArray(entry.ingredients) && entry.ingredients.length ? `
+    <div class="cb-section-label">By Ingredient</div>
+    ${entry.ingredients.map((ing) => `
+      <div class="cb-ing-row">
+        <div><div class="cb-ing-name">${esc(ing.name)}</div>${ing.sub ? `<div class="cb-ing-sub">${esc(ing.sub)}</div>` : ''}</div>
+        <div class="cb-ing-cal">${round(ing.calories)} cal</div>
+      </div>`).join('')}
+  ` : '';
+
+  return `
+    <div class="calorie-breakdown-backdrop" id="calorieBreakdownBackdrop"></div>
+    <div class="calorie-breakdown-sheet" id="calorieBreakdownSheet">
+      <div class="calorie-breakdown-handle"></div>
+      <div class="cb-eyebrow">Just Logged</div>
+      <div class="cb-title">${esc(entry.food_name)}</div>
+      <div class="cb-sub">Logged at ${loggedTime}</div>
+      <div class="cb-hero">
+        <div class="cb-hero-num">${round(entry.calories)}</div>
+        <div class="cb-hero-label">calories · where they came from</div>
+      </div>
+      ${barHtml}
+      ${ingredientsHtml}
+      <button class="btn btn-primary btn-block cb-done-btn" id="calorieBreakdownDoneBtn">Done</button>
+    </div>
+  `;
+}
+
+// Shown right after a log succeeds — a confirmation/insight layer, never
+// a gate before the save, so it's called after logFood()'s insert has
+// already completed rather than anything it awaits.
+function showCalorieBreakdownPopup(entry) {
+  const el = $('#calorieBreakdownOverlay');
+  el.innerHTML = calorieBreakdownPopupHtml(entry);
+  el.classList.remove('hidden');
+
+  const sheet = $('#calorieBreakdownSheet');
+  $('#calorieBreakdownBackdrop').addEventListener('click', closeCalorieBreakdownPopup);
+  $('#calorieBreakdownDoneBtn').addEventListener('click', closeCalorieBreakdownPopup);
+
+  // Swipe-down-to-dismiss, matching the bottom-sheet pattern in the
+  // mockup. Below the drag threshold, the sheet springs back rather than
+  // closing — only a deliberate downward drag dismisses it.
+  let dragStartY = null;
+  const onStart = (y) => { dragStartY = y; sheet.style.transition = 'none'; };
+  const onMove = (y) => {
+    if (dragStartY === null) return;
+    const delta = Math.max(0, y - dragStartY);
+    sheet.style.transform = `translateY(${delta}px)`;
+  };
+  const onEnd = (y) => {
+    if (dragStartY === null) return;
+    const delta = Math.max(0, y - dragStartY);
+    sheet.style.transition = '';
+    if (delta > 80) closeCalorieBreakdownPopup();
+    else sheet.style.transform = '';
+    dragStartY = null;
+  };
+  sheet.addEventListener('touchstart', (e) => onStart(e.touches[0].clientY), { passive: true });
+  sheet.addEventListener('touchmove', (e) => onMove(e.touches[0].clientY), { passive: true });
+  sheet.addEventListener('touchend', (e) => onEnd(e.changedTouches[0].clientY));
+}
+
+function closeCalorieBreakdownPopup() {
+  const el = $('#calorieBreakdownOverlay');
+  el.classList.add('hidden');
+  el.innerHTML = '';
+}
+
 async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source, photo_path, sugar_g, barcode }) {
   const { error } = await supabase.from('food_logs').insert({
     user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source, photo_path: photo_path || null,
@@ -3796,6 +3944,7 @@ async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source,
   if (error) return toast('Could not log food: ' + error.message);
   await loadHistory();
   renderAll();
+  showCalorieBreakdownPopup({ food_name, calories, protein_g, carbs_g, fat_g, logged_at: new Date().toISOString() });
 }
 
 async function logWater(amountOz) {
