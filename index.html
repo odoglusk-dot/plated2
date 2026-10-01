@@ -264,8 +264,11 @@
     color: var(--accent); }
   .profile-avatar-circle svg { width: 30px; height: 30px; }
   .profile-hero-name { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; color: var(--text); }
-  .profile-hero-tier { font-family: var(--font-body); font-size: 0.72rem; color: var(--accent); margin-top: 0.15rem;
-    letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600; }
+
+  /* ── Tier status card — first thing on Profile, above the avatar. The
+     Pro state gets the warm accent treatment (same tokens as .badge.on)
+     so it reads as a small reward rather than an identical free-tier card. */
+  .tier-status-card.pro { border-color: var(--accent); background: var(--accent-soft); }
 
   /* ── Bottom nav (primary) ─────────────────────────────────────── */
   .bottom-nav { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex;
@@ -2023,6 +2026,11 @@ function renderOnboarding() {
           <option value="gain">Bulk — build muscle</option>
         </select>
       </div>
+      <div class="field hidden" id="ob_goal_weight_wrap">
+        <label>Goal weight (lb) <span class="muted">(optional)</span></label>
+        <input class="input mono" id="ob_goal_weight" type="number" placeholder="Leave blank for a standard pace">
+        <p class="muted small" style="margin-top:0.3rem;">If set, this helps set a sensible pace toward it — a bigger gap allows a slightly faster, still-safe rate. You can skip it and set one anytime from Profile → Goal Calculator.</p>
+      </div>
       <div id="ob_calc_preview" class="muted small" style="min-height:1.4em;margin:0.5rem 0;"></div>
       <button type="button" class="btn btn-primary btn-block" id="onboardingSave1">Calculate &amp; Continue</button>
       <button type="button" class="btn btn-ghost btn-block" id="onboardingSkip1" style="margin-top:0.5rem;">Skip for now</button>
@@ -2041,35 +2049,54 @@ function renderOnboarding() {
       const weightLb = Number($('#ob_weight').value);
       const activity = $('#ob_activity').value;
       const goalMode = $('#ob_goal').value;
-      return { age, sex, heightFt, heightIn, weightLb, activity, goalMode };
+      const goalWeightLb = Number($('#ob_goal_weight').value) || 0;
+      return { age, sex, heightFt, heightIn, weightLb, activity, goalMode, goalWeightLb };
     }
 
     function calcFromObInputs() {
-      const { age, sex, heightFt, heightIn, weightLb, activity, goalMode } = readObInputs();
+      const { age, sex, heightFt, heightIn, weightLb, activity, goalMode, goalWeightLb } = readObInputs();
       const totalHeightIn = heightFt * 12 + heightIn;
       if (!age || totalHeightIn <= 0 || !weightLb) return null;
       const heightCm = totalHeightIn * 2.54;
       const weightKg = weightLb * 0.453592;
       const bmr = mifflinStJeorBMR(sex, weightKg, heightCm, age);
       const tdee = bmr * ACTIVITY_MULTIPLIERS[activity];
-      const weeklyRatePercent = DEFAULT_WEEKLY_RATE_PERCENT_BY_GOAL[goalMode] ?? 0;
+      // Gap-scaled pace only kicks in when a goal weight is actually set and
+      // it points the same direction as the selected goal — a goal weight
+      // above current weight while "Cut" is selected (or vice versa) is a
+      // contradiction we don't try to resolve, so it falls back to the flat
+      // default exactly like leaving the field blank does.
+      const weightDiffLb = goalWeightLb ? goalWeightLb - weightLb : 0;
+      const directionMatches = (goalMode === 'lose' && weightDiffLb < 0) || (goalMode === 'gain' && weightDiffLb > 0);
+      const usedGapScaledRate = !!goalWeightLb && directionMatches;
+      const weeklyRatePercent = usedGapScaledRate
+        ? gapScaledWeeklyRatePercent(goalMode, Math.abs(weightDiffLb), age)
+        : (DEFAULT_WEEKLY_RATE_PERCENT_BY_GOAL[goalMode] ?? 0);
       const weeklyRateLb = (weeklyRatePercent / 100) * weightLb;
       const { targetCalories, proteinG, fatG, carbsG } = computeCaloriesAndMacros({ bmr, tdee, weightLb, weeklyRateLb, goalMode });
-      return { age, sex, heightCm, weightKg, activity, goalMode, targetCalories, proteinG, fatG, carbsG };
+      return { age, sex, heightCm, weightKg, weightLb, activity, goalMode, goalWeightLb: goalWeightLb || null, usedGapScaledRate, weightDiffLb, targetCalories, proteinG, fatG, carbsG };
     }
+
+    function updateGoalWeightVisibility() {
+      $('#ob_goal_weight_wrap').classList.toggle('hidden', $('#ob_goal').value === 'maintain');
+    }
+    updateGoalWeightVisibility();
 
     function updateObPreview() {
       const r = calcFromObInputs();
       const preview = $('#ob_calc_preview');
-      preview.innerHTML = r
-        ? `<span class="badge on">${r.targetCalories} kcal</span> <span class="badge">P ${r.proteinG}g</span> <span class="badge">C ${r.carbsG}g</span> <span class="badge">F ${r.fatG}g</span>${goalExplainerHtml(r.activity, r.goalMode)}`
-        : `Fill in age, height, and weight to see your calculated targets.`;
+      if (!r) { preview.innerHTML = `Fill in age, height, and weight to see your calculated targets.`; return; }
+      const paceNote = r.usedGapScaledRate
+        ? `<p class="muted small" style="margin-top:0.4rem;">Pace scaled to your ${round(Math.abs(r.weightDiffLb), 1)} lb gap to your goal weight.</p>`
+        : '';
+      preview.innerHTML = `<span class="badge on">${r.targetCalories} kcal</span> <span class="badge">P ${r.proteinG}g</span> <span class="badge">C ${r.carbsG}g</span> <span class="badge">F ${r.fatG}g</span>${goalExplainerHtml(r.activity, r.goalMode)}${paceNote}`;
     }
     updateObPreview();
-    ['ob_age', 'ob_sex', 'ob_height_ft', 'ob_height_in', 'ob_weight', 'ob_activity', 'ob_goal'].forEach((id) => {
+    ['ob_age', 'ob_sex', 'ob_height_ft', 'ob_height_in', 'ob_weight', 'ob_activity', 'ob_goal', 'ob_goal_weight'].forEach((id) => {
       $('#' + id).addEventListener('input', updateObPreview);
       $('#' + id).addEventListener('change', updateObPreview);
     });
+    $('#ob_goal').addEventListener('change', updateGoalWeightVisibility);
 
     $('#onboardingSave1').addEventListener('click', async () => {
       const r = calcFromObInputs();
@@ -2082,7 +2109,7 @@ function renderOnboarding() {
       const [{ error: profileError }, { error: bodyError }, { error: goalsError }] = await Promise.all([
         supabase.from('profiles').upsert({ id: state.user.id, age: r.age, sex: r.sex, height_cm: round(r.heightCm, 1), activity_level: r.activity }),
         supabase.from('body_stats').upsert({ user_id: state.user.id, weight_kg: round(r.weightKg, 2), updated_at: new Date().toISOString() }),
-        supabase.from('goals').upsert(withGoalModeTracking({ user_id: state.user.id, calories: r.targetCalories, protein_g: r.proteinG, carbs_g: r.carbsG, fat_g: r.fatG, goal_mode: r.goalMode, water_oz: g.water_oz || 64, updated_at: new Date().toISOString() })),
+        supabase.from('goals').upsert(withGoalModeTracking({ user_id: state.user.id, calories: r.targetCalories, protein_g: r.proteinG, carbs_g: r.carbsG, fat_g: r.fatG, goal_mode: r.goalMode, goal_weight_lb: r.goalWeightLb, water_oz: g.water_oz || 64, updated_at: new Date().toISOString() })),
       ]);
       const error = profileError || bodyError || goalsError;
       if (error) { toast('Could not save: ' + error.message); btn.disabled = false; return; }
@@ -4512,6 +4539,32 @@ function exportHistoryCsv() {
 // ══════════════════════════════════════════════════════════════════
 // WEIGHT TAB
 // ══════════════════════════════════════════════════════════════════
+// Hidden entirely when no goal weight is set (onboarding skipped it, or
+// goal_mode is "maintain" and it was never filled in) — a glance stat on
+// the gap to goal_weight_lb, not a second place to set or edit it (that
+// stays in Settings → Goals & Macros).
+function weightGoalProgressHtml(sorted) {
+  const goalWeightLb = state.goals.goal_weight_lb;
+  if (!goalWeightLb) return '';
+  const latestLb = sorted.length ? sorted[sorted.length - 1].weight_lb : (state.bodyStats?.weight_kg ? state.bodyStats.weight_kg / LB_PER_KG : null);
+  if (!latestLb) return '';
+  const unit = weightUnitLabel();
+  const goalDisplay = toDisplayWeight(goalWeightLb, 1).value;
+  const diffLb = goalWeightLb - latestLb;
+  const gapDisplay = toDisplayWeight(Math.abs(diffLb), 1).value;
+  if (gapDisplay === 0) {
+    return `<div class="card">
+      <h3>Goal Weight</h3>
+      <p class="muted">You've reached your goal weight of ${goalDisplay} ${unit}. 🎉</p>
+    </div>`;
+  }
+  const direction = diffLb < 0 ? 'to lose' : 'to gain';
+  return `<div class="card">
+    <h3>Goal Weight</h3>
+    <p class="muted">${gapDisplay} ${unit} ${direction} to reach your goal of ${goalDisplay} ${unit}.</p>
+  </div>`;
+}
+
 function renderWeight() {
   const panel = $('#panel-weight');
   const sorted = [...state.weightLog].sort((a, b) => a.logged_date.localeCompare(b.logged_date));
@@ -4526,6 +4579,7 @@ function renderWeight() {
       <div class="field"><label>Note (optional)</label><input class="input" id="wt_note"></div>
       <button class="btn btn-primary" id="wt_save">Save</button>
     </div>
+    ${weightGoalProgressHtml(sorted)}
     <div class="card">
       <h3>Trend</h3>
       ${sorted.length < 2 ? `<p class="muted">Log at least two entries to see a trend line.</p>` : weightChartSvg(sorted)}
@@ -4857,6 +4911,25 @@ function computeBMR(profile, bodyStats) {
 // from (e.g. onboarding's auto-calculation) — a moderate, sustainable rate
 // per goal type rather than the calculator's max-safe bound.
 const DEFAULT_WEEKLY_RATE_PERCENT_BY_GOAL = { lose: -0.5, maintain: 0, gain: 0.25 };
+
+// Onboarding collects a goal weight but no target date (keeping the flow
+// light) — so instead of deriving a pace from a timeline like the full
+// Goal Calculator does, this scales the pace by how large the weight gap
+// is: a bigger gap can sustain the faster, still-safe end of the cited
+// range, a near-goal gap tapers toward the slower end. Returns the flat
+// DEFAULT_WEEKLY_RATE_PERCENT_BY_GOAL rate unchanged when there's no
+// usable gap (goal weight blank, or pointing the wrong direction for the
+// selected goal) — see calcFromObInputs().
+const GAP_SCALED_RATE_RANGE_BY_GOAL = { lose: { min: 0.5, max: 1.0 }, gain: { min: 0.25, max: 0.5 } };
+const GAP_SCALE_MIN_LB = 5;
+const GAP_SCALE_MAX_LB = 20;
+function gapScaledWeeklyRatePercent(goalMode, gapLb, age) {
+  const range = GAP_SCALED_RATE_RANGE_BY_GOAL[goalMode];
+  if (!range) return 0;
+  const t = Math.min(1, Math.max(0, (gapLb - GAP_SCALE_MIN_LB) / (GAP_SCALE_MAX_LB - GAP_SCALE_MIN_LB)));
+  const percent = Math.min(range.min + t * (range.max - range.min), maxSafeWeeklyRatePercent(age));
+  return goalMode === 'lose' ? -percent : percent;
+}
 
 // Shared by the full Goal Calculator (Profile) and onboarding's
 // auto-calculated step — turning a weekly-rate pace into calories/macros is
@@ -5290,6 +5363,24 @@ function renderHealthSyncSetup(panel) {
   });
 }
 
+// First thing on Profile, above the avatar/name — tier status reads as a
+// persistent status banner rather than personal info. Reuses the exact
+// buttons/handlers the old Settings → Subscription card used
+// (manage_subscription_btn opens the Stripe billing portal, upgrade_tier_btn
+// opens the paywall screen) since that card is now gone — this is its one
+// home, not a duplicate of a second subscription-management UI.
+function tierStatusCardHtml() {
+  const pro = hasAccess(state.subscription);
+  return `<div class="card tier-status-card ${pro ? 'pro' : ''}">
+    <span class="badge ${pro ? 'on' : ''}">${pro ? '⭐ Krafft Pro' : '🔓 Free Tier'}</span>
+    <p class="muted" style="margin-top:0.5rem;">${subscriptionStatusLabel(state.subscription)}</p>
+    ${pro
+      ? `<button class="btn" id="manage_subscription_btn">Manage Subscription</button>`
+      : `<button class="btn btn-primary" id="upgrade_tier_btn">Upgrade — Unlock AI Features</button>`}
+    <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
+  </div>`;
+}
+
 function renderProfile() {
   const panel = $('#panel-profile');
   if (showLearningPaths) { renderLearningPaths(panel); return; }
@@ -5330,6 +5421,7 @@ function renderProfile() {
         <div class="field"><label>Carbs (g)</label><input class="input mono" id="goal_carb" type="number" value="${round(state.goals.carbs_g)}"></div>
         <div class="field"><label>Fat (g)</label><input class="input mono" id="goal_fat" type="number" value="${round(state.goals.fat_g)}"></div>
         <div class="field"><label>Water (oz)</label><input class="input mono" id="goal_water" type="number" value="${round(state.goals.water_oz || 64)}"></div>
+        <div class="field"><label>Goal weight (${weightUnitLabel()}) <span class="muted">(optional)</span></label><input class="input mono" id="goal_weight_target" type="number" value="${state.goals.goal_weight_lb ? toDisplayWeight(state.goals.goal_weight_lb, 1).value : ''}" placeholder="None set"></div>
       </div>
       <button class="btn btn-primary" id="goal_save">Save Goals</button>
     </div>
@@ -5439,17 +5531,6 @@ function renderProfile() {
       </div>
     </div>
 
-    <div class="settings-section-label">Subscription</div>
-    <div class="card">
-      <h3>Subscription</h3>
-      <span class="badge ${hasAccess(state.subscription) ? 'on' : ''}">${hasAccess(state.subscription) ? '⭐ Paid — AI unlocked' : '🔓 Free tier'}</span>
-      <p class="muted" style="margin-top:0.5rem;">${subscriptionStatusLabel(state.subscription)}</p>
-      ${hasAccess(state.subscription)
-        ? `<button class="btn" id="manage_subscription_btn">Manage Subscription</button>`
-        : `<button class="btn btn-primary" id="upgrade_tier_btn">Upgrade — Unlock AI Features</button>`}
-      <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
-    </div>
-
     <div class="settings-section-label">Social</div>
     <div class="card">
       <h3>Refer a Friend</h3>
@@ -5539,10 +5620,10 @@ function renderProfile() {
   `;
 
   panel.innerHTML = `
+    ${tierStatusCardHtml()}
     <div class="profile-hero">
       <div class="profile-avatar-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.5 20c1.2-3.6 4.2-5.5 7.5-5.5s6.3 1.9 7.5 5.5"></path></svg></div>
       <div class="profile-hero-name">${esc(p.display_name || state.user.email)}</div>
-      <div class="profile-hero-tier">${hasAccess(state.subscription) ? 'Krafft Pro' : 'Free Tier'}</div>
     </div>
     <div class="sub-nav">
       <button class="btn btn-sm ${profileSubTab === 'account' ? 'btn-primary' : ''}" data-sub="account">Account</button>
@@ -5577,6 +5658,7 @@ function renderProfile() {
       carbs_g: Number($('#goal_carb').value) || 0,
       fat_g: Number($('#goal_fat').value) || 0,
       water_oz: Number($('#goal_water').value) || 64,
+      goal_weight_lb: $('#goal_weight_target').value ? fromDisplayWeight($('#goal_weight_target').value) : null,
       // goal_mode intentionally omitted — merge-duplicates leaves it
       // untouched, so manually editing goals here doesn't clobber whatever
       // the calculator last derived for the Dashboard's calorie-range shading.

@@ -1,0 +1,16 @@
+-- Krafft — Phase 31: persisted goal weight. Run this once in the Supabase
+-- SQL Editor against the existing live database. Fresh installs get it
+-- automatically from reset-schema.sql instead.
+--
+-- Lives on goals, not body_stats — it's a target alongside goal_mode
+-- (which it directly extends for the onboarding/Goal Calculator pace
+-- math), not a measurement like body_stats.weight_kg. Stored in lb,
+-- same convention as every other user-entered weight value in the app
+-- (exercise_goals.target_weight, weight_log.weight_lb) — body_stats.weight_kg
+-- is the one deliberate exception, used only for the Mifflin-St Jeor formula.
+--
+-- Nullable and optional everywhere it's read — a user who never sets a
+-- goal weight (declined at onboarding, never visited the calculator)
+-- simply sees no "X lb to go" indicator and gets today's flat
+-- rate-of-change default, unchanged.
+alter table goals add column if not exists goal_weight_lb numeric;

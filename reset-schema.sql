@@ -82,6 +82,17 @@ create table profiles (
   group_streak_emails_opt_out boolean not null default false,
   group_freeze_emails_opt_out boolean not null default false,
   group_goal_emails_opt_out boolean not null default false,
+  -- Krafft Athlete Mode — additive, not a replacement for anything else.
+  -- athlete_sport/athlete_position are plain text (no check constraint);
+  -- the valid-option list lives in SPORTS in index.html, not here, so a
+  -- new sport is a JS change, not a migration. athlete_mode_unlocked_at
+  -- is what the one-time unlock animation checks, not the enabled flag
+  -- itself — see supabase-schema-phase29-athlete-mode.sql.
+  athlete_mode_enabled boolean not null default false,
+  athlete_mode_unlocked_at timestamptz,
+  athlete_sport text,
+  athlete_position text,
+  athlete_game_plan jsonb,
   created_at timestamptz not null default now()
 );
 
@@ -113,6 +124,11 @@ create table goals (
   -- goals write) — lets the goal-adaptive nudge tell "just changed" from
   -- "has been this way for months." See supabase-schema-phase14-goal-nudges.sql.
   goal_mode_changed_at timestamptz,
+  -- Target bodyweight in lb, optional. Set at onboarding or the Goal
+  -- Calculator; informs the rate-of-change calorie adjustment for
+  -- lose/gain and drives the "X lb to go" indicator on the Weight tab.
+  -- See supabase-schema-phase31-goal-weight.sql.
+  goal_weight_lb numeric,
   updated_at timestamptz not null default now()
 );
 
@@ -454,21 +470,38 @@ create policy "friendships_delete_own" on friendships for delete
 
 -- ── groups / group_members / group_freeze_log / group_goals (Group Mode) ──
 -- One active group per user, built on friendships (not a new social
--- graph) — every invite requires an existing accepted friendship. See
+-- graph) for invite-to-group.js's friend-based invites — a shareable
+-- invite_code (below) is a separate, friend-agnostic join path. See
 -- supabase-schema-phase26-group-mode.sql for the full rationale.
 create table groups (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   creator_id uuid not null references auth.users(id) on delete cascade,
+  -- Streak metric, leader-changeable anytime (not locked at creation) via
+  -- update-group-settings.js. 'sessions' is weekly (sessions_target_per_week
+  -- required), unlike 'protein'/'calories' which are daily — see
+  -- supabase-schema-phase27-group-goal-metric.sql for the full rationale.
+  goal_metric text not null default 'protein' check (goal_metric in ('protein', 'calories', 'sessions')),
+  sessions_target_per_week int check (sessions_target_per_week is null or (sessions_target_per_week between 1 and 14)),
   current_streak int not null default 0,
   best_streak int not null default 0,
   freezes_available int not null default 0,
   last_evaluated_date date,
   last_achievement_check_at timestamptz not null default now(),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Shareable join link — any member can (re)generate one, which
+  -- overwrites and invalidates the previous code. 7-day expiry is set by
+  -- generate-group-invite.js at generation time, not a column default.
+  -- See supabase-schema-phase28-group-invite-link.sql for the full
+  -- rationale.
+  invite_code text unique,
+  invite_code_expires_at timestamptz,
+  constraint groups_sessions_target_required check (goal_metric != 'sessions' or sessions_target_per_week is not null)
 );
 
 alter table groups enable row level security;
+
+create index groups_invite_code_idx on groups (invite_code);
 
 create table group_members (
   id uuid primary key default gen_random_uuid(),
@@ -535,6 +568,73 @@ create policy "group_goals_select_member" on group_goals for select
 
 create policy "group_goals_insert_member" on group_goals for insert
   with check (created_by = auth.uid() and group_id in (select group_id from group_members where user_id = auth.uid() and status = 'joined'));
+
+-- ── conditioning_log / athlete_journal_entries / athlete_confidence_entries
+-- (Krafft Athlete Mode) ─────────────────────────────────────────────────
+-- Speed/agility work doesn't fit lifts' weight/sets/reps_per_set shape
+-- (all NOT NULL there), so it gets its own table rather than loosening
+-- those constraints for every existing row. Journal/confidence entries
+-- are adapted from the standalone "Show Up Ready" app's data model
+-- (github.com/odoglusk-dot/showup-ready) — see
+-- supabase-schema-phase29-athlete-mode.sql for the full rationale.
+create table conditioning_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  drill text not null,
+  metric_type text not null check (metric_type in ('distance', 'time', 'completion')),
+  distance_m numeric,
+  duration_s numeric,
+  completed boolean,
+  notes text,
+  date date not null,
+  created_at timestamptz not null default now()
+);
+
+create index conditioning_log_user_date_idx on conditioning_log (user_id, date desc);
+
+alter table conditioning_log enable row level security;
+
+create policy "conditioning_log_select_own" on conditioning_log for select using (auth.uid() = user_id);
+create policy "conditioning_log_insert_own" on conditioning_log for insert with check (auth.uid() = user_id);
+create policy "conditioning_log_update_own" on conditioning_log for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "conditioning_log_delete_own" on conditioning_log for delete using (auth.uid() = user_id);
+
+create table athlete_journal_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  what_went_well text,
+  one_thing_to_improve text,
+  mood int check (mood between 1 and 5),
+  entry_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+create index athlete_journal_entries_user_idx on athlete_journal_entries (user_id, entry_date desc);
+
+alter table athlete_journal_entries enable row level security;
+
+create policy "athlete_journal_entries_select_own" on athlete_journal_entries for select using (auth.uid() = user_id);
+create policy "athlete_journal_entries_insert_own" on athlete_journal_entries for insert with check (auth.uid() = user_id);
+create policy "athlete_journal_entries_update_own" on athlete_journal_entries for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "athlete_journal_entries_delete_own" on athlete_journal_entries for delete using (auth.uid() = user_id);
+
+create table athlete_confidence_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  description text not null,
+  source text not null default 'self' check (source in ('self', 'coach', 'teammate', 'other')),
+  entry_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+create index athlete_confidence_entries_user_idx on athlete_confidence_entries (user_id, entry_date desc);
+
+alter table athlete_confidence_entries enable row level security;
+
+create policy "athlete_confidence_entries_select_own" on athlete_confidence_entries for select using (auth.uid() = user_id);
+create policy "athlete_confidence_entries_insert_own" on athlete_confidence_entries for insert with check (auth.uid() = user_id);
+create policy "athlete_confidence_entries_update_own" on athlete_confidence_entries for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "athlete_confidence_entries_delete_own" on athlete_confidence_entries for delete using (auth.uid() = user_id);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- IRONLOG MERGE (supabase-schema-phase7-ironlog.sql)
@@ -1416,6 +1516,87 @@ update exercises set movement_type = 'compound', lengthened_bias = false, avoid_
 update exercises set movement_type = 'compound', lengthened_bias = false, avoid_flags = '{overhead,heavy_spinal_load}', block_types = '{power_speed}', muscle_map_key = 'lowerback', muscle_map_secondary_keys = '{delts,quads}' where name = 'Snatch';
 update exercises set movement_type = 'compound', lengthened_bias = false, avoid_flags = '{heavy_spinal_load}', block_types = '{strength,hypertrophy}', muscle_map_key = 'forearms', muscle_map_secondary_keys = '{lowerback,abs}' where name = 'Farmer''s Carry';
 update exercises set movement_type = 'compound', lengthened_bias = false, avoid_flags = '{overhead}', block_types = '{hypertrophy}', muscle_map_key = 'quads', muscle_map_secondary_keys = '{delts}' where name = 'Thruster';
+
+-- Plyometric exercises (Krafft Athlete Mode) — fills the
+-- power_speed/functional_athletic pools with real content for the first
+-- time. See supabase-schema-phase30-plyometric-exercises.sql for the
+-- full rationale; cues are written for explosive/reactive movement with
+-- landing mechanics called out as their own cue line.
+insert into exercises (
+  name, muscle_group, body_region, secondary_regions, equipment,
+  cue_setup, cue_execution, cue_mistake, cue_bracing,
+  movement_type, lengthened_bias, avoid_flags, block_types,
+  muscle_map_key, muscle_map_secondary_keys
+) values
+('Box Jump', 'Legs', 'legs', '{}', 'Bodyweight',
+ 'Stand arm''s length from a sturdy, stable box or platform, feet shoulder-width apart, knees soft.',
+ 'Swing your arms back, then drive them forward and up explosively while extending through the hips, knees, and ankles to jump onto the box.',
+ 'Landing with stiff, locked knees. Absorb the landing by bending your hips and knees the instant your feet touch down — don''t let your legs stay straight through impact.',
+ 'Brace your core before takeoff and keep it braced through landing, so the impact loads your legs and hips, not a collapsing lower back.',
+ 'plyometric', false, '{impact}', '{functional_athletic,power_speed}', 'quads', '{glutes,calves}'),
+
+('Depth Jump', 'Legs', 'legs', '{}', 'Bodyweight',
+ 'Stand on a low box (roughly 12-18 inches), feet hip-width apart, near the front edge.',
+ 'Step off the box — don''t jump off — land on both feet, and the instant your feet touch the ground, explode straight up into a maximal vertical jump.',
+ 'Pausing on the ground before jumping back up. This turns one reactive movement into two separate ones — the point is a near-instant rebound, not a stop-and-go squat.',
+ 'Keep your torso tall and braced through the landing so the rebound is driven by your legs and hips snapping into the ground, not a trunk that folds forward.',
+ 'plyometric', false, '{impact}', '{functional_athletic,power_speed}', 'quads', '{glutes,hamstrings}'),
+
+('Broad Jump', 'Legs', 'legs', '{}', 'Bodyweight',
+ 'Stand with feet shoulder-width apart, toes just behind a start line, knees slightly bent.',
+ 'Swing your arms back and load your hips, then drive forward and up explosively, extending fully through the hips and ankles to jump as far forward as possible.',
+ 'Landing off-balance or falling backward. Land with knees bent, absorbing through the hips, and stick the landing under control before resetting for the next rep.',
+ 'Brace your core on takeoff so the power comes from your hips and legs, and keep that brace through landing to control your forward momentum.',
+ 'plyometric', false, '{impact}', '{functional_athletic,power_speed}', 'quads', '{glutes,hamstrings}'),
+
+('Lateral Bound', 'Legs', 'legs', '{}', 'Bodyweight',
+ 'Start balanced on one leg, knee slightly bent, the other leg lifted slightly off the ground.',
+ 'Push off hard to the side off the stance leg, driving through the hip to bound laterally, and land softly on the opposite leg with the knee tracking over the foot.',
+ 'Letting the landing knee cave inward toward the midline. Keep the knee aligned over the foot on landing to control the sideways force instead of absorbing it at the joint.',
+ 'Brace your core through each landing to stay stable on one leg before bounding back the other direction.',
+ 'plyometric', false, '{impact}', '{functional_athletic}', 'glutes', '{quads,calves}'),
+
+('Single-Leg Bound', 'Legs', 'legs', '{}', 'Bodyweight',
+ 'Start in a slight single-leg athletic stance, knee soft, opposite arm back.',
+ 'Drive off the ground leg explosively, extending the hip fully, and bound forward to land on the same leg, absorbing through the hip and knee before bounding again.',
+ 'Landing flat-footed with a straight knee. Land on the ball of the foot with the knee bent to absorb the impact before the next bound.',
+ 'Keep your core braced and your landing leg stable under your hips on each touchdown, rather than reaching out in front of your body.',
+ 'plyometric', false, '{impact}', '{functional_athletic}', 'hamstrings', '{glutes,calves}'),
+
+('Tuck Jump', 'Legs', 'legs', '{}', 'Bodyweight',
+ 'Stand with feet shoulder-width apart, knees soft, arms relaxed at your sides.',
+ 'Jump straight up as high as possible, driving your knees up toward your chest at the peak, then land softly back in the starting stance and repeat immediately.',
+ 'Landing with knees collapsing inward. Land with feet shoulder-width apart and knees tracking over the toes on every rep, even as fatigue sets in.',
+ 'Brace your core throughout to keep your trunk upright instead of leaning forward to generate the knee drive.',
+ 'plyometric', false, '{impact}', '{functional_athletic,power_speed}', 'quads', '{abs}'),
+
+('Squat Jump', 'Legs', 'legs', '{}', 'Bodyweight',
+ 'Stand with feet shoulder-width apart, drop into a quarter-to-half squat.',
+ 'Explode upward out of the squat, extending hips, knees, and ankles fully to jump as high as possible, then land softly back into the squat position.',
+ 'Re-bending the knees too little on landing, so the impact goes straight into the joints. Land back into the same depth of squat you jumped from to absorb the force.',
+ 'Keep your core braced throughout the jump and landing to keep your torso upright rather than collapsing forward.',
+ 'plyometric', false, '{impact}', '{functional_athletic,power_speed}', 'quads', '{glutes}'),
+
+('Medicine Ball Chest Pass', 'Chest', 'chest', '{}', 'Medicine Ball',
+ 'Stand or half-kneel facing a solid wall, holding the ball at your chest with both hands.',
+ 'Explosively extend your arms and push the ball into the wall as hard as possible, catching it on the rebound and resetting quickly for the next rep.',
+ 'Pushing only with the arms. Drive the pass with a quick extension through the chest and a slight hip snap, not an arm-only shove.',
+ 'Brace your core to keep your torso stable as you catch the rebound, rather than getting knocked backward by the ball''s momentum.',
+ 'plyometric', false, '{}', '{functional_athletic}', 'chest', '{delts,triceps}'),
+
+('Medicine Ball Overhead Slam', 'Abs', 'core', '{}', 'Medicine Ball',
+ 'Stand with feet shoulder-width apart, holding the ball overhead with both hands, arms extended.',
+ 'Explosively flex at the hips and core, slamming the ball into the ground as hard as possible in front of your feet, then catch the bounce and reset.',
+ 'Rounding the lower back on the slam. Hinge at the hips and brace the core through the movement rather than letting the spine flex under load.',
+ 'Brace your core hard right as the ball leaves your hands — that brace is what transfers the power from your hips into the slam.',
+ 'plyometric', false, '{}', '{functional_athletic}', 'abs', '{lowerback}'),
+
+('Medicine Ball Rotational Throw', 'Obliques', 'core', '{}', 'Medicine Ball',
+ 'Stand sideways to a solid wall, feet shoulder-width apart, holding the ball at hip height with both hands.',
+ 'Rotate your hips and trunk away from the wall slightly, then explosively reverse the rotation, releasing the ball into the wall at hip height, and catch the rebound.',
+ 'Rotating only through the arms and shoulders. The power should start from the hips turning first, with the trunk and arms following — not the other way around.',
+ 'Keep your core braced through the rotation so the force transfers through your trunk instead of loading your lower back at the end range.',
+ 'plyometric', false, '{}', '{functional_athletic}', 'obliques', '{abs}');
 
 -- ── user_achievements (milestone system) ─────────────────────────────────
 -- Definitions (title, coach-voice description, unlock condition) live in
