@@ -667,6 +667,15 @@ create table lifts (
   -- hard-sets-per-muscle feature only; PR detection, career volume, and
   -- the muscle map heatmap are unchanged and still count every set.
   warmup_per_set boolean[] not null default '{}',
+  -- Per-lift muscle tags (first = primary, rest = secondary), same 14-key
+  -- taxonomy as exercises.muscle_map_key/muscle_map_secondary_keys. When
+  -- set, computeWeeklyHardSetsByMuscle() uses these instead of looking up
+  -- the exercises library — the only way a custom/non-library exercise
+  -- gets attributed to the Weekly Training Volume / Muscle Map at all, and
+  -- a way to override a library exercise's default tags for one set. Empty
+  -- by default, meaning "use the library lookup," same as before this
+  -- column existed. See supabase-schema-phase32-multi-muscle-tagging.sql.
+  muscle_map_keys text[] not null default '{}',
   created_at timestamptz not null default now()
 );
 

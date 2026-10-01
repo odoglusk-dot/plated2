@@ -1,0 +1,27 @@
+-- Krafft — Phase 32: multi-muscle tagging for logged lifts. Run this once
+-- in the Supabase SQL Editor against the existing live database. Fresh
+-- installs get it automatically from reset-schema.sql instead.
+--
+-- Weekly Training Volume and the Muscle Map (computeWeeklyHardSetsByMuscle
+-- in index.html) already do primary+secondary weighted muscle attribution
+-- — but only by looking up the exercises reference library's own
+-- muscle_map_key/muscle_map_secondary_keys for whatever exercise name was
+-- logged. A custom/typed-in exercise with no library match is skipped
+-- entirely — no muscle attribution at all, today.
+--
+-- This column lets a specific logged lift carry its own muscle tags
+-- (first key = primary, rest = secondary, same 14-key taxonomy and same
+-- weighting as the library path), which the calculation now prefers over
+-- the library lookup whenever it's set — giving custom exercises real
+-- attribution for the first time, and letting a user override a library
+-- exercise's default tags for one particular set (e.g. an incline
+-- variation that hit more front delt than the generic entry implies).
+--
+-- Nullable/empty by default so every existing row keeps behaving exactly
+-- as it does today (library lookup, or skipped if there's no match) —
+-- this is additive, not a backfill, since there's no reliable way to
+-- infer which specific muscles an already-logged set worked without
+-- guessing, which this app's own existing convention avoids (see the
+-- "skipped rather than guessed at" comment already in
+-- computeWeeklyHardSetsByMuscle).
+alter table lifts add column if not exists muscle_map_keys text[] not null default '{}';

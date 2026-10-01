@@ -3616,9 +3616,10 @@ function renderDashboard() {
   const calorieColor = calorieInRange ? 'var(--macro-calories)' : 'var(--text-dim)';
 
   const today = localDateStr();
-  const todayWaterOz = state.waterLog
+  const todayWaterEntries = state.waterLog
     .filter((w) => localDateStr(new Date(w.logged_at)) === today)
-    .reduce((sum, w) => sum + (Number(w.amount_oz) || 0), 0);
+    .sort((a, b) => new Date(a.logged_at) - new Date(b.logged_at));
+  const todayWaterOz = todayWaterEntries.reduce((sum, w) => sum + (Number(w.amount_oz) || 0), 0);
   const todaysLiftVolume = state.lifts.filter((l) => l.date === today).reduce((sum, l) => sum + l.weight * totalReps(l), 0);
   const trainingStreak = computeTrainingStreak(state.lifts);
 
@@ -3691,6 +3692,14 @@ function renderDashboard() {
           <button class="btn btn-sm" id="water_custom_log">Log</button>
         </div>
       </div>
+      ${todayWaterEntries.length ? `
+      <div style="margin-top:0.5rem;">
+        ${todayWaterEntries.map((w) => `
+          <div class="log-row" style="padding:0.3rem 0;">
+            <span class="muted small">${new Date(w.logged_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${round(w.amount_oz)}oz</span>
+            <button class="btn btn-sm btn-ghost" data-delete-water="${w.id}">✕</button>
+          </div>`).join('')}
+      </div>` : ''}
     </div>
 
     <div class="card">
@@ -3719,25 +3728,6 @@ function renderDashboard() {
           </div>`).join('')}
     </div>
     ${proteinByMealHtml(state.todayLogs, state.goals.protein_g)}
-
-    <div class="card">
-      <h3>Quick Add</h3>
-      ${state.favorites.length ? `
-      <div class="quick-add-grid">
-        ${state.favorites.slice(0, 8).map((f) => quickAddConfirmDeleteId === f.id ? `
-          <div class="quick-add-confirm">
-            <span class="muted">Delete "${esc(f.food_name)}"?</span>
-            <div class="row">
-              <button class="btn btn-sm" data-qa-confirm="${f.id}" style="background:var(--danger);color:#FFFFFF;">Delete</button>
-              <button class="btn btn-sm btn-ghost" data-qa-cancel="${f.id}">Cancel</button>
-            </div>
-          </div>` : `
-          <div class="quick-add-card">
-            <button class="quick-add-main" data-quicklog-fav="${f.id}"><span class="name">${esc(f.food_name)}</span></button>
-            <button class="quick-add-del" data-qa-del="${f.id}" aria-label="Remove ${esc(f.food_name)} from Quick Add">✕</button>
-          </div>`).join('')}
-      </div>` : `<p class="muted small">Log a meal, then tap "Save as Favorite" to see it here for one-tap logging next time.</p>`}
-    </div>
   `;
 
   const spikeDismiss = $('#spikeDismiss');
@@ -3792,6 +3782,7 @@ function renderDashboard() {
   const proteinByMealInfoBtn = $('#proteinByMealInfoBtn', panel);
   if (proteinByMealInfoBtn) proteinByMealInfoBtn.addEventListener('click', () => { proteinByMealInfoExpanded = !proteinByMealInfoExpanded; renderDashboard(); });
   $$('[data-water]', panel).forEach((btn) => btn.addEventListener('click', () => logWater(Number(btn.dataset.water))));
+  $$('[data-delete-water]', panel).forEach((btn) => btn.addEventListener('click', () => deleteWaterLog(btn.dataset.deleteWater)));
   const logCustomWater = () => {
     const input = $('#water_custom_oz');
     const amount = Number(input.value);
@@ -3800,29 +3791,6 @@ function renderDashboard() {
   };
   $('#water_custom_log').addEventListener('click', logCustomWater);
   $('#water_custom_oz').addEventListener('keydown', (e) => { if (e.key === 'Enter') logCustomWater(); });
-  $$('[data-quicklog-fav]', panel).forEach((btn) => btn.addEventListener('click', () => {
-    const fav = state.favorites.find((f) => f.id === btn.dataset.quicklogFav);
-    if (fav) logFood({ food_name: fav.food_name, calories: fav.calories, protein_g: fav.protein_g, carbs_g: fav.carbs_g, fat_g: fav.fat_g, source: 'favorite' });
-  }));
-  $$('[data-qa-del]', panel).forEach((btn) => btn.addEventListener('click', () => {
-    quickAddConfirmDeleteId = btn.dataset.qaDel;
-    renderDashboard();
-  }));
-  $$('[data-qa-cancel]', panel).forEach((btn) => btn.addEventListener('click', () => {
-    quickAddConfirmDeleteId = null;
-    renderDashboard();
-  }));
-  $$('[data-qa-confirm]', panel).forEach((btn) => btn.addEventListener('click', async () => {
-    const id = btn.dataset.qaConfirm;
-    // Deletes the saved Quick Add template only — food_logs rows from past
-    // uses of it are independent rows with their own copied macro values,
-    // not a reference to this favorites row, so they're untouched.
-    const { error } = await supabase.from('favorites').delete().eq('id', id);
-    quickAddConfirmDeleteId = null;
-    if (error) return toast('Could not delete: ' + error.message);
-    await loadFavorites();
-    renderAll();
-  }));
 }
 
 async function deleteLog(id) {
@@ -3954,6 +3922,13 @@ async function logWater(amountOz) {
   renderAll();
 }
 
+async function deleteWaterLog(id) {
+  const { error } = await supabase.from('water_logs').delete().eq('id', id);
+  if (error) return toast('Could not delete: ' + error.message);
+  await loadWaterLog();
+  renderAll();
+}
+
 // ══════════════════════════════════════════════════════════════════
 // LOG FOOD TAB
 // ══════════════════════════════════════════════════════════════════
@@ -4041,6 +4016,59 @@ function renderCommonFoodsList() {
   }));
   $$('[data-common-fav]', listEl).forEach((btn) => btn.addEventListener('click', () => {
     saveFavorite(computeScaledFood(Number(btn.dataset.commonFav)));
+  }));
+}
+
+// Lives on the Log Food tab's Describe It sub-tab, below the manual
+// "describe your food" input — the primary logging action comes first,
+// Quick Add reads as a shortcut underneath it. Used to sit on the
+// Dashboard; moved here rather than duplicated, so there's one home for
+// it.
+function quickAddCardHtml() {
+  return `
+    <div class="card">
+      <h3>Quick Add</h3>
+      ${state.favorites.length ? `
+      <div class="quick-add-grid">
+        ${state.favorites.slice(0, 8).map((f) => quickAddConfirmDeleteId === f.id ? `
+          <div class="quick-add-confirm">
+            <span class="muted">Delete "${esc(f.food_name)}"?</span>
+            <div class="row">
+              <button class="btn btn-sm" data-qa-confirm="${f.id}" style="background:var(--danger);color:#FFFFFF;">Delete</button>
+              <button class="btn btn-sm btn-ghost" data-qa-cancel="${f.id}">Cancel</button>
+            </div>
+          </div>` : `
+          <div class="quick-add-card">
+            <button class="quick-add-main" data-quicklog-fav="${f.id}"><span class="name">${esc(f.food_name)}</span></button>
+            <button class="quick-add-del" data-qa-del="${f.id}" aria-label="Remove ${esc(f.food_name)} from Quick Add">✕</button>
+          </div>`).join('')}
+      </div>` : `<p class="muted small">Log a meal, then tap "Save as Favorite" to see it here for one-tap logging next time.</p>`}
+    </div>`;
+}
+
+function wireQuickAddEvents(panel) {
+  $$('[data-quicklog-fav]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const fav = state.favorites.find((f) => f.id === btn.dataset.quicklogFav);
+    if (fav) logFood({ food_name: fav.food_name, calories: fav.calories, protein_g: fav.protein_g, carbs_g: fav.carbs_g, fat_g: fav.fat_g, source: 'favorite' });
+  }));
+  $$('[data-qa-del]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    quickAddConfirmDeleteId = btn.dataset.qaDel;
+    renderLogSubPanel();
+  }));
+  $$('[data-qa-cancel]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    quickAddConfirmDeleteId = null;
+    renderLogSubPanel();
+  }));
+  $$('[data-qa-confirm]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    const id = btn.dataset.qaConfirm;
+    // Deletes the saved Quick Add template only — food_logs rows from past
+    // uses of it are independent rows with their own copied macro values,
+    // not a reference to this favorites row, so they're untouched.
+    const { error } = await supabase.from('favorites').delete().eq('id', id);
+    quickAddConfirmDeleteId = null;
+    if (error) return toast('Could not delete: ' + error.message);
+    await loadFavorites();
+    renderAll();
   }));
 }
 
@@ -4309,7 +4337,9 @@ function renderLogSubPanel() {
         <button class="btn btn-primary" id="aiEstimateBtn">Estimate Macros</button>
         <div id="aiError" class="muted" style="color:var(--danger);margin-top:0.5rem;"></div>
       </div>
-      <div id="aiResultSlot"></div>`;
+      <div id="aiResultSlot"></div>
+      ${quickAddCardHtml()}`;
+    wireQuickAddEvents(el);
 
     let aiMatches = [];
     let aiActiveIndex = -1;
@@ -5133,7 +5163,7 @@ function calorieRangeForGoal(calorieGoal, goalMode, bmr) {
 }
 
 let addFriendMessage = '';
-let profileSubTab = 'account'; // 'account' | 'settings'
+let profileSubTab = 'settings'; // 'account' | 'settings' — Settings default so Goals & Macros/Units/Notifications are the first thing seen after the tier card, not gated behind a tap
 
 // ── In-app User Guide (Profile → Guide) ──────────────────────────────────
 // Static, pre-written reference content — same spirit as TIP_LIBRARY and
@@ -6172,6 +6202,16 @@ function getMuscleGroup(l) {
   return l.muscle_group || exerciseDefFor(l.exercise)?.muscle_group || DEFAULT_MUSCLE_GROUP[l.exercise] || 'Other';
 }
 
+// Primary first, then secondaries — the same order computeWeeklyHardSetsByMuscle()
+// expects from lifts.muscle_map_keys (see that function for the weighting).
+// Used to prefill the lift form's multi-select when a known exercise is
+// picked; a custom/unmatched exercise starts with no tags at all, since
+// there's nothing to default to.
+function defaultMuscleMapKeysFor(exerciseDef) {
+  if (!exerciseDef || !exerciseDef.muscle_map_key) return [];
+  return [exerciseDef.muscle_map_key, ...(exerciseDef.muscle_map_secondary_keys || [])];
+}
+
 const BODY_REGIONS = ['chest', 'shoulders', 'biceps', 'triceps', 'back', 'forearms', 'abs', 'quads', 'hamstrings', 'glutes', 'calves'];
 const BODY_REGION_LABELS = {
   chest: 'Chest', shoulders: 'Shoulders', biceps: 'Biceps', triceps: 'Triceps', back: 'Back',
@@ -6258,15 +6298,27 @@ function computeWeeklyHardSetsByMuscle(lifts, exercises, windowDays = 7) {
   MUSCLE_MAP_KEYS.forEach((k) => { totals[k] = 0; });
   for (const l of lifts) {
     if (cutoff && l.date < cutoff) continue;
-    const def = exercises.find((e) => e.name.toLowerCase() === l.exercise.trim().toLowerCase());
-    // An exercise with no muscle_map_key (not in the library, or a custom
-    // typed-in name) can't be attributed to a muscle — skipped rather than
-    // guessed at.
-    if (!def || !def.muscle_map_key) continue;
+    // A lift's own muscle_map_keys (first = primary, rest = secondary) wins
+    // when set — it's what the user explicitly tagged that specific set
+    // with, and it's the only path a custom/non-library exercise name can
+    // be attributed through at all. Falls back to the library's tags
+    // otherwise, unchanged from before this column existed.
+    let primaryKey, secondaryKeys;
+    if (l.muscle_map_keys && l.muscle_map_keys.length) {
+      [primaryKey, ...secondaryKeys] = l.muscle_map_keys;
+    } else {
+      const def = exercises.find((e) => e.name.toLowerCase() === l.exercise.trim().toLowerCase());
+      // An exercise with no muscle_map_key (not in the library, or a custom
+      // typed-in name) can't be attributed to a muscle — skipped rather than
+      // guessed at.
+      if (!def || !def.muscle_map_key) continue;
+      primaryKey = def.muscle_map_key;
+      secondaryKeys = def.muscle_map_secondary_keys || [];
+    }
     const sets = workingSetCount(l);
     if (sets <= 0) continue;
-    totals[def.muscle_map_key] = (totals[def.muscle_map_key] || 0) + sets;
-    (def.muscle_map_secondary_keys || []).forEach((k) => {
+    totals[primaryKey] = (totals[primaryKey] || 0) + sets;
+    secondaryKeys.forEach((k) => {
       totals[k] = (totals[k] || 0) + sets * SECONDARY_MUSCLE_SET_WEIGHT;
     });
   }
@@ -6731,10 +6783,18 @@ let liftsSelectedExercise = null;
 // — starts empty (everything collapsed on load), multiple can be open at
 // once, same Set-based convention as expandedHistoryDays.
 let expandedLiftExercises = new Set();
+// Whether the "Exercises" list collapses as one section, independent of
+// which individual rows inside it (above) are expanded — defaults open.
+let liftExercisesSectionExpanded = true;
 let liftForm = {
   exercise: '', muscleGroup: '', bodyRegion: '', weight: '', sets: 3,
   repsPerSet: ['5', '5', '5'], warmupPerSet: [false, false, false],
   date: localDateStr(), isSuperset: false, supersetGroup: '',
+  // Which Weekly Training Volume / Muscle Map muscles this specific lift
+  // counts toward — order matters (first = primary, rest = secondary at
+  // half weight). See defaultMuscleMapKeysFor() and
+  // computeWeeklyHardSetsByMuscle().
+  muscleMapKeys: [],
 };
 let showWarmupRamp = false;
 let liftFormError = '';
@@ -7224,6 +7284,7 @@ function drawLiftAutocompleteDropdown(wrap) {
     liftAutocompleteOpen = false;
     liftForm.muscleGroup = exerciseDefFor(val)?.muscle_group || DEFAULT_MUSCLE_GROUP[val] || liftForm.muscleGroup || '';
     liftForm.bodyRegion = exerciseDefFor(val)?.body_region || DEFAULT_BODY_REGION[val] || liftForm.bodyRegion || '';
+    liftForm.muscleMapKeys = defaultMuscleMapKeysFor(exerciseDefFor(val));
     prefillLiftFormFromLast(val);
     // Deliberately blur before re-rendering — a selection is a completed
     // action, and renderLiftLog() would otherwise skip the render it
@@ -7799,6 +7860,15 @@ function renderLiftLog(panel) {
           </select>
         </div>
       </div>
+      <div class="field">
+        <label>Muscles worked <span class="muted">(optional — feeds Weekly Training Volume &amp; the Muscle Map)</span></label>
+        <div class="chip-row">
+          ${MUSCLE_MAP_KEYS.map((k) => `<button type="button" class="chip ${liftForm.muscleMapKeys.includes(k) ? 'chip-active' : ''}" data-lift-muscle-map-key="${k}">${esc(MUSCLE_MAP_KEY_LABELS[k])}</button>`).join('')}
+        </div>
+        <p class="muted small" style="margin-top:0.4rem;">${liftForm.muscleMapKeys.length
+          ? `Primary: ${esc(MUSCLE_MAP_KEY_LABELS[liftForm.muscleMapKeys[0]])}${liftForm.muscleMapKeys.length > 1 ? ` · Secondary: ${liftForm.muscleMapKeys.slice(1).map((k) => esc(MUSCLE_MAP_KEY_LABELS[k])).join(', ')}` : ''}`
+          : `First tap sets the primary muscle; more taps count as secondary (half weight). Leave blank to fall back to this exercise's library defaults, if any.`}</p>
+      </div>
       <div class="field" id="liftLiveComparison">${liveComparisonHtml(liftForm.exercise, lifts)}</div>
       ` : ''}
       <div class="row">
@@ -7832,7 +7902,12 @@ function renderLiftLog(panel) {
     </div>
     ${exercises.length ? `
     <div class="card">
-      <h3>Exercises</h3>
+      <button class="history-day-header" id="exercisesSectionToggle" aria-expanded="${liftExercisesSectionExpanded}">
+        <span class="chevron ${liftExercisesSectionExpanded ? 'expanded' : ''}">▸</span>
+        <h3 style="margin:0;flex:1;">Exercises</h3>
+      </button>
+      <div class="history-day-body" id="exercisesSectionBody">
+      <div class="history-day-body-inner">
       ${(() => {
         // Today's split focus, if any — purely a highlight/sort hint, never
         // filters the list or restricts logging.
@@ -7873,6 +7948,8 @@ function renderLiftLog(panel) {
         </div>`;
         }).join('');
       })()}
+      </div>
+      </div>
     </div>` : ''}
     ${suggestedExercisesHtml(exercises)}
   `;
@@ -7980,6 +8057,13 @@ function renderLiftLog(panel) {
   if (mgSel) mgSel.addEventListener('change', (e) => { liftForm.muscleGroup = e.target.value; });
   const brSel = $('#lift_bodyRegion');
   if (brSel) brSel.addEventListener('change', (e) => { liftForm.bodyRegion = e.target.value; });
+  $$('[data-lift-muscle-map-key]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const k = btn.dataset.liftMuscleMapKey;
+    const idx = liftForm.muscleMapKeys.indexOf(k);
+    if (idx === -1) liftForm.muscleMapKeys.push(k);
+    else liftForm.muscleMapKeys.splice(idx, 1);
+    renderLiftsTab();
+  }));
   $('#lift_weight')?.addEventListener('input', (e) => {
     liftForm.weight = e.target.value;
     // Patch the ramp content directly rather than a full renderLiftsTab()
@@ -8025,6 +8109,28 @@ function renderLiftLog(panel) {
   wireTodaysLiftEditEvents(panel);
   wireSessionAnalysisEvents(panel);
   $('#openGlossaryBtn')?.addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); });
+
+  // Exercises section itself collapses as one unit, independent of the
+  // per-exercise rows inside it — same max-height/chevron technique, one
+  // level up. A flat large value (not scrollHeight) for the initial,
+  // non-animated render, same convention as the per-exercise bodies right
+  // below — the real scrollHeight is only measured at click time.
+  const exercisesSectionBody = $('#exercisesSectionBody', panel);
+  if (exercisesSectionBody) {
+    if (liftExercisesSectionExpanded) exercisesSectionBody.style.maxHeight = '100000px';
+    $('#exercisesSectionToggle', panel)?.addEventListener('click', () => {
+      const chevron = $('#exercisesSectionToggle .chevron', panel);
+      liftExercisesSectionExpanded = !liftExercisesSectionExpanded;
+      if (liftExercisesSectionExpanded) {
+        exercisesSectionBody.style.maxHeight = exercisesSectionBody.scrollHeight + 'px';
+        chevron.classList.add('expanded');
+      } else {
+        exercisesSectionBody.style.maxHeight = '0px';
+        chevron.classList.remove('expanded');
+      }
+      $('#exercisesSectionToggle', panel).setAttribute('aria-expanded', String(liftExercisesSectionExpanded));
+    });
+  }
 
   // Exercises list accordion — mutate the existing DOM nodes directly
   // (same technique as the History tab's day accordion) so the max-height
@@ -8074,6 +8180,7 @@ function renderLiftLog(panel) {
     liftForm.exercise = val;
     liftForm.muscleGroup = exerciseDefFor(val)?.muscle_group || DEFAULT_MUSCLE_GROUP[val] || '';
     liftForm.bodyRegion = exerciseDefFor(val)?.body_region || DEFAULT_BODY_REGION[val] || '';
+    liftForm.muscleMapKeys = defaultMuscleMapKeysFor(exerciseDefFor(val));
     prefillLiftFormFromLast(val);
     renderLiftsTab();
   }));
@@ -8121,6 +8228,7 @@ async function addLiftFromForm() {
     weight: weightNum, sets: repsPerSet.length, reps_per_set: repsPerSet, reps,
     warmup_per_set: warmupPerSet.some(Boolean) ? warmupPerSet : [],
     date: liftForm.date, superset_group: liftForm.isSuperset ? (liftForm.supersetGroup.trim() || null) : null,
+    muscle_map_keys: liftForm.muscleMapKeys,
   });
   liftFormSaving = false;
   if (error) { liftFormError = error.message || 'Failed to save lift.'; renderLiftsTab(); return; }
