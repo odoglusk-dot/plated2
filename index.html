@@ -86,6 +86,31 @@
 
   .hazard-divider { height: 4px; background: var(--accent); border-radius: 2px; }
 
+  /* ── Krafft Athlete Mode — subtle accent shift, not a reskin. Only
+     --accent moves (links, spinner, hazard-divider, focus-style accents);
+     --text/--bg-driven primary buttons and the core V3 Editorial surfaces
+     are untouched. */
+  body.athlete-mode { --accent: #C1440E; --accent-soft: #F3DACB; }
+  .athlete-badge { font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+    background: #C1440E; color: #FFF8F3; border-radius: 3px; padding: 0.3rem 0.55rem; }
+
+  /* ── Athlete Mode first-time unlock transition — full-screen takeover,
+     plays once (see athleteModeUnlockedAt gating in JS), ~2.6s total.
+     transform/opacity/stroke-dashoffset only, for smooth phone performance. */
+  #athleteUnlockScreen { position: fixed; inset: 0; background: #0B0C0E; z-index: 90;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.25rem;
+    opacity: 0; animation: athleteUnlockFade 2.6s ease forwards; }
+  @keyframes athleteUnlockFade { 0% { opacity: 0; } 8% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
+  .athlete-unlock-mark { width: 120px; height: 120px; }
+  .athlete-unlock-mark path { fill: none; stroke: #C1440E; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 220; stroke-dashoffset: 220; animation: athleteUnlockDraw 1.1s 0.3s ease-out forwards; }
+  @keyframes athleteUnlockDraw { to { stroke-dashoffset: 0; } }
+  .athlete-unlock-word { font-family: var(--font-display); color: #FFF8F3; font-size: 1.6rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; opacity: 0; animation: athleteUnlockWordIn 0.6s 1.3s ease-out forwards; }
+  .athlete-unlock-sub { font-family: var(--font-mono); color: #C1440E; font-size: 0.85rem; opacity: 0;
+    animation: athleteUnlockWordIn 0.6s 1.6s ease-out forwards; }
+  @keyframes athleteUnlockWordIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
   /* ── Loading spinners ─────────────────────────────────────────── */
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { width: 36px; height: 36px; border: 4px solid var(--border); border-top-color: var(--accent);
@@ -840,6 +865,7 @@
   <div class="topbar">
     <div class="logo">KRAFFT</div>
     <div class="topbar-right">
+      <span class="athlete-badge hidden" id="athleteBadge" title="Krafft Athlete Mode is on">⚡ ATHLETE</span>
       <span class="streak-pill" id="streakPill" title="Current protein-goal streak">🔥 0 day streak</span>
       <button class="avatar-btn" id="avatarBtn" aria-label="Profile" title="Profile"></button>
     </div>
@@ -875,6 +901,7 @@
     <section class="tab-panel" data-tab="recaps" id="panel-recaps"></section>
     <section class="tab-panel" data-tab="insights" id="panel-insights"></section>
     <section class="tab-panel" data-tab="group" id="panel-group"></section>
+    <section class="tab-panel" data-tab="athlete" id="panel-athlete"></section>
   </main>
 
   <footer class="legal">
@@ -898,6 +925,10 @@
     <button class="bottom-nav-btn" data-bottom="group" aria-label="Group">
       <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3.3 2.9-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><circle cx="17" cy="9" r="2.3"/><path d="M14.5 14.3c.9-.4 1.9-.6 2.5-.6 2.5 0 4.6 1.8 4.8 4.3"/></svg></span>
       <span class="bottom-nav-label">Group</span>
+    </button>
+    <button class="bottom-nav-btn hidden" data-bottom="athlete" aria-label="Athlete" id="athleteNavBtn">
+      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></span>
+      <span class="bottom-nav-label">Athlete</span>
     </button>
     <button class="bottom-nav-btn" data-bottom="profile" aria-label="Profile">
       <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg></span>
@@ -1010,6 +1041,12 @@ const state = {
   group: null, // {id, name, currentStreak, bestStreak, freezesAvailable, roster, freezeLog, goal} | null — one active Group, see loadGroup()
   groupPendingInvites: [], // [{groupId, groupName, invitedAt}] — invites sent TO this user, see loadGroup()
   groupLoadFailed: false, // true on a genuine load error (not the expected 402 for a free user), see loadGroup()
+  // Krafft Athlete Mode — all three lazy-loaded on first visit to their
+  // respective Athlete sub-views, not part of bootstrapApp()'s Promise.all,
+  // so a user who never opens Athlete Mode never pays for these fetches.
+  athleteConditioningLog: [],
+  athleteJournalEntries: [],
+  athleteConfidenceEntries: [],
   exercises: [], // reference data, same rows for every account — see loadExercises()
   achievements: [], // unlocked rows: {achievement_id, unlocked_at} — see loadAchievements()
   workoutSession: null, // today's row: {date, ended_at, analysis, analysis_generated_at} | null — see loadWorkoutSession()
@@ -2406,6 +2443,8 @@ function renderAll() {
   renderRecapsTab();
   renderInsightsTab();
   renderGroupTab();
+  renderAthleteTab();
+  applyAthleteModeVisualState();
   updateStreakPill();
   updateBottomNav();
   checkAndUnlockAchievements();
@@ -2427,6 +2466,7 @@ const BOTTOM_NAV_ACTIONS = {
   log: () => setActiveTab('log'),
   lift: () => setActiveTab('lifts'),
   group: () => setActiveTab('group'),
+  athlete: () => setActiveTab('athlete'),
   profile: () => setActiveTab('profile'),
 };
 $$('.bottom-nav-btn').forEach((btn) => btn.addEventListener('click', () => BOTTOM_NAV_ACTIONS[btn.dataset.bottom]()));
@@ -2442,15 +2482,17 @@ function updateBottomNav() {
   if (state.activeTab === 'log') active = 'log';
   else if (TRAINING_SUB_TABS.has(state.activeTab)) active = 'lift';
   else if (state.activeTab === 'group') active = 'group';
+  else if (state.activeTab === 'athlete') active = 'athlete';
   else if (state.activeTab === 'profile') active = 'profile';
   $$('.bottom-nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.bottom === active));
 }
 
-// Home, Group, and Profile are endpoint screens — nothing to jump laterally
-// to from any of them — so they rely on the bottom nav alone; every other
-// screen (History, Weight, Lifts, Days, etc.) genuinely benefits from the
-// secondary row's quick lateral movement, so it stays for those.
-const TABS_WITHOUT_SECONDARY_NAV = new Set(['dashboard', 'profile', 'group']);
+// Home, Group, Athlete, and Profile are endpoint screens — nothing to jump
+// laterally to from any of them — so they rely on the bottom nav alone;
+// every other screen (History, Weight, Lifts, Days, etc.) genuinely
+// benefits from the secondary row's quick lateral movement, so it stays
+// for those.
+const TABS_WITHOUT_SECONDARY_NAV = new Set(['dashboard', 'profile', 'group', 'athlete']);
 
 function setActiveTab(tab) {
   // Navigating away from Log Food while the barcode camera is running
@@ -4021,7 +4063,7 @@ function renderLogSubPanel() {
       if (aiMatches.length === 0) { dd.innerHTML = ''; return; }
       dd.innerHTML = `
         <div class="autocomplete-dropdown">
-          <div class="autocomplete-hint">Common foods — instant, no AI lookup used</div>
+          <div class="autocomplete-hint">Common foods — instant match</div>
           ${aiMatches.map((f) => `
             <div class="autocomplete-item" data-ai-common="${COMMON_FOODS.indexOf(f)}">
               <span class="name">${esc(f.name)}</span>
@@ -4116,7 +4158,7 @@ function renderLogSubPanel() {
     el.innerHTML = `
       <div class="card">
         <h3>Scan a barcode</h3>
-        <p class="muted">Free, no AI — looks up packaged foods via Open Food Facts.</p>
+        <p class="muted">Free — looks up packaged foods via Open Food Facts.</p>
         ${barcodeScanning ? `
           <video id="barcodeVideoEl" style="width:100%;border-radius:8px;background:#000;" playsinline muted></video>
           <button class="btn btn-block" id="stopBarcodeBtn" style="margin-top:0.75rem;">Stop Scanning</button>
@@ -4149,7 +4191,7 @@ function renderLogSubPanel() {
     el.innerHTML = `
       <div class="card">
         <h3>Common Foods</h3>
-        <p class="muted">Free, instant logging — no AI lookup used. Meats let you type the exact ounces; everything else scales by whole servings.</p>
+        <p class="muted">Free, instant logging from a built-in list. Meats let you type the exact ounces; everything else scales by whole servings.</p>
         <div class="field"><input class="input" id="commonSearch" placeholder="Search ${COMMON_FOODS.length} foods (e.g. chicken, rice, banana)…" value="${esc(commonSearchQuery)}"></div>
         <div id="commonFoodsList"></div>
       </div>`;
@@ -4763,7 +4805,7 @@ const USER_GUIDE_SECTIONS = [
       { id: 'photo-logging', title: 'Photo Food Logging (Snap a Photo)',
         body: 'Snap a Photo of your meal from the Log Food tab and Krafft\'s AI estimates its calories and macros for you — no manual entry needed. This is a paid-tier AI feature (3-day free trial, then $4.99/month); manual logging and Quick Add remain free forever either way.' },
       { id: 'barcode-scanning', title: 'Scan Barcode',
-        body: 'Scan a packaged food\'s barcode from the Log Food tab to pull its calories, protein, carbs, fat, and sugar from Open Food Facts — no AI involved, so it\'s free. Confirm or adjust the numbers for your actual serving before logging. If a barcode isn\'t recognized, you can enter it manually and the scanned code is kept with that entry.' },
+        body: 'Scan a packaged food\'s barcode from the Log Food tab to pull its calories, protein, carbs, fat, and sugar from Open Food Facts — free, since it\'s a direct database lookup. Confirm or adjust the numbers for your actual serving before logging. If a barcode isn\'t recognized, you can enter it manually and the scanned code is kept with that entry.' },
       { id: 'macro-goals', title: 'Macro & Goal Tracking',
         body: 'Set daily calorie, protein, carb, fat, and water goals from the Profile tab, or use the Goal Calculator there (Mifflin-St Jeor formula) to get a personalized estimate from your age, sex, height, weight, activity level, and optional target weight/date. Whenever goals are calculated for you — here or during onboarding — a "here\'s how we got your numbers" note explains the formula, the activity multiplier used, and the protein basis behind the result. Your Dashboard tracks each day\'s progress against these goals.' },
       { id: 'protein-by-meal', title: 'Protein by Meal',
@@ -4788,11 +4830,11 @@ const USER_GUIDE_SECTIONS = [
       { id: 'muscle-map', title: 'Muscle Map',
         body: 'A visual heatmap of which muscles you\'ve trained recently, on the Lifts tab, with 7-day/30-day/all-time toggles. Tap a region for details on the volume and exercises behind it.' },
       { id: 'warmup-1rm', title: 'Warm-Up Ramp & Estimated 1RM',
-        body: 'Enter a working weight on the Log-a-Lift form and tap "Suggest a warm-up ramp" for a static percentage-based ramp-up (no AI). Your estimated 1-rep max (Epley formula) is tracked per exercise over time on that exercise\'s detail page, feeding your Strength Score — estimates get less reliable above about 10 reps, which is called out when relevant.' },
+        body: 'Enter a working weight on the Log-a-Lift form and tap "Suggest a warm-up ramp" for a percentage-based ramp-up to that weight. Your estimated 1-rep max (Epley formula) is tracked per exercise over time on that exercise\'s detail page, feeding your Strength Score — estimates get less reliable above about 10 reps, which is called out when relevant.' },
       { id: 'pr-tracking', title: 'PR Tracking',
         body: 'Krafft automatically tracks your all-time personal record (heaviest weight logged) for every exercise. Your current PRs show on the Lifts tab in the Personal Records strip, each with a mini trend line of your history on that lift.' },
       { id: 'block-builder', title: 'Training Block Builder',
-        body: 'Generate an optional 4-week training block from the Lifts tab — pick a focus (Hypertrophy or Strength; Power & Speed, Mobility, and Functional/Athletic are coming soon), up to 3 priority muscle areas for extra volume, days per week, equipment, and anything to avoid. It builds a day-by-day exercise plan from fixed rules (no AI) with a Base → +Sets → +Sets → Deload progression across the 4 weeks. Starting a block doesn\'t change your Training Split setting — you still log lifts the normal way from the Log tab.' },
+        body: 'Generate an optional 4-week training block from the Lifts tab — pick a focus (Hypertrophy or Strength; Power & Speed and Functional/Athletic unlock with Athlete Mode, Mobility is coming soon), up to 3 priority muscle areas for extra volume, days per week, equipment, and anything to avoid. It builds a day-by-day exercise plan with a Base → +Sets → +Sets → Deload progression across the 4 weeks. Starting a block doesn\'t change your Training Split setting — you still log lifts the normal way from the Log tab.' },
     ],
   },
   {
@@ -5226,6 +5268,14 @@ function renderProfile() {
         </label>
       </div>
     </div>
+    <div class="card">
+      <h3>Krafft Athlete Mode</h3>
+      <p class="muted small" style="margin-top:-0.3rem;">Unlocks plyometrics, speed/agility logging, and the Power & Speed / Functional-Athletic Block Builder categories. Nutrition, general lifting, and everything else stay exactly as they are.</p>
+      <div class="consent-line" style="margin-top:0;">
+        <input type="checkbox" id="athlete_mode_check" ${p.athlete_mode_enabled ? 'checked' : ''}>
+        <label style="margin:0;color:var(--text-dim);font-weight:400;" for="athlete_mode_check">Turn on Athlete Mode.</label>
+      </div>
+    </div>
     ${state.group ? `
     <div class="card">
       <h3>Group Notifications</h3>
@@ -5597,6 +5647,31 @@ function renderProfile() {
     renderProfile();
   }));
 
+  $('#athlete_mode_check')?.addEventListener('change', async (e) => {
+    const turningOn = e.target.checked;
+    const { error } = await supabase.from('profiles').upsert({ id: state.user.id, athlete_mode_enabled: turningOn });
+    if (error) { toast('Could not save preference: ' + error.message); e.target.checked = !turningOn; return; }
+    await loadProfile();
+    applyAthleteModeVisualState();
+    if (!turningOn) {
+      if (state.activeTab === 'athlete') setActiveTab('dashboard');
+      renderAthleteTab();
+      renderProfile();
+      return;
+    }
+    const firstTime = !state.profile.athlete_mode_unlocked_at;
+    if (firstTime) {
+      await supabase.from('profiles').update({ athlete_mode_unlocked_at: new Date().toISOString() }).eq('id', state.user.id);
+      await loadProfile();
+      playAthleteUnlockTransition(() => {
+        renderAthleteTab();
+        setActiveTab('athlete');
+      });
+    } else {
+      renderAthleteTab();
+      setActiveTab('athlete');
+    }
+  });
   $('#group_streak_emails_check')?.addEventListener('change', async (e) => {
     const { error } = await supabase.from('profiles').upsert({ id: state.user.id, group_streak_emails_opt_out: !e.target.checked });
     if (error) { toast('Could not save preference: ' + error.message); return; }
@@ -8100,18 +8175,24 @@ function wireSplitEvents(panel) {
 // the user follows by logging lifts the normal way, stored as its own
 // jsonb blob on profiles.active_training_block (see
 // supabase-schema-phase23-block-builder.sql).
+// power_speed/functional_athletic are comingSoon outside Krafft Athlete
+// Mode (athleteOnly: true) — see BLOCK_FOCUS_OPTIONS' disabled check in
+// blockBuilderStep1Html(), which also checks state.profile?.athlete_mode_enabled.
+// Mobility stays coming-soon regardless; no exercise content exists for
+// it yet.
 const BLOCK_FOCUS_OPTIONS = [
   { key: 'hypertrophy', name: 'Hypertrophy', description: 'Build muscle size with moderate reps and higher total volume.' },
   { key: 'strength', name: 'Strength', description: 'Build maximal strength on compound lifts with lower reps, heavier loads.' },
-  { key: 'power_speed', name: 'Power & Speed', description: 'Explosive, Olympic-lift-family training.', comingSoon: true },
+  { key: 'power_speed', name: 'Power & Speed', description: 'Explosive, Olympic-lift-family training plus plyometrics.', comingSoon: true, athleteOnly: true },
   { key: 'mobility', name: 'Mobility', description: 'Joint range of motion and movement-quality work.', comingSoon: true },
-  { key: 'functional_athletic', name: 'Functional / Athletic', description: 'General athletic conditioning and movement patterns.', comingSoon: true },
+  { key: 'functional_athletic', name: 'Functional / Athletic', description: 'Plyometrics and general athletic conditioning patterns.', comingSoon: true, athleteOnly: true },
 ];
 const BLOCK_DAYS_OPTIONS = [3, 4, 5, 6];
-const BLOCK_EQUIPMENT_OPTIONS = ['Barbell', 'Dumbbell', 'Cable', 'Machine', 'Bodyweight'];
+const BLOCK_EQUIPMENT_OPTIONS = ['Barbell', 'Dumbbell', 'Cable', 'Machine', 'Bodyweight', 'Medicine Ball'];
 const BLOCK_AVOID_OPTIONS = [
   { key: 'overhead', label: 'Overhead pressing' },
   { key: 'heavy_spinal_load', label: 'Heavy spinal loading' },
+  { key: 'impact', label: 'High-impact jumping/plyometric work' },
 ];
 const BLOCK_MAX_PRIORITIES = 3;
 // Coarse push/pull/legs grouping used only to build a day's exercise
@@ -8404,7 +8485,7 @@ function planSummaryCardHtml() {
   if (!plan) {
     return `<div class="card">
       <h3>Plan <span class="muted small" style="font-weight:400;">(optional)</span></h3>
-      <p class="muted small">Set a goal and timeframe and let the app sequence multiple blocks toward it with real periodization — Hypertrophy, Strength, a planned Deload, a Peak or Taper — instead of the same block on repeat. From fixed rules. No AI.</p>
+      <p class="muted small">Set a goal and timeframe and let the app sequence multiple blocks toward it with real periodization — Hypertrophy, Strength, a planned Deload, a Peak or Taper — instead of the same block on repeat.</p>
       <button class="btn btn-sm" id="planBuilderOpenBtn">Build a Plan</button>
     </div>`;
   }
@@ -8493,7 +8574,7 @@ function blockBuilderSummaryCardHtml() {
   if (!active) {
     return `<div class="card">
       <h3>Training Block <span class="muted small" style="font-weight:400;">(optional)</span></h3>
-      <p class="muted small">Generate a 4-week block — focus, priority areas, and a day-by-day exercise plan — from fixed rules. No AI.</p>
+      <p class="muted small">Generate a 4-week block — focus, priority areas, and a day-by-day exercise plan, built from your inputs.</p>
       <button class="btn btn-sm" id="blockBuilderOpenBtn">Build a block</button>
     </div>`;
   }
@@ -8556,11 +8637,13 @@ function blockBuilderStep1Html() {
     <div style="display:flex;flex-direction:column;gap:0.6rem;">
       ${BLOCK_FOCUS_OPTIONS.map((opt) => {
         const selected = blockBuilderFocus === opt.key;
-        const disabled = !!opt.comingSoon;
+        const unlockedByAthleteMode = opt.athleteOnly && state.profile?.athlete_mode_enabled;
+        const disabled = !!opt.comingSoon && !unlockedByAthleteMode;
+        const comingSoonNote = opt.athleteOnly ? ' — unlocks with Athlete Mode.' : ' — coming soon, no exercises tagged for this yet.';
         return `<button class="card" data-block-focus="${opt.key}" ${disabled ? 'disabled' : ''}
           style="display:block;width:100%;text-align:left;margin-bottom:0;cursor:${disabled ? 'default' : 'pointer'};opacity:${disabled ? '0.5' : '1'};border:1px solid ${selected ? 'var(--accent)' : 'var(--border)'};background:${selected ? 'var(--surface-2)' : 'var(--surface)'};">
           <div class="display" style="text-transform:uppercase;font-weight:700;">${esc(opt.name)}</div>
-          <div class="muted small" style="margin-top:0.2rem;">${esc(opt.description)}${disabled ? ' — coming soon, no exercises tagged for this yet.' : ''}</div>
+          <div class="muted small" style="margin-top:0.2rem;">${esc(opt.description)}${disabled ? comingSoonNote : ''}</div>
         </button>`;
       }).join('')}
     </div>
@@ -8872,7 +8955,7 @@ function blockBuilderStep3Html() {
       ? `<button class="btn btn-ghost" id="blockCloseBtn" style="width:100%;">Close</button>`
       : `<button class="btn btn-primary" id="blockStartBtn" style="width:100%;" ${blockBuilderStarting ? 'disabled' : ''}>${blockBuilderStarting ? 'Starting…' : 'Start block'}</button>
          <button class="btn btn-ghost" id="blockBackStep3" style="width:100%;margin-top:0.5rem;">Back</button>`}
-    <p class="muted small" style="text-align:center;margin-top:0.6rem;margin-bottom:0;">Built from your inputs using fixed rules. No AI.</p>
+    <p class="muted small" style="text-align:center;margin-top:0.6rem;margin-bottom:0;">Built from your inputs — focus, priorities, days, equipment, and what to avoid.</p>
   </div>`;
 }
 
@@ -9264,7 +9347,7 @@ function planBuilderStep3Html() {
   <div class="card">
     <button class="btn btn-primary" id="planStartBtn" style="width:100%;" ${planBuilderStarting ? 'disabled' : ''}>${planBuilderStarting ? 'Starting…' : 'Start Plan'}</button>
     <button class="btn btn-ghost" id="planBackStep3" style="width:100%;margin-top:0.5rem;">Back</button>
-    <p class="muted small" style="text-align:center;margin-top:0.6rem;margin-bottom:0;">Sequenced from your inputs using fixed rules. No AI.</p>
+    <p class="muted small" style="text-align:center;margin-top:0.6rem;margin-bottom:0;">Sequenced from your goal and timeframe into real periodization.</p>
   </div>`;
 }
 
@@ -10377,6 +10460,597 @@ function friendsLeaderboardHtml() {
   </div>`;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// KRAFFT ATHLETE MODE
+// ══════════════════════════════════════════════════════════════════
+// Additive mode built around athletic performance — unlocks Power &
+// Speed / Functional-Athletic Block Builder categories (see
+// BLOCK_FOCUS_OPTIONS above), a conditioning (speed/agility) log, a
+// sport/position setup flow, and a Pro-gated sports psychology section
+// adapted from the standalone "Show Up Ready" app
+// (github.com/odoglusk-dot/showup-ready). Nutrition tracking, general
+// lifting, the standard Block Builder, achievements, and everything
+// else stay exactly as they are — this only ever adds a new tab, never
+// replaces anything.
+//
+// Sport/position config — structured so a new sport is a new key here,
+// not a rebuild. emphasizeTags are a lightweight hook for "recommended
+// for your position" content (matched against EXERCISE_POSITIONAL_TAGS/
+// CONDITIONING_DRILLS' own tags below), not separate content per position.
+const SPORTS = {
+  soccer: {
+    name: 'Soccer',
+    positions: {
+      forward: { name: 'Forward', focus: 'Acceleration off the mark and finishing-relevant power — first-step speed and a strong, repeatable strike.', emphasizeTags: ['acceleration', 'power'] },
+      midfielder: { name: 'Midfielder', focus: 'Repeated-sprint endurance and change-of-direction — covering ground for 90 minutes and turning quickly in tight spaces.', emphasizeTags: ['endurance', 'agility'] },
+      defender: { name: 'Defender', focus: 'Aerial strength and change-of-direction — winning duels in the air and recovering quickly after a turn.', emphasizeTags: ['power', 'agility'] },
+      goalkeeper: { name: 'Goalkeeper', focus: 'Explosive lateral power and reactive quickness — covering the goal line and reacting to a shot in a fraction of a second.', emphasizeTags: ['lateral', 'reactive'] },
+    },
+  },
+};
+function athleteSportOptions() { return Object.keys(SPORTS).map((key) => ({ key, name: SPORTS[key].name })); }
+function athletePositionOptions(sportKey) {
+  const sport = SPORTS[sportKey];
+  return sport ? Object.keys(sport.positions).map((key) => ({ key, ...sport.positions[key] })) : [];
+}
+
+// Positional emphasis tags for the plyometric exercises seeded in
+// supabase-schema-phase30-plyometric-exercises.sql — kept as a lookup
+// here rather than a new exercises column, since it's read-only
+// reference data matched against SPORTS positions above, not something
+// that needs its own RLS-scoped storage.
+const EXERCISE_POSITIONAL_TAGS = {
+  'Box Jump': ['power'],
+  'Depth Jump': ['power', 'reactive'],
+  'Broad Jump': ['power'],
+  'Lateral Bound': ['lateral', 'agility'],
+  'Single-Leg Bound': ['acceleration', 'power'],
+  'Tuck Jump': ['reactive', 'power'],
+  'Squat Jump': ['power'],
+  'Medicine Ball Chest Pass': ['power'],
+  'Medicine Ball Overhead Slam': ['power'],
+  'Medicine Ball Rotational Throw': ['power', 'agility'],
+};
+
+// Speed/agility drills — logged with their own simple metric via
+// conditioning_log (distance/time/completion), not forced into the
+// lifts table's weight x reps shape. Static content, not DB-seeded,
+// since these aren't part of the Block Builder's muscle-pool system.
+const CONDITIONING_DRILLS = [
+  { key: 'sprint_intervals', name: 'Sprint Intervals', description: 'Short, maximal-effort sprints with full recovery between reps — builds top-end speed and acceleration.', metricType: 'distance', tags: ['acceleration', 'endurance'] },
+  { key: 'cone_drill', name: 'Cone Drill (e.g. 5-10-5 Shuttle)', description: 'A timed cone pattern — builds change-of-direction speed and body control.', metricType: 'time', tags: ['agility', 'lateral'] },
+  { key: 'ladder_drill', name: 'Agility Ladder', description: 'Footwork patterns through a ladder — builds foot speed and coordination, not top-end speed.', metricType: 'completion', tags: ['agility'] },
+  { key: 'change_of_direction', name: 'Change-of-Direction Drill (e.g. T-Drill)', description: 'A timed cut-and-accelerate pattern — builds the deceleration and re-acceleration sport actually demands.', metricType: 'time', tags: ['agility', 'reactive'] },
+];
+function conditioningDrillByKey(key) { return CONDITIONING_DRILLS.find((d) => d.key === key) || CONDITIONING_DRILLS[0]; }
+
+// Mirrors SESSION_DEFS in showup-ready's index.html essentially
+// verbatim — the breathing + visualization structure isn't
+// sport-specific, so it ports directly rather than needing adaptation.
+const ATHLETE_PSYCH_SESSIONS = {
+  pre_performance: {
+    label: 'Pre-Performance', seconds: 240, clockLabel: '4:00',
+    desc: 'Box breathing plus a short visualization of specific game moments — a clean first touch, staying composed after a mistake.',
+    prompts: [
+      'Picture your first touch of the game — clean, controlled, exactly where you want it.',
+      'Picture a moment where something goes wrong. See yourself reset and move to the next play.',
+      'Picture the version of you that shows up ready, right from the first whistle.',
+      'Picture yourself making the read before the ball arrives.',
+      'Picture the feeling right after you do something well — hold onto it.',
+    ],
+  },
+  post_game: {
+    label: 'Post-Game Reset', seconds: 210, clockLabel: '3:30',
+    desc: 'Name what happened, take the one lesson, close it out — built to stop the mental replay loop before it starts.',
+    prompts: [
+      'Let the breath do the work. Nothing to figure out yet — just settle.',
+      'The game is over. What happens next is what you do with it.',
+      'One lesson, not a highlight reel. You\'ll write it down in a moment.',
+    ],
+  },
+};
+
+// Self-talk cue types — well-established sports psychology research,
+// cited rather than carried over from showup-ready's own uncited
+// marketing copy. Flag anything uncertain rather than inventing a
+// citation: these four are genuinely well-established, not fringe.
+const SELF_TALK_CUE_TYPES = [
+  { kind: 'Instructional', example: '"Eyes up. Next play."', note: 'Task-specific cues for execution under pressure — instructional self-talk shows a larger effect on precision/technique tasks than motivational self-talk does.', citation: 'Hatzigeorgiadis et al., 2011, Perspectives on Psychological Science (meta-analysis of self-talk and task performance).' },
+  { kind: 'Motivational', example: '"I\'ve done the work."', note: 'For resetting your state after a mistake, not for skill execution — motivational self-talk shows its largest effect on effort/persistence tasks, not precision.', citation: 'Hatzigeorgiadis et al., 2011.' },
+  { kind: 'If-Then Plan', example: '"If I give up a bad goal, then I say \'next play\' and reset my stance."', note: 'Deciding your response ahead of time removes the decision under stress — implementation intentions have one of sports psychology\'s larger evidence bases for follow-through under pressure.', citation: 'Gollwitzer, 1999, American Psychologist (implementation intentions).' },
+  { kind: 'Process Goal', example: '"Win my first three headers."', note: 'Set before competition, reviewed after — within your control, unlike the scoreline. Process goals are linked to better focus under pressure than outcome goals alone.', citation: 'Locke & Latham, 2002, American Psychologist (goal-setting theory).' },
+];
+
+// ── State ────────────────────────────────────────────────────────────
+let athleteTabSubView = 'home'; // 'home' | 'setup' | 'conditioning' | 'psych' | 'journal' | 'bank' | 'plan'
+let athleteSetupStep = 1; // 1: sport, 2: position
+let athleteSetupSport = '';
+let athleteSetupPosition = '';
+let athleteConditioningForm = { drillKey: CONDITIONING_DRILLS[0].key, distanceM: '', durationS: '', completed: true, notes: '' };
+let athleteConditioningLoaded = false;
+let athleteJournalLoaded = false;
+let athleteConfidenceLoaded = false;
+let athleteJournalFormOpen = false;
+let athleteJournalForm = { whatWentWell: '', oneThingToImprove: '', mood: 3 };
+let athleteConfidenceFormOpen = false;
+let athleteConfidenceForm = { description: '', source: 'self' };
+let athleteGamePlanEditing = false;
+let athleteGamePlanForm = { ifThenPlan: '', processGoal: '' };
+let athletePlayerSession = null; // {type, secondsLeft, promptIndex, timerHandle} | null
+
+function applyAthleteModeVisualState() {
+  const on = !!state.profile?.athlete_mode_enabled;
+  document.body.classList.toggle('athlete-mode', on);
+  $('#athleteNavBtn')?.classList.toggle('hidden', !on);
+  $('#athleteBadge')?.classList.toggle('hidden', !on);
+}
+
+// Full-screen takeover, CSS-driven (transform/opacity/stroke-dashoffset
+// only, for smooth performance on a phone) — see #athleteUnlockScreen's
+// keyframes. Plays once per account (gated by athlete_mode_unlocked_at
+// at the call site), not on every toggle-on.
+function playAthleteUnlockTransition(onDone) {
+  const overlay = document.createElement('div');
+  overlay.id = 'athleteUnlockScreen';
+  overlay.innerHTML = `
+    <svg class="athlete-unlock-mark" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+    <div class="athlete-unlock-word">Athlete Mode</div>
+    <div class="athlete-unlock-sub">Unlocked</div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => { overlay.remove(); onDone(); }, 2600);
+}
+
+function athleteSetupHtml() {
+  if (athleteSetupStep === 1) {
+    return `<div class="card">
+      <h3>Pick your sport</h3>
+      <p class="muted small">More sports are on the way — starting with soccer.</p>
+      <div style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem;">
+        ${athleteSportOptions().map((s) => `
+          <button class="card" data-athlete-sport="${s.key}" style="display:block;width:100%;text-align:left;margin-bottom:0;cursor:pointer;border:1px solid ${athleteSetupSport === s.key ? 'var(--accent)' : 'var(--border)'};background:${athleteSetupSport === s.key ? 'var(--surface-2)' : 'var(--surface)'};">
+            <div class="display" style="text-transform:uppercase;font-weight:700;">${esc(s.name)}</div>
+          </button>`).join('')}
+      </div>
+      <button class="btn btn-primary" id="athleteSetupNextBtn" style="width:100%;margin-top:0.9rem;" ${athleteSetupSport ? '' : 'disabled'}>Next</button>
+      <button class="btn btn-ghost" id="athleteBackToHomeBtn" style="width:100%;margin-top:0.5rem;">Cancel</button>
+    </div>`;
+  }
+  const positions = athletePositionOptions(athleteSetupSport);
+  return `<div class="card">
+    <h3>Pick your position</h3>
+    <p class="muted small">Krafft Athlete Mode tailors which drills and focus areas get emphasized — same content pool, different emphasis, not separate content per position.</p>
+    <div style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem;">
+      ${positions.map((p) => `
+        <button class="card" data-athlete-position="${p.key}" style="display:block;width:100%;text-align:left;margin-bottom:0;cursor:pointer;border:1px solid ${athleteSetupPosition === p.key ? 'var(--accent)' : 'var(--border)'};background:${athleteSetupPosition === p.key ? 'var(--surface-2)' : 'var(--surface)'};">
+          <div class="display" style="text-transform:uppercase;font-weight:700;">${esc(p.name)}</div>
+          <div class="muted small" style="margin-top:0.2rem;">${esc(p.focus)}</div>
+        </button>`).join('')}
+    </div>
+    <button class="btn btn-primary" id="athleteSetupFinishBtn" style="width:100%;margin-top:0.9rem;" ${athleteSetupPosition ? '' : 'disabled'}>Finish Setup</button>
+    <button class="btn btn-ghost" id="athleteSetupBackBtn" style="width:100%;margin-top:0.5rem;">Back</button>
+  </div>`;
+}
+
+function wireAthleteSetup(panel) {
+  $$('[data-athlete-sport]', panel).forEach((btn) => btn.addEventListener('click', () => { athleteSetupSport = btn.dataset.athleteSport; renderAthleteTab(); }));
+  const nextBtn = $('#athleteSetupNextBtn', panel);
+  if (nextBtn) nextBtn.addEventListener('click', () => { athleteSetupStep = 2; renderAthleteTab(); });
+  $$('[data-athlete-position]', panel).forEach((btn) => btn.addEventListener('click', () => { athleteSetupPosition = btn.dataset.athletePosition; renderAthleteTab(); }));
+  const setupBackBtn = $('#athleteSetupBackBtn', panel);
+  if (setupBackBtn) setupBackBtn.addEventListener('click', () => { athleteSetupStep = 1; renderAthleteTab(); });
+  const finishBtn = $('#athleteSetupFinishBtn', panel);
+  if (finishBtn) finishBtn.addEventListener('click', async () => {
+    const { error } = await supabase.from('profiles').update({ athlete_sport: athleteSetupSport, athlete_position: athleteSetupPosition }).eq('id', state.user.id);
+    if (error) return toast('Could not save setup: ' + error.message);
+    state.profile = { ...state.profile, athlete_sport: athleteSetupSport, athlete_position: athleteSetupPosition };
+    athleteTabSubView = 'home';
+    renderAthleteTab();
+  });
+}
+
+async function loadConditioningLog() {
+  const { data } = await supabase.from('conditioning_log').select('*').eq('user_id', state.user.id).order('date', { ascending: false }).limit(20);
+  state.athleteConditioningLog = data || [];
+}
+
+function conditioningLogHtml() {
+  const drill = conditioningDrillByKey(athleteConditioningForm.drillKey);
+  const recent = state.athleteConditioningLog || [];
+  return `
+    <div class="card">
+      <h3>Log Conditioning Work</h3>
+      <div class="field">
+        <label>Drill</label>
+        <select class="input" id="conditioning_drill_select">
+          ${CONDITIONING_DRILLS.map((d) => `<option value="${d.key}" ${d.key === athleteConditioningForm.drillKey ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}
+        </select>
+      </div>
+      <p class="muted small" style="margin-top:-0.4rem;">${esc(drill.description)}</p>
+      ${drill.metricType === 'distance' ? `<div class="field"><label>Distance (m)</label><input class="input mono" id="conditioning_distance_input" type="number" value="${esc(athleteConditioningForm.distanceM)}"></div>` : ''}
+      ${drill.metricType === 'time' ? `<div class="field"><label>Time (seconds)</label><input class="input mono" id="conditioning_duration_input" type="number" value="${esc(athleteConditioningForm.durationS)}"></div>` : ''}
+      ${drill.metricType === 'completion' ? `<div class="consent-line"><input type="checkbox" id="conditioning_completed_check" ${athleteConditioningForm.completed ? 'checked' : ''}><label style="margin:0;font-weight:400;" for="conditioning_completed_check">Completed</label></div>` : ''}
+      <div class="field"><label>Notes <span class="muted">(optional)</span></label><input class="input" id="conditioning_notes_input" value="${esc(athleteConditioningForm.notes)}"></div>
+      <button class="btn btn-primary" id="conditioningSaveBtn">Log It</button>
+      <button class="btn btn-ghost" id="athleteBackToHomeBtn" style="margin-left:0.5rem;">Back</button>
+    </div>
+    <div class="card">
+      <h3>Recent</h3>
+      ${recent.length ? recent.map((c) => `
+        <div class="row" style="justify-content:space-between;padding:0.3rem 0;border-bottom:1px solid var(--border);">
+          <span class="small">${esc(conditioningDrillByKey(c.drill).name)} · ${fmtLiftDate(c.date)}</span>
+          <span class="mono muted small">${c.metric_type === 'distance' ? `${c.distance_m ?? '—'}m` : c.metric_type === 'time' ? `${c.duration_s ?? '—'}s` : (c.completed ? '✓ done' : '— incomplete')}</span>
+        </div>`).join('') : `<p class="muted small">Nothing logged yet.</p>`}
+    </div>`;
+}
+
+function wireConditioningLog(panel) {
+  const drillSelect = $('#conditioning_drill_select', panel);
+  if (drillSelect) drillSelect.addEventListener('change', () => { athleteConditioningForm.drillKey = drillSelect.value; renderAthleteTab(); });
+  const distInput = $('#conditioning_distance_input', panel);
+  if (distInput) distInput.addEventListener('input', () => { athleteConditioningForm.distanceM = distInput.value; });
+  const durInput = $('#conditioning_duration_input', panel);
+  if (durInput) durInput.addEventListener('input', () => { athleteConditioningForm.durationS = durInput.value; });
+  const compCheck = $('#conditioning_completed_check', panel);
+  if (compCheck) compCheck.addEventListener('change', () => { athleteConditioningForm.completed = compCheck.checked; });
+  const notesInput = $('#conditioning_notes_input', panel);
+  if (notesInput) notesInput.addEventListener('input', () => { athleteConditioningForm.notes = notesInput.value; });
+  const saveBtn = $('#conditioningSaveBtn', panel);
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const drill = conditioningDrillByKey(athleteConditioningForm.drillKey);
+    const payload = {
+      user_id: state.user.id, drill: drill.key, metric_type: drill.metricType,
+      distance_m: drill.metricType === 'distance' ? (Number(athleteConditioningForm.distanceM) || null) : null,
+      duration_s: drill.metricType === 'time' ? (Number(athleteConditioningForm.durationS) || null) : null,
+      completed: drill.metricType === 'completion' ? !!athleteConditioningForm.completed : null,
+      notes: athleteConditioningForm.notes.trim() || null,
+      date: localDateStr(),
+    };
+    const { error } = await supabase.from('conditioning_log').insert(payload);
+    if (error) return toast('Could not log that: ' + error.message);
+    athleteConditioningForm.notes = '';
+    toast('Logged.');
+    await loadConditioningLog();
+    renderAthleteTab();
+  });
+}
+
+async function loadAthleteJournal() {
+  const { data } = await supabase.from('athlete_journal_entries').select('*').eq('user_id', state.user.id).order('entry_date', { ascending: false }).limit(50);
+  state.athleteJournalEntries = data || [];
+}
+async function loadAthleteConfidence() {
+  const { data } = await supabase.from('athlete_confidence_entries').select('*').eq('user_id', state.user.id).order('entry_date', { ascending: false }).limit(100);
+  state.athleteConfidenceEntries = data || [];
+}
+
+function startAthletePsychSession(type) {
+  if (athletePlayerSession?.timerHandle) clearInterval(athletePlayerSession.timerHandle);
+  const def = ATHLETE_PSYCH_SESSIONS[type];
+  const session = { type, secondsLeft: def.seconds, promptIndex: 0, timerHandle: null };
+  session.timerHandle = setInterval(() => {
+    session.secondsLeft -= 1;
+    const elapsed = def.seconds - session.secondsLeft;
+    const promptInterval = def.seconds / def.prompts.length;
+    session.promptIndex = Math.min(def.prompts.length - 1, Math.floor(elapsed / promptInterval));
+    if (session.secondsLeft <= 0) {
+      clearInterval(session.timerHandle);
+      athletePlayerSession = null;
+      toast(def.label + ' session complete.');
+      renderAthleteTab();
+      return;
+    }
+    renderAthleteTab();
+  }, 1000);
+  athletePlayerSession = session;
+  renderAthleteTab();
+}
+function endAthletePsychSession() {
+  if (athletePlayerSession?.timerHandle) clearInterval(athletePlayerSession.timerHandle);
+  athletePlayerSession = null;
+  renderAthleteTab();
+}
+
+function athletePsychPlayerHtml() {
+  const def = ATHLETE_PSYCH_SESSIONS[athletePlayerSession.type];
+  const mins = Math.floor(athletePlayerSession.secondsLeft / 60);
+  const secs = athletePlayerSession.secondsLeft % 60;
+  return `<div class="card">
+    <h3>${esc(def.label)}</h3>
+    <div class="display" style="font-size:2.2rem;text-align:center;margin:0.5rem 0;">${mins}:${String(secs).padStart(2, '0')}</div>
+    <p style="text-align:center;min-height:3em;">${esc(def.prompts[athletePlayerSession.promptIndex])}</p>
+    <button class="btn btn-ghost" id="athleteEndSessionBtn" style="width:100%;">End Session</button>
+  </div>`;
+}
+
+function athletePsychHtml() {
+  if (athletePlayerSession) return athletePsychPlayerHtml();
+  return `
+    <div class="card">
+      <h3>${esc(ATHLETE_PSYCH_SESSIONS.pre_performance.label)}</h3>
+      <p class="muted small">${esc(ATHLETE_PSYCH_SESSIONS.pre_performance.desc)}</p>
+      <button class="btn btn-primary" data-athlete-start-session="pre_performance">Start (${ATHLETE_PSYCH_SESSIONS.pre_performance.clockLabel})</button>
+    </div>
+    <div class="card">
+      <h3>${esc(ATHLETE_PSYCH_SESSIONS.post_game.label)}</h3>
+      <p class="muted small">${esc(ATHLETE_PSYCH_SESSIONS.post_game.desc)}</p>
+      <button class="btn btn-primary" data-athlete-start-session="post_game">Start (${ATHLETE_PSYCH_SESSIONS.post_game.clockLabel})</button>
+    </div>
+    <div class="card">
+      <h3>A Few Words, Chosen</h3>
+      <p class="muted small" style="margin-top:-0.3rem;">Short, specific cues get recalled under pressure better than generic hype does.</p>
+      ${SELF_TALK_CUE_TYPES.map((c) => `
+        <div style="padding:0.5rem 0;border-bottom:1px solid var(--border);">
+          <div class="mono small" style="color:var(--accent);font-weight:700;">${esc(c.kind)}</div>
+          <div style="margin:0.15rem 0;">${esc(c.example)}</div>
+          <div class="muted small">${esc(c.note)}</div>
+          <div class="muted small" style="font-style:italic;">${esc(c.citation)}</div>
+        </div>`).join('')}
+    </div>
+    <div class="card">
+      <h3>Journal</h3>
+      <p class="muted small">Three fixed prompts, not a blank page — what went well, one thing to work on, and a mood rating.</p>
+      <button class="btn btn-sm" id="athleteOpenJournalBtn">Open Journal</button>
+    </div>
+    <div class="card">
+      <h3>Confidence Bank</h3>
+      <p class="muted small">A running log of good sessions and good feedback — pull it up right before the moment that matters most.</p>
+      <button class="btn btn-sm" id="athleteOpenBankBtn">Open Bank</button>
+    </div>
+    <div class="card">
+      <h3>Game Plan</h3>
+      <p class="muted small">An if-then plan and a process goal, set ahead of time and reviewed against the journal after.</p>
+      <button class="btn btn-sm" id="athleteOpenPlanBtn">${state.profile?.athlete_game_plan ? 'Edit Plan' : 'Set a Plan'}</button>
+    </div>
+    <button class="btn btn-ghost" id="athleteBackToHomeBtn">Back</button>`;
+}
+
+function athleteJournalHtml() {
+  const entries = state.athleteJournalEntries || [];
+  return `
+    <div class="card">
+      <h3>Journal</h3>
+      ${athleteJournalFormOpen ? `
+        <div class="field"><label>What went well</label><textarea class="input" id="journal_went_well_input">${esc(athleteJournalForm.whatWentWell)}</textarea></div>
+        <div class="field"><label>One thing to work on</label><textarea class="input" id="journal_improve_input">${esc(athleteJournalForm.oneThingToImprove)}</textarea></div>
+        <div class="field"><label>Mood (1-5)</label><input class="input mono" id="journal_mood_input" type="number" min="1" max="5" value="${athleteJournalForm.mood}"></div>
+        <button class="btn btn-primary" id="journalSaveBtn">Save Entry</button>
+        <button class="btn btn-ghost" id="journalCancelBtn">Cancel</button>
+      ` : `<button class="btn btn-sm btn-primary" id="journalOpenFormBtn">New Entry</button>`}
+    </div>
+    <div class="card">
+      <h3>Past Entries</h3>
+      ${entries.length ? entries.map((e) => `
+        <div style="padding:0.5rem 0;border-bottom:1px solid var(--border);">
+          <div class="mono small muted">${fmtLiftDate(e.entry_date)} · Mood ${e.mood ?? '—'}/5</div>
+          ${e.what_went_well ? `<div class="small" style="margin-top:0.2rem;"><strong>Went well:</strong> ${esc(e.what_went_well)}</div>` : ''}
+          ${e.one_thing_to_improve ? `<div class="small"><strong>To work on:</strong> ${esc(e.one_thing_to_improve)}</div>` : ''}
+        </div>`).join('') : `<p class="muted small">No entries yet.</p>`}
+    </div>
+    <button class="btn btn-ghost" id="athleteBackToPsychBtn">Back</button>`;
+}
+
+function athleteBankHtml() {
+  const entries = state.athleteConfidenceEntries || [];
+  return `
+    <div class="card">
+      <h3>Confidence Bank</h3>
+      ${athleteConfidenceFormOpen ? `
+        <div class="field"><label>What happened</label><input class="input" id="confidence_desc_input" value="${esc(athleteConfidenceForm.description)}" placeholder="e.g. Best defensive read all season"></div>
+        <div class="field"><label>Source</label>
+          <select class="input" id="confidence_source_select">
+            <option value="self" ${athleteConfidenceForm.source === 'self' ? 'selected' : ''}>Self</option>
+            <option value="coach" ${athleteConfidenceForm.source === 'coach' ? 'selected' : ''}>Coach</option>
+            <option value="teammate" ${athleteConfidenceForm.source === 'teammate' ? 'selected' : ''}>Teammate</option>
+            <option value="other" ${athleteConfidenceForm.source === 'other' ? 'selected' : ''}>Other</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="confidenceSaveBtn">Add to Bank</button>
+        <button class="btn btn-ghost" id="confidenceCancelBtn">Cancel</button>
+      ` : `<button class="btn btn-sm btn-primary" id="confidenceOpenFormBtn">Add Proof</button>`}
+    </div>
+    <div class="card">
+      <h3>The Bank</h3>
+      ${entries.length ? entries.map((e) => `
+        <div class="row" style="justify-content:space-between;padding:0.3rem 0;border-bottom:1px solid var(--border);">
+          <span class="small">${esc(e.description)}</span>
+          <span class="muted small">${esc(e.source)} · ${fmtLiftDate(e.entry_date)}</span>
+        </div>`).join('') : `<p class="muted small">Nothing in the bank yet.</p>`}
+    </div>
+    <button class="btn btn-ghost" id="athleteBackToPsychBtn">Back</button>`;
+}
+
+function athleteGamePlanHtml() {
+  const plan = state.profile?.athlete_game_plan;
+  if (athleteGamePlanEditing) {
+    return `<div class="card">
+      <h3>Game Plan</h3>
+      <div class="field"><label>If-Then Plan</label><input class="input" id="gameplan_ifthen_input" placeholder="If I give up a bad goal, then I say &quot;next play&quot; and reset my stance." value="${esc(athleteGamePlanForm.ifThenPlan)}"></div>
+      <div class="field"><label>Process Goal</label><input class="input" id="gameplan_process_input" placeholder="e.g. Win my first three headers" value="${esc(athleteGamePlanForm.processGoal)}"></div>
+      <button class="btn btn-primary" id="gamePlanSaveBtn">Save</button>
+      <button class="btn btn-ghost" id="gamePlanCancelBtn">Cancel</button>
+    </div>
+    <button class="btn btn-ghost" id="athleteBackToPsychBtn">Back</button>`;
+  }
+  return `<div class="card">
+    <h3>Game Plan</h3>
+    ${plan ? `
+      <p style="margin:0;"><strong>If-Then:</strong> ${esc(plan.ifThenPlan || '—')}</p>
+      <p style="margin:0.5rem 0 0;"><strong>Process Goal:</strong> ${esc(plan.processGoal || '—')}</p>
+      <button class="btn btn-sm" id="gamePlanEditBtn" style="margin-top:0.6rem;">Edit</button>
+    ` : `<p class="muted small">No plan set yet.</p><button class="btn btn-sm btn-primary" id="gamePlanEditBtn">Set a Plan</button>`}
+  </div>
+  <button class="btn btn-ghost" id="athleteBackToPsychBtn">Back</button>`;
+}
+
+function athleteDashboardHtml() {
+  const paid = hasAccess(state.subscription);
+  const sportKey = state.profile?.athlete_sport;
+  const positionKey = state.profile?.athlete_position;
+  const position = (paid && sportKey && positionKey) ? SPORTS[sportKey]?.positions?.[positionKey] : null;
+  return `
+    <div class="card">
+      <h3>Krafft Athlete</h3>
+      <p class="muted small">Plyometrics, speed/agility logging, and the Power & Speed / Functional-Athletic Block Builder categories are unlocked. Nutrition, general lifting, and everything else in Krafft stay exactly the same.</p>
+    </div>
+    ${paid ? (position ? `
+      <div class="card">
+        <h3>${esc(SPORTS[sportKey].name)} — ${esc(position.name)}</h3>
+        <p class="muted small" style="margin:0;">${esc(position.focus)}</p>
+        <button class="btn btn-sm btn-ghost" id="athleteEditSetupBtn" style="margin-top:0.6rem;">Change Sport/Position</button>
+      </div>
+    ` : `
+      <div class="card">
+        <h3>Set Up Your Sport & Position</h3>
+        <p class="muted small">Tell Krafft your sport and position to get drills and focus areas emphasized for how you actually play.</p>
+        <button class="btn btn-sm btn-primary" id="athleteStartSetupBtn">Set Up</button>
+      </div>
+    `) : `
+      <div class="card">
+        <h3>Sport & Position Customization <span class="muted small" style="font-weight:400;">(Pro)</span></h3>
+        <p class="muted small">Unlock positional drill emphasis and the sports psychology section on the paid tier.</p>
+        <button class="btn btn-sm btn-primary" data-athlete-upgrade>Upgrade</button>
+      </div>
+    `}
+    <div class="card">
+      <h3>Plyometrics & Speed/Agility</h3>
+      <p class="muted small">Plyometric exercises are in the Lifts tab's exercise library and the Power & Speed / Functional-Athletic Block Builder focuses. Speed and agility drills get their own simple log here instead, since they don't fit a weight × reps format.</p>
+      <button class="btn btn-sm" id="athleteOpenConditioningBtn">Log Conditioning Work</button>
+    </div>
+    <div class="card">
+      <h3>Sports Psychology <span class="muted small" style="font-weight:400;">(Pro)</span></h3>
+      <p class="muted small">Pre-performance visualization, a post-game reset, a 3-prompt journal, a confidence bank, and a game plan — adapted from established sports psychology practice.</p>
+      ${paid ? `<button class="btn btn-sm" id="athleteOpenPsychBtn">Open</button>` : `<button class="btn btn-sm btn-primary" data-athlete-upgrade>Upgrade</button>`}
+    </div>`;
+}
+
+function renderAthleteTab() {
+  const panel = $('#panel-athlete');
+  if (!panel) return;
+  if (!state.profile?.athlete_mode_enabled) { panel.innerHTML = ''; return; }
+  let body;
+  if (athleteTabSubView === 'setup' && hasAccess(state.subscription)) body = athleteSetupHtml();
+  else if (athleteTabSubView === 'conditioning') body = conditioningLogHtml();
+  else if (athleteTabSubView === 'psych' && hasAccess(state.subscription)) body = athletePsychHtml();
+  else if (athleteTabSubView === 'journal' && hasAccess(state.subscription)) body = athleteJournalHtml();
+  else if (athleteTabSubView === 'bank' && hasAccess(state.subscription)) body = athleteBankHtml();
+  else if (athleteTabSubView === 'plan' && hasAccess(state.subscription)) body = athleteGamePlanHtml();
+  else body = athleteDashboardHtml();
+  panel.innerHTML = `<div class="pagehead"><div class="pagetitle">Athlete</div></div>${body}`;
+  wireAthleteEvents(panel);
+  if (athleteTabSubView === 'conditioning' && !athleteConditioningLoaded) {
+    athleteConditioningLoaded = true;
+    loadConditioningLog().then(() => { if (athleteTabSubView === 'conditioning') renderAthleteTab(); });
+  }
+  if (athleteTabSubView === 'journal' && !athleteJournalLoaded) {
+    athleteJournalLoaded = true;
+    loadAthleteJournal().then(() => { if (athleteTabSubView === 'journal') renderAthleteTab(); });
+  }
+  if (athleteTabSubView === 'bank' && !athleteConfidenceLoaded) {
+    athleteConfidenceLoaded = true;
+    loadAthleteConfidence().then(() => { if (athleteTabSubView === 'bank') renderAthleteTab(); });
+  }
+}
+
+function wireAthleteEvents(panel) {
+  const startSetupBtn = $('#athleteStartSetupBtn', panel) || $('#athleteEditSetupBtn', panel);
+  if (startSetupBtn) startSetupBtn.addEventListener('click', () => {
+    athleteSetupStep = 1;
+    athleteSetupSport = state.profile?.athlete_sport || '';
+    athleteSetupPosition = state.profile?.athlete_position || '';
+    athleteTabSubView = 'setup';
+    renderAthleteTab();
+  });
+  $$('[data-athlete-upgrade]', panel).forEach((b) => b.addEventListener('click', () => showUpgradeScreen()));
+  const openConditioningBtn = $('#athleteOpenConditioningBtn', panel);
+  if (openConditioningBtn) openConditioningBtn.addEventListener('click', () => { athleteTabSubView = 'conditioning'; renderAthleteTab(); });
+  const openPsychBtn = $('#athleteOpenPsychBtn', panel);
+  if (openPsychBtn) openPsychBtn.addEventListener('click', () => { athleteTabSubView = 'psych'; renderAthleteTab(); });
+  const backHomeBtn = $('#athleteBackToHomeBtn', panel);
+  if (backHomeBtn) backHomeBtn.addEventListener('click', () => { athleteTabSubView = 'home'; renderAthleteTab(); });
+  const backPsychBtn = $('#athleteBackToPsychBtn', panel);
+  if (backPsychBtn) backPsychBtn.addEventListener('click', () => { athleteTabSubView = 'psych'; renderAthleteTab(); });
+
+  wireAthleteSetup(panel);
+  wireConditioningLog(panel);
+
+  $$('[data-athlete-start-session]', panel).forEach((btn) => btn.addEventListener('click', () => startAthletePsychSession(btn.dataset.athleteStartSession)));
+  const endSessionBtn = $('#athleteEndSessionBtn', panel);
+  if (endSessionBtn) endSessionBtn.addEventListener('click', endAthletePsychSession);
+
+  const openJournalBtn = $('#athleteOpenJournalBtn', panel);
+  if (openJournalBtn) openJournalBtn.addEventListener('click', () => { athleteTabSubView = 'journal'; renderAthleteTab(); });
+  const openBankBtn = $('#athleteOpenBankBtn', panel);
+  if (openBankBtn) openBankBtn.addEventListener('click', () => { athleteTabSubView = 'bank'; renderAthleteTab(); });
+  const openPlanBtn = $('#athleteOpenPlanBtn', panel);
+  if (openPlanBtn) openPlanBtn.addEventListener('click', () => { athleteTabSubView = 'plan'; renderAthleteTab(); });
+
+  const journalOpenFormBtn = $('#journalOpenFormBtn', panel);
+  if (journalOpenFormBtn) journalOpenFormBtn.addEventListener('click', () => { athleteJournalFormOpen = true; athleteJournalForm = { whatWentWell: '', oneThingToImprove: '', mood: 3 }; renderAthleteTab(); });
+  const journalCancelBtn = $('#journalCancelBtn', panel);
+  if (journalCancelBtn) journalCancelBtn.addEventListener('click', () => { athleteJournalFormOpen = false; renderAthleteTab(); });
+  const wentWellInput = $('#journal_went_well_input', panel);
+  if (wentWellInput) wentWellInput.addEventListener('input', () => { athleteJournalForm.whatWentWell = wentWellInput.value; });
+  const improveInput = $('#journal_improve_input', panel);
+  if (improveInput) improveInput.addEventListener('input', () => { athleteJournalForm.oneThingToImprove = improveInput.value; });
+  const moodInput = $('#journal_mood_input', panel);
+  if (moodInput) moodInput.addEventListener('input', () => { athleteJournalForm.mood = Number(moodInput.value) || 3; });
+  const journalSaveBtn = $('#journalSaveBtn', panel);
+  if (journalSaveBtn) journalSaveBtn.addEventListener('click', async () => {
+    const { error } = await supabase.from('athlete_journal_entries').insert({
+      user_id: state.user.id, what_went_well: athleteJournalForm.whatWentWell.trim() || null,
+      one_thing_to_improve: athleteJournalForm.oneThingToImprove.trim() || null,
+      mood: Math.min(5, Math.max(1, athleteJournalForm.mood)), entry_date: localDateStr(),
+    });
+    if (error) return toast('Could not save entry: ' + error.message);
+    athleteJournalFormOpen = false;
+    await loadAthleteJournal();
+    renderAthleteTab();
+  });
+
+  const confidenceOpenFormBtn = $('#confidenceOpenFormBtn', panel);
+  if (confidenceOpenFormBtn) confidenceOpenFormBtn.addEventListener('click', () => { athleteConfidenceFormOpen = true; athleteConfidenceForm = { description: '', source: 'self' }; renderAthleteTab(); });
+  const confidenceCancelBtn = $('#confidenceCancelBtn', panel);
+  if (confidenceCancelBtn) confidenceCancelBtn.addEventListener('click', () => { athleteConfidenceFormOpen = false; renderAthleteTab(); });
+  const confDescInput = $('#confidence_desc_input', panel);
+  if (confDescInput) confDescInput.addEventListener('input', () => { athleteConfidenceForm.description = confDescInput.value; });
+  const confSourceSelect = $('#confidence_source_select', panel);
+  if (confSourceSelect) confSourceSelect.addEventListener('change', () => { athleteConfidenceForm.source = confSourceSelect.value; });
+  const confidenceSaveBtn = $('#confidenceSaveBtn', panel);
+  if (confidenceSaveBtn) confidenceSaveBtn.addEventListener('click', async () => {
+    if (!athleteConfidenceForm.description.trim()) return;
+    const { error } = await supabase.from('athlete_confidence_entries').insert({
+      user_id: state.user.id, description: athleteConfidenceForm.description.trim(), source: athleteConfidenceForm.source, entry_date: localDateStr(),
+    });
+    if (error) return toast('Could not add that: ' + error.message);
+    athleteConfidenceFormOpen = false;
+    await loadAthleteConfidence();
+    renderAthleteTab();
+  });
+
+  const gamePlanEditBtn = $('#gamePlanEditBtn', panel);
+  if (gamePlanEditBtn) gamePlanEditBtn.addEventListener('click', () => {
+    const plan = state.profile?.athlete_game_plan || {};
+    athleteGamePlanForm = { ifThenPlan: plan.ifThenPlan || '', processGoal: plan.processGoal || '' };
+    athleteGamePlanEditing = true;
+    renderAthleteTab();
+  });
+  const gamePlanCancelBtn = $('#gamePlanCancelBtn', panel);
+  if (gamePlanCancelBtn) gamePlanCancelBtn.addEventListener('click', () => { athleteGamePlanEditing = false; renderAthleteTab(); });
+  const ifThenInput = $('#gameplan_ifthen_input', panel);
+  if (ifThenInput) ifThenInput.addEventListener('input', () => { athleteGamePlanForm.ifThenPlan = ifThenInput.value; });
+  const processInput = $('#gameplan_process_input', panel);
+  if (processInput) processInput.addEventListener('input', () => { athleteGamePlanForm.processGoal = processInput.value; });
+  const gamePlanSaveBtn = $('#gamePlanSaveBtn', panel);
+  if (gamePlanSaveBtn) gamePlanSaveBtn.addEventListener('click', async () => {
+    const payload = { ifThenPlan: athleteGamePlanForm.ifThenPlan.trim(), processGoal: athleteGamePlanForm.processGoal.trim(), updatedAt: new Date().toISOString() };
+    const { error } = await supabase.from('profiles').update({ athlete_game_plan: payload }).eq('id', state.user.id);
+    if (error) return toast('Could not save plan: ' + error.message);
+    state.profile = { ...state.profile, athlete_game_plan: payload };
+    athleteGamePlanEditing = false;
+    renderAthleteTab();
+  });
+}
+
 let insightsSubTab = 'training'; // 'training' | 'social'
 
 // ── Group Mode (own top-level tab — see renderGroupTab() below) ─────────
@@ -10488,7 +11162,7 @@ function groupTabHtml() {
       </div>` : ''}
       <div class="card">
         <h3>Group <span class="muted small" style="font-weight:400;">(optional)</span></h3>
-        <p class="muted small">Form a group of up to 10 friends with a shared streak — it only ticks up on a day everyone hits their own goal, protected by freezes the group earns together. From fixed rules, evaluated once a day. No AI.</p>
+        <p class="muted small">Form a group of up to 10 friends with a shared streak — it only ticks up on a day everyone hits their own goal, protected by freezes the group earns together. Evaluated once a day.</p>
         <div class="field"><input class="input" id="group_name_input" placeholder="Group name" value="${esc(groupCreateName)}"></div>
         <button class="btn btn-sm" id="groupCreateBtn" ${groupCreating ? 'disabled' : ''}>${groupCreating ? 'Creating…' : 'Create a Group'}</button>
         ${groupActionMessage ? `<div class="muted small" style="margin-top:0.5rem;">${esc(groupActionMessage)}</div>` : ''}
@@ -10870,7 +11544,7 @@ function renderInsightsTab() {
   const insightsSocialSubTabHtml = `
     <div class="card">
       <h3>Nutrition × Training</h3>
-      <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Weekly protein-goal consistency vs. lift volume — no AI, just your own logged data grouped by week.</p>
+      <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Weekly protein-goal consistency vs. lift volume — your own logged data, grouped by week.</p>
       ${correlationHtml()}
     </div>
     <div class="card">
