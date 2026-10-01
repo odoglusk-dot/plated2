@@ -2,21 +2,26 @@
 // not callable meaningfully from the browser. Runs once/day, shortly
 // after send-reminder-emails, and for every group:
 //
-//   1. Checks whether every JOINED member hit their own protein-goal
-//      streak yesterday (a server-side port of computeStreaks()'s exact
-//      threshold in index.html — daily food_logs protein sum >=
-//      goals.protein_g — deliberately NOT computeTrainingStreak(), the
-//      separate lift-day streak the Friends Leaderboard already uses).
-//      Everyone hit it -> group streak +1 (and +1 banked freeze every
-//      7th day, capped at 3). Someone missed it -> spend a banked freeze
-//      if one exists (streak survives), otherwise the streak resets.
+//   1. Checks whether every JOINED member hit the group's chosen streak
+//      metric (groups.goal_metric — 'protein' or 'calories' is a daily
+//      per-member goal check against their own goals row, same threshold
+//      computeStreaks() uses in index.html; 'sessions' is a weekly
+//      per-member training-day count against groups.sessions_target_per_week,
+//      leader-set). Everyone hit it -> group streak +1 (one "period" — a
+//      day for protein/calories, a week for sessions) and +1 banked freeze
+//      every 7th period, capped at 3. Someone missed it -> spend a banked
+//      freeze if one exists (streak survives), otherwise the streak resets.
+//      A 'sessions' group is only evaluated once every 7 days (its period
+//      length) rather than daily — see the isDue check below — so its
+//      achievement/goal-concluded digest pieces are folded into that same
+//      weekly cadence rather than running independently on a daily one;
+//      this is the same kind of fixed-cadence approximation
+//      send-reminder-emails.js's "evening" timing already accepts.
 //   2. Separately, diffs each member's user_achievements against the
 //      group's last_achievement_check_at and banks a bonus freeze per
 //      new unlock found (capped at 3) — this can't be real-time, since
 //      achievement unlocking is 100% client-side with no server code
-//      path; this daily diff is the only way to detect it at all. Same
-//      known-limitation shape as this file's own "fixed UTC day" already
-//      accepts for send-reminder-emails.js's "evening" timing.
+//      path; this periodic diff is the only way to detect it at all.
 //   3. If a group_goal's period just ended, that's folded into the same
 //      digest.
 //   4. Sends one combined digest email per member per group (via
@@ -30,7 +35,7 @@
 const { captureError, withErrorReporting } = require('./_shared');
 
 const FREEZE_CAP = 3;
-const MILESTONE_INTERVAL_DAYS = 7;
+const MILESTONE_INTERVAL = 7; // every 7th period — days for protein/calories groups, weeks for sessions groups
 
 function utcDayBoundsFor(daysAgo) {
   const now = new Date();
@@ -38,6 +43,12 @@ function utcDayBoundsFor(daysAgo) {
   const start = new Date(todayStart.getTime() - daysAgo * 24 * 60 * 60 * 1000);
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   return { start, end, dateStr: start.toISOString().slice(0, 10) };
+}
+
+function daysBetweenDateStrs(laterStr, earlierStr) {
+  const later = new Date(laterStr + 'T00:00:00Z').getTime();
+  const earlier = new Date(earlierStr + 'T00:00:00Z').getTime();
+  return Math.round((later - earlier) / (24 * 60 * 60 * 1000));
 }
 
 async function sendDigestEmail(email, groupName, lines) {
@@ -75,7 +86,17 @@ exports.handler = withErrorReporting(async () => {
 
     let evaluated = 0;
     for (const group of groups) {
-      if (group.last_evaluated_date === evalDateStr) continue; // already ran for this day
+      const isWeekly = group.goal_metric === 'sessions';
+      const periodWord = isWeekly ? 'week' : 'day';
+      const periodWordPlural = periodWord + 's';
+
+      if (isWeekly) {
+        // Only due once every 7 days since the group's last evaluation —
+        // "sessions" is a weekly target, not a daily hit/miss.
+        if (group.last_evaluated_date && daysBetweenDateStrs(evalDateStr, group.last_evaluated_date) < MILESTONE_INTERVAL) continue;
+      } else if (group.last_evaluated_date === evalDateStr) {
+        continue; // already ran for this day
+      }
 
       const membersRes = await fetch(
         `${base}/rest/v1/group_members?group_id=eq.${group.id}&status=eq.joined&select=user_id`,
@@ -87,23 +108,40 @@ exports.handler = withErrorReporting(async () => {
       const memberIds = members.map((m) => m.user_id);
       const [profilesRes, goalsRes] = await Promise.all([
         fetch(`${base}/rest/v1/profiles?id=in.(${memberIds.join(',')})&select=id,display_name,group_streak_emails_opt_out,group_freeze_emails_opt_out,group_goal_emails_opt_out`, { headers: serviceHeaders }),
-        fetch(`${base}/rest/v1/goals?user_id=in.(${memberIds.join(',')})&select=user_id,protein_g`, { headers: serviceHeaders }),
+        fetch(`${base}/rest/v1/goals?user_id=in.(${memberIds.join(',')})&select=user_id,protein_g,calories`, { headers: serviceHeaders }),
       ]);
       const profiles = profilesRes.ok ? await profilesRes.json() : [];
-      const proteinGoalById = Object.fromEntries((goalsRes.ok ? await goalsRes.json() : []).map((g) => [g.user_id, g.protein_g]));
+      const goalRows = goalsRes.ok ? await goalsRes.json() : [];
       const nameById = Object.fromEntries(profiles.map((p) => [p.id, p.display_name || 'A member']));
 
-      const hitResults = await Promise.all(memberIds.map(async (userId) => {
-        const goal = proteinGoalById[userId];
-        if (!goal) return false;
-        const res = await fetch(
-          `${base}/rest/v1/food_logs?user_id=eq.${userId}&logged_at=gte.${evalStart.toISOString()}&logged_at=lt.${evalEnd.toISOString()}&select=protein_g`,
+      let hitResults;
+      if (isWeekly) {
+        const weekStartDateStr = new Date(evalEnd.getTime() - MILESTONE_INTERVAL * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const todayDateStr = evalEnd.toISOString().slice(0, 10);
+        const sessionsRes = await fetch(
+          `${base}/rest/v1/lifts?user_id=in.(${memberIds.join(',')})&date=gte.${weekStartDateStr}&date=lt.${todayDateStr}&select=user_id,date`,
           { headers: serviceHeaders }
         );
-        if (!res.ok) return false;
-        const rows = await res.json();
-        return rows.reduce((sum, r) => sum + (Number(r.protein_g) || 0), 0) >= goal;
-      }));
+        const sessionRows = sessionsRes.ok ? await sessionsRes.json() : [];
+        const datesByUser = {};
+        for (const r of sessionRows) (datesByUser[r.user_id] || (datesByUser[r.user_id] = new Set())).add(r.date);
+        const target = group.sessions_target_per_week || 1;
+        hitResults = memberIds.map((id) => (datesByUser[id] ? datesByUser[id].size : 0) >= target);
+      } else {
+        const goalColumn = group.goal_metric === 'calories' ? 'calories' : 'protein_g';
+        const goalById = Object.fromEntries(goalRows.map((g) => [g.user_id, g[goalColumn]]));
+        hitResults = await Promise.all(memberIds.map(async (userId) => {
+          const goal = goalById[userId];
+          if (!goal) return false;
+          const res = await fetch(
+            `${base}/rest/v1/food_logs?user_id=eq.${userId}&logged_at=gte.${evalStart.toISOString()}&logged_at=lt.${evalEnd.toISOString()}&select=${goalColumn}`,
+            { headers: serviceHeaders }
+          );
+          if (!res.ok) return false;
+          const rows = await res.json();
+          return rows.reduce((sum, r) => sum + (Number(r[goalColumn]) || 0), 0) >= goal;
+        }));
+      }
       const everyoneHit = hitResults.every(Boolean);
 
       let freezesAvailable = group.freezes_available;
@@ -115,21 +153,21 @@ exports.handler = withErrorReporting(async () => {
       if (everyoneHit) {
         currentStreak += 1;
         bestStreak = Math.max(bestStreak, currentStreak);
-        for (const id of memberIds) digestByMember[id].push({ cat: 'streak', text: `Your group streak is now ${currentStreak} days — everyone hit their goal yesterday.` });
-        if (currentStreak % MILESTONE_INTERVAL_DAYS === 0 && freezesAvailable < FREEZE_CAP) {
+        for (const id of memberIds) digestByMember[id].push({ cat: 'streak', text: `Your group streak is now ${currentStreak} ${periodWordPlural} — everyone hit their goal ${isWeekly ? 'this week' : 'yesterday'}.` });
+        if (currentStreak % MILESTONE_INTERVAL === 0 && freezesAvailable < FREEZE_CAP) {
           freezesAvailable += 1;
           logEntries.push({ kind: 'milestone_earned', member_id: null });
-          for (const id of memberIds) digestByMember[id].push({ cat: 'freeze', text: `Bonus: a ${currentStreak}-day streak earned the group a freeze (${freezesAvailable}/${FREEZE_CAP} banked).` });
+          for (const id of memberIds) digestByMember[id].push({ cat: 'freeze', text: `Bonus: a ${currentStreak}-${periodWord} streak earned the group a freeze (${freezesAvailable}/${FREEZE_CAP} banked).` });
         }
       } else if (freezesAvailable > 0) {
         freezesAvailable -= 1;
         currentStreak += 1;
         bestStreak = Math.max(bestStreak, currentStreak);
         logEntries.push({ kind: 'spent', member_id: null });
-        for (const id of memberIds) digestByMember[id].push({ cat: 'freeze', text: `A freeze protected the streak today (${freezesAvailable}/${FREEZE_CAP} left) — it's still at ${currentStreak} days.` });
+        for (const id of memberIds) digestByMember[id].push({ cat: 'freeze', text: `A freeze protected the streak ${isWeekly ? 'this week' : 'today'} (${freezesAvailable}/${FREEZE_CAP} left) — it's still at ${currentStreak} ${periodWordPlural}.` });
       } else {
         currentStreak = 0;
-        for (const id of memberIds) digestByMember[id].push({ cat: 'streak', text: `The group streak reset today — no freezes left to protect it. Fresh start tomorrow.` });
+        for (const id of memberIds) digestByMember[id].push({ cat: 'streak', text: `The group streak reset ${isWeekly ? 'this week' : 'today'} — no freezes left to protect it. Fresh start ${isWeekly ? 'next week' : 'tomorrow'}.` });
       }
 
       // Achievement-triggered bonus freezes — independent of the

@@ -10344,11 +10344,23 @@ let groupGoalFormOpen = false;
 let groupGoalDescription = '';
 let groupGoalTargetValue = '';
 let groupGoalPeriodDays = 7;
+let groupSettingsOpen = false;
+let groupSettingsMetric = 'protein';
+let groupSettingsTarget = 3;
+let groupSettingsSaving = false;
+let groupSettingsMessage = '';
 
-function groupFreezeLogText(entry) {
-  if (entry.kind === 'milestone_earned') return '🧊 Freeze earned — 7-day streak milestone.';
+function groupMetricLabel(g) {
+  if (g.goalMetric === 'calories') return 'calorie goal';
+  if (g.goalMetric === 'sessions') return `${g.sessionsTargetPerWeek}x/week sessions`;
+  return 'protein goal';
+}
+
+function groupFreezeLogText(entry, g) {
+  const unit = g && g.goalMetric === 'sessions' ? 'week' : 'day';
+  if (entry.kind === 'milestone_earned') return `🧊 Freeze earned — 7-${unit} streak milestone.`;
   if (entry.kind === 'achievement_earned') return `🧊 Freeze earned — ${esc(entry.memberName)} unlocked an achievement.`;
-  if (entry.kind === 'spent') return '🧊 A freeze protected the streak that day.';
+  if (entry.kind === 'spent') return `🧊 A freeze protected the streak that ${unit}.`;
   return '';
 }
 
@@ -10393,22 +10405,45 @@ function groupTabHtml() {
   const g = state.group;
   const friendCandidates = state.leaderboard.filter((e) => !e.isSelf && !g.roster.some((m) => m.userId === e.userId));
   const ranked = [...g.roster].sort((a, b) => b.sessionsThisWeek - a.sessionsThisWeek);
+  const streakUnit = g.goalMetric === 'sessions' ? 'wk' : 'd';
+  const isSessionsMetric = g.goalMetric === 'sessions';
 
   return `
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <h3 style="margin:0;">${esc(g.name)}</h3>
-        <span class="muted small">🔥 ${g.currentStreak}d streak · best ${g.bestStreak}d</span>
+        <span class="muted small">🔥 ${g.currentStreak}${streakUnit} streak · best ${g.bestStreak}${streakUnit}</span>
       </div>
-      <p class="muted small" style="margin-top:0.25rem;">🧊 ${g.freezesAvailable}/3 freezes banked</p>
+      <p class="muted small" style="margin-top:0.25rem;">🧊 ${g.freezesAvailable}/3 freezes banked · tracking ${groupMetricLabel(g)}</p>
       <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.3rem;">
         ${ranked.map((m, i) => `
           <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border-radius:8px;background:${m.isSelf ? 'var(--surface-2)' : 'transparent'};">
             <span>${i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}${esc(m.displayName)}${m.isSelf ? ' (you)' : ''}</span>
-            <span class="mono muted small">${m.sessionsThisWeek} this wk · ${m.hitToday ? '✓ hit today' : '— not yet'}</span>
+            <span class="mono muted small">${isSessionsMetric ? `${m.sessionsThisWeek}/${g.sessionsTargetPerWeek} this wk` : `${m.sessionsThisWeek} sessions this wk`} · ${m.hitToday ? (isSessionsMetric ? '✓ on track' : '✓ hit today') : (isSessionsMetric ? '— behind' : '— not yet')}</span>
           </div>`).join('')}
       </div>
-      <button class="btn btn-sm btn-ghost" id="groupLeaveBtn" style="margin-top:0.75rem;">Leave Group</button>
+      <div class="row" style="margin-top:0.75rem;gap:0.5rem;">
+        <button class="btn btn-sm btn-ghost" id="groupLeaveBtn">Leave Group</button>
+        ${g.isCreator ? `<button class="btn btn-sm btn-ghost" id="groupSettingsToggleBtn">${groupSettingsOpen ? 'Hide Settings' : 'Group Settings'}</button>` : ''}
+      </div>
+      ${g.isCreator && groupSettingsOpen ? `
+        <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border);">
+          <div class="field">
+            <label>Streak tracks</label>
+            <select class="input" id="group_metric_select">
+              <option value="protein" ${groupSettingsMetric === 'protein' ? 'selected' : ''}>Everyone's protein goal (daily)</option>
+              <option value="calories" ${groupSettingsMetric === 'calories' ? 'selected' : ''}>Everyone's calorie goal (daily)</option>
+              <option value="sessions" ${groupSettingsMetric === 'sessions' ? 'selected' : ''}>Weekly training sessions</option>
+            </select>
+          </div>
+          ${groupSettingsMetric === 'sessions' ? `
+            <div class="field"><label>Sessions per week (each member)</label><input class="input mono" id="group_sessions_target_input" type="number" min="1" max="14" value="${esc(groupSettingsTarget)}"></div>
+          ` : ''}
+          <p class="muted small">Changing this doesn't reset the current streak — it just changes what counts starting now.</p>
+          <button class="btn btn-sm btn-primary" id="groupSettingsSaveBtn" ${groupSettingsSaving ? 'disabled' : ''}>${groupSettingsSaving ? 'Saving…' : 'Save Settings'}</button>
+          ${groupSettingsMessage ? `<div class="muted small" style="margin-top:0.5rem;">${esc(groupSettingsMessage)}</div>` : ''}
+        </div>
+      ` : ''}
     </div>
 
     <div class="card">
@@ -10425,7 +10460,7 @@ function groupTabHtml() {
       <h3>Activity</h3>
       ${g.freezeLog.length ? g.freezeLog.map((entry) => `
         <div class="row" style="padding:0.3rem 0;border-bottom:1px solid var(--border);">
-          <span class="small">${groupFreezeLogText(entry)}</span>
+          <span class="small">${groupFreezeLogText(entry, g)}</span>
         </div>`).join('') : `<p class="muted small">Nothing yet — check back after your first day together.</p>`}
     </div>
 
@@ -10496,6 +10531,46 @@ function wireGroupEvents(panel) {
       .eq('group_id', state.group.id).eq('user_id', state.user.id);
     if (error) return toast('Could not leave group: ' + error.message);
     await loadGroup();
+    renderGroupTab();
+  });
+
+  const settingsToggleBtn = $('#groupSettingsToggleBtn', panel);
+  if (settingsToggleBtn) settingsToggleBtn.addEventListener('click', () => {
+    groupSettingsOpen = !groupSettingsOpen;
+    if (groupSettingsOpen && state.group) {
+      groupSettingsMetric = state.group.goalMetric;
+      groupSettingsTarget = state.group.sessionsTargetPerWeek || 3;
+      groupSettingsMessage = '';
+    }
+    renderGroupTab();
+  });
+  const metricSelect = $('#group_metric_select', panel);
+  if (metricSelect) metricSelect.addEventListener('change', () => { groupSettingsMetric = metricSelect.value; renderGroupTab(); });
+  const sessionsTargetInput = $('#group_sessions_target_input', panel);
+  if (sessionsTargetInput) sessionsTargetInput.addEventListener('input', () => { groupSettingsTarget = sessionsTargetInput.value; });
+  const settingsSaveBtn = $('#groupSettingsSaveBtn', panel);
+  if (settingsSaveBtn) settingsSaveBtn.addEventListener('click', async () => {
+    if (!state.group) return;
+    if (groupSettingsMetric === 'sessions') {
+      const n = Math.round(Number(groupSettingsTarget));
+      if (!Number.isFinite(n) || n < 1 || n > 14) { groupSettingsMessage = 'Enter a number from 1 to 14.'; renderGroupTab(); return; }
+    }
+    groupSettingsSaving = true;
+    renderGroupTab();
+    try {
+      await callFunction('update-group-settings', {
+        groupId: state.group.id,
+        goalMetric: groupSettingsMetric,
+        sessionsTargetPerWeek: groupSettingsMetric === 'sessions' ? Math.round(Number(groupSettingsTarget)) : undefined,
+      });
+      groupSettingsOpen = false;
+      groupSettingsMessage = '';
+      await loadGroup();
+    } catch (err) {
+      if (err.upgradeRequired) { groupSettingsSaving = false; showUpgradeScreen(); return; }
+      groupSettingsMessage = err.message || 'Could not save settings.';
+    }
+    groupSettingsSaving = false;
     renderGroupTab();
   });
 

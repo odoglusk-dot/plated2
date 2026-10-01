@@ -16,21 +16,23 @@
 // get-leaderboard.js never returning a friend's raw lift rows.
 const { jsonResponse, verifyUser, hasPaidAccess, captureError, withErrorReporting } = require('./_shared');
 
-// Mirrors sumMacros(dayLogs).protein_g >= proteinGoal from computeStreaks()
-// in index.html — "hit your goal today" is protein-only, not calories/
-// training. today/tomorrow are fixed UTC calendar-day boundaries (no
+// Mirrors sumMacros(dayLogs)[goalColumn] >= goal from computeStreaks() in
+// index.html for the 'protein' metric; same shape for 'calories' against
+// goals.calories. today/tomorrow are fixed UTC calendar-day boundaries (no
 // per-user timezone stored anywhere in this app — same documented
-// approximation send-reminder-emails.js already uses).
-async function hitGoalToday(base, serviceHeaders, userId, proteinGoal, todayStart, tomorrowStart) {
-  if (!proteinGoal) return false;
+// approximation send-reminder-emails.js already uses). Not used for the
+// 'sessions' metric — that's a weekly count, computed from sessionsThisWeek
+// instead (see below).
+async function hitGoalToday(base, serviceHeaders, userId, goalColumn, goal, todayStart, tomorrowStart) {
+  if (!goal) return false;
   const res = await fetch(
-    `${base}/rest/v1/food_logs?user_id=eq.${userId}&logged_at=gte.${todayStart}&logged_at=lt.${tomorrowStart}&select=protein_g`,
+    `${base}/rest/v1/food_logs?user_id=eq.${userId}&logged_at=gte.${todayStart}&logged_at=lt.${tomorrowStart}&select=${goalColumn}`,
     { headers: serviceHeaders }
   );
   if (!res.ok) return false;
   const rows = await res.json();
-  const total = rows.reduce((sum, r) => sum + (Number(r.protein_g) || 0), 0);
-  return total >= proteinGoal;
+  const total = rows.reduce((sum, r) => sum + (Number(r[goalColumn]) || 0), 0);
+  return total >= goal;
 }
 
 exports.handler = withErrorReporting(async (event) => {
@@ -97,13 +99,14 @@ exports.handler = withErrorReporting(async (event) => {
 
     const [profilesRes, goalsRes, freezeLogRes, groupGoalRes] = await Promise.all([
       fetch(`${base}/rest/v1/profiles?id=in.(${allMemberIds.join(',')})&select=id,display_name`, { headers: serviceHeaders }),
-      fetch(`${base}/rest/v1/goals?user_id=in.(${joinedMembers.map((m) => m.user_id).join(',')})&select=user_id,protein_g`, { headers: serviceHeaders }),
+      fetch(`${base}/rest/v1/goals?user_id=in.(${joinedMembers.map((m) => m.user_id).join(',')})&select=user_id,protein_g,calories`, { headers: serviceHeaders }),
       fetch(`${base}/rest/v1/group_freeze_log?group_id=eq.${groupId}&select=kind,member_id,created_at&order=created_at.desc&limit=20`, { headers: serviceHeaders }),
       fetch(`${base}/rest/v1/group_goals?group_id=eq.${groupId}&select=*&order=created_at.desc&limit=1`, { headers: serviceHeaders }),
     ]);
     const profiles = profilesRes.ok ? await profilesRes.json() : [];
     const nameById = Object.fromEntries(profiles.map((p) => [p.id, p.display_name || 'Athlete']));
-    const proteinGoalById = Object.fromEntries((goalsRes.ok ? await goalsRes.json() : []).map((g) => [g.user_id, g.protein_g]));
+    const goalColumn = group.goal_metric === 'calories' ? 'calories' : 'protein_g';
+    const goalByUser = Object.fromEntries((goalsRes.ok ? await goalsRes.json() : []).map((g) => [g.user_id, g[goalColumn]]));
     const freezeLog = freezeLogRes.ok ? await freezeLogRes.json() : [];
     const [groupGoal] = groupGoalRes.ok ? await groupGoalRes.json() : [];
 
@@ -125,13 +128,19 @@ exports.handler = withErrorReporting(async (event) => {
       (sessionDatesByUser[row.user_id] || (sessionDatesByUser[row.user_id] = new Set())).add(row.date);
     }
 
-    const roster = await Promise.all(joinedMembers.map(async (m) => ({
-      userId: m.user_id,
-      displayName: nameById[m.user_id] || 'Athlete',
-      isSelf: m.user_id === auth.user.id,
-      hitToday: await hitGoalToday(base, serviceHeaders, m.user_id, proteinGoalById[m.user_id], todayStart.toISOString(), tomorrowStart.toISOString()),
-      sessionsThisWeek: sessionDatesByUser[m.user_id] ? sessionDatesByUser[m.user_id].size : 0,
-    })));
+    const roster = await Promise.all(joinedMembers.map(async (m) => {
+      const sessionsThisWeek = sessionDatesByUser[m.user_id] ? sessionDatesByUser[m.user_id].size : 0;
+      const hitToday = group.goal_metric === 'sessions'
+        ? sessionsThisWeek >= (group.sessions_target_per_week || 1)
+        : await hitGoalToday(base, serviceHeaders, m.user_id, goalColumn, goalByUser[m.user_id], todayStart.toISOString(), tomorrowStart.toISOString());
+      return {
+        userId: m.user_id,
+        displayName: nameById[m.user_id] || 'Athlete',
+        isSelf: m.user_id === auth.user.id,
+        hitToday,
+        sessionsThisWeek,
+      };
+    }));
 
     const freezeLogOut = freezeLog.map((entry) => ({
       kind: entry.kind,
@@ -165,6 +174,9 @@ exports.handler = withErrorReporting(async (event) => {
       group: {
         id: group.id,
         name: group.name,
+        isCreator: group.creator_id === auth.user.id,
+        goalMetric: group.goal_metric,
+        sessionsTargetPerWeek: group.sessions_target_per_week,
         currentStreak: group.current_streak,
         bestStreak: group.best_streak,
         freezesAvailable: group.freezes_available,
