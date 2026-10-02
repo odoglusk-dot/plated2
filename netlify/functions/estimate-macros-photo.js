@@ -2,7 +2,7 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
 // Checks food_cache first using a hash of image + note; if hit, returns immediately without using API budget.
-const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, claimOneTimeProPreview, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Krafft, a macro-and-strength-tracking app.
 You will be shown a photo of a food or meal. Estimate its nutritional content from what's visible —
@@ -28,8 +28,17 @@ exports.handler = withErrorReporting(async (event) => {
   const auth = await verifyUser(event);
   if (!auth) return jsonResponse(401, { error: 'Sign in required.' });
 
+  let isPreview = false;
   if (!(await hasPaidAccess(auth.user.id, auth.token))) {
-    return jsonResponse(402, { error: 'AI photo macro estimation is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
+    // Item 6 of the conversion-surface-area batch: a highly engaged free
+    // user (10-day logging streak, checked client-side) gets one real
+    // preview result instead of the usual 402. claimOneTimeProPreview()
+    // atomically enforces the "only once ever" part server-side, so this
+    // can't be replayed by calling the endpoint directly.
+    isPreview = await claimOneTimeProPreview(auth.user.id, auth.token);
+    if (!isPreview) {
+      return jsonResponse(402, { error: 'AI photo macro estimation is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
+    }
   }
 
   let payload;
@@ -77,6 +86,7 @@ exports.handler = withErrorReporting(async (event) => {
       ingredients: cached.ingredients || null,
       confidence: cached.confidence || 'high',
       cached: true,
+      preview: isPreview,
       remaining,
     });
   }
@@ -125,7 +135,7 @@ exports.handler = withErrorReporting(async (event) => {
     } catch {
       // Cache write failure is non-fatal.
     }
-    return jsonResponse(200, { ...parsed, remaining: rateLimit.remaining });
+    return jsonResponse(200, { ...parsed, preview: isPreview, remaining: rateLimit.remaining });
   } catch (err) {
     await captureError(err, { function: 'estimate-macros-photo', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not estimate macros from that photo.', detail: String(err.message || err) });

@@ -206,6 +206,34 @@ async function checkAndIncrementRateLimit(userId, token) {
   return { ok: true, remaining: DAILY_AI_LIMIT - (currentCount + 1) };
 }
 
+// Item 6 of the conversion-surface-area batch: a highly engaged free user
+// (10-day logging streak, checked client-side before ever reaching this
+// endpoint) gets exactly one real AI photo-log result as a preview. The
+// "exactly one" part has to be enforced here, not just client-side, since
+// the whole point is that it can't be replayed for unlimited free photos.
+// A conditional PATCH (pro_preview_used_at=is.null) claims it atomically —
+// Postgres evaluates the WHERE clause and the SET in one statement, so two
+// concurrent requests can't both see it unclaimed and both win.
+async function claimOneTimeProPreview(userId, token) {
+  const base = process.env.SUPABASE_URL;
+  const res = await fetch(
+    `${base}/rest/v1/profiles?id=eq.${userId}&pro_preview_used_at=is.null`,
+    {
+      method: 'PATCH',
+      headers: {
+        apikey: process.env.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({ pro_preview_used_at: new Date().toISOString() }),
+    }
+  );
+  if (!res.ok) return false;
+  const rows = await res.json().catch(() => []);
+  return rows.length > 0;
+}
+
 async function callAnthropic({ system, messages, maxTokens = 500 }) {
   const model = 'claude-sonnet-5';
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -397,6 +425,7 @@ module.exports = {
   jsonResponse,
   verifyUser,
   hasPaidAccess,
+  claimOneTimeProPreview,
   checkAndIncrementRateLimit,
   callAnthropic,
   calculateCost,

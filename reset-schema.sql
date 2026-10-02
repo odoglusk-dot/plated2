@@ -93,6 +93,11 @@ create table profiles (
   athlete_sport text,
   athlete_position text,
   athlete_game_plan jsonb,
+  -- One-time streak-based upgrade prompts for free users — each fires at
+  -- most once ever per account. See
+  -- supabase-schema-phase34-streak-upgrade-prompts.sql.
+  streak_upgrade_prompt_shown_at timestamptz,
+  pro_preview_used_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -1655,6 +1660,21 @@ create policy "workout_sessions_insert_own" on workout_sessions for insert
   with check (auth.uid() = user_id);
 create policy "workout_sessions_update_own" on workout_sessions for update
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ── cancellation_flow_events (custom in-app cancel flow) ─────────────────
+-- See supabase-schema-phase35-cancellation-flow.sql for the full rationale.
+create table cancellation_flow_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  reason text,
+  outcome text not null check (outcome in ('canceled', 'paused', 'stayed')),
+  created_at timestamptz not null default now()
+);
+
+alter table cancellation_flow_events enable row level security;
+
+create policy "cancellation_flow_events: insert own" on cancellation_flow_events
+  for insert with check (auth.uid() = user_id);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE

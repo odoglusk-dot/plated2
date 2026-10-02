@@ -177,6 +177,9 @@
   .onboarding-tour-icon svg { width: 100%; height: 100%; }
   .auth-box { width: 100%; max-width: 380px; }
   .paywall-price { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; text-align: center; margin: 1rem 0; }
+  .paywall-includes { list-style: none; padding: 0; margin: 1rem 0; }
+  .paywall-includes li { font-size: 0.85rem; color: var(--text-dim); padding: 0.3rem 0 0.3rem 1.4rem; position: relative; }
+  .paywall-includes li::before { content: '✓'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
   .paywall-price .unit { font-size: 0.85rem; font-weight: 400; color: var(--text-dim); }
   .auth-logo { text-align: center; font-size: 3rem; color: var(--accent); margin-bottom: 0.1rem; }
   .auth-tagline { text-align: center; color: var(--text-dim); margin-bottom: 1.75rem; font-size: 0.9rem; }
@@ -274,6 +277,8 @@
     background: transparent; border: none; border-radius: 100px; color: var(--text-faint); cursor: pointer; padding: 0.5rem 0.2rem; }
   .bottom-nav-icon { display: block; line-height: 0; }
   .bottom-nav-icon svg { display: block; width: 21px; height: 21px; }
+  .pro-lock-badge { position: absolute; right: -5px; bottom: -3px; width: 11px; height: 11px;
+    color: var(--accent); background: var(--surface); border-radius: 50%; padding: 1px; }
   .bottom-nav-label { font-family: var(--font-body); text-transform: uppercase; letter-spacing: 0.04em;
     font-size: 0.65rem; font-weight: 500; }
   .bottom-nav-btn.active { color: var(--bg); background: var(--text); }
@@ -888,9 +893,18 @@
     </div>
 
     <div id="paywallContent">
+      <p id="paywallContextLine" class="hidden" style="color:var(--accent);font-weight:600;font-size:0.82rem;margin:0 0 0.35rem;"></p>
       <h2 id="paywallHeading" style="margin:0 0 0.5rem;">Start Your Free Trial</h2>
       <p id="paywallBody" class="muted" style="margin-top:0;"></p>
       <div class="paywall-price">$4.99<span class="unit"> / month</span></div>
+      <p class="muted small" style="margin-top:-0.25rem;">Cancel anytime — no long-term commitment.</p>
+      <ul class="paywall-includes">
+        <li>AI photo macro estimation — snap a meal, skip manual entry</li>
+        <li>AI text macro estimation (Describe It)</li>
+        <li>Ask AI — ask questions about your own logged history</li>
+        <li>AI-written post-session analysis and Group Mode</li>
+      </ul>
+      <p id="paywallSocialProof" class="muted small hidden" style="text-align:center;margin-top:0.5rem;"></p>
       <button type="button" class="btn btn-primary btn-block" id="paywallSubscribeBtn">Start 3-Day Free Trial</button>
       <button type="button" class="btn btn-ghost btn-block" id="paywallCloseBtn" style="margin-top:0.5rem;">Maybe Later — Back to Krafft</button>
       <div id="paywallError" style="color:var(--danger);font-size:0.85rem;margin-top:0.5rem;min-height:1em;text-align:center;"></div>
@@ -979,7 +993,7 @@
       <span class="bottom-nav-label">Lift</span>
     </button>
     <button class="bottom-nav-btn" data-bottom="group" aria-label="Group">
-      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3.3 2.9-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><circle cx="17" cy="9" r="2.3"/><path d="M14.5 14.3c.9-.4 1.9-.6 2.5-.6 2.5 0 4.6 1.8 4.8 4.3"/></svg></span>
+      <span class="bottom-nav-icon" style="position:relative;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3.3 2.9-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><circle cx="17" cy="9" r="2.3"/><path d="M14.5 14.3c.9-.4 1.9-.6 2.5-.6 2.5 0 4.6 1.8 4.8 4.3"/></svg><svg id="groupNavLock" class="pro-lock-badge hidden" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg></span>
       <span class="bottom-nav-label">Group</span>
     </button>
     <button class="bottom-nav-btn hidden" data-bottom="athlete" aria-label="Athlete" id="athleteNavBtn">
@@ -1937,10 +1951,41 @@ function hasAccess(sub) {
 // round trip. Every AI Netlify function re-checks this same trialing/active
 // condition server-side (hasPaidAccess() in _shared.js), so this is purely a
 // UX shortcut, not the actual gate.
-function requireAIAccess() {
+function requireAIAccess(contextLine) {
   if (hasAccess(state.subscription)) return true;
-  showUpgradeScreen();
+  showUpgradeScreen(contextLine);
   return false;
+}
+
+// Item 6 of the conversion-surface-area batch: a highly engaged free user
+// (10-day logging streak) is eligible for exactly one real AI photo-log
+// result, framed as a one-time preview rather than the usual paywall. This
+// is a client-side convenience check only — claimOneTimeProPreview() on the
+// server is what actually enforces "only once ever" (see
+// estimate-macros-photo.js), the same client-shortcut/server-gate split as
+// requireAIAccess() above.
+function proPreviewEligible() {
+  if (hasAccess(state.subscription) || state.profile?.pro_preview_used_at) return false;
+  return computeStreaks(state.historyLogs, state.goals.protein_g).current >= 10;
+}
+
+// One short line per Pro-gated feature, reused by every entry point that
+// can land a free user on the upgrade screen for that specific feature —
+// see item 3 of the conversion-surface-area batch.
+const UPGRADE_CONTEXT_AI_TEXT = 'Unlock AI macro estimation to log that in one line, no manual math.';
+const UPGRADE_CONTEXT_AI_PHOTO = 'Unlock AI photo macro estimation — snap this meal instead of entering it by hand.';
+const UPGRADE_CONTEXT_ASK_AI = 'Unlock Ask AI to ask questions about your own logged history.';
+const UPGRADE_CONTEXT_SESSION_ANALYSIS = 'Unlock AI-written analysis for workouts like this one.';
+const UPGRADE_CONTEXT_GROUP = 'Unlock Group Mode — a shared streak and leaderboard with friends.';
+const UPGRADE_CONTEXT_ATHLETE_POSITION = 'Unlock positional drill emphasis for your sport.';
+const UPGRADE_CONTEXT_ATHLETE_PSYCH = 'Unlock sports psychology tools like pre-performance visualization and the confidence bank.';
+const UPGRADE_CONTEXT_STREAK = "You've built a real streak — Pro users get AI insight into patterns like this.";
+
+// Price shown next to every inline "Upgrade" CTA in the app, not just the
+// full paywall screen — a bare "Upgrade" button with price hidden behind
+// another tap undersells what's actually a pretty direct trial offer.
+function upgradePriceLineHtml() {
+  return `<p class="muted small" style="margin:0.4rem 0 0.75rem;">$4.99/mo after a 3-day free trial · cancel anytime</p>`;
 }
 
 function renderPaywallProcessing() {
@@ -1948,7 +1993,13 @@ function renderPaywallProcessing() {
   $('#paywallProcessing').classList.remove('hidden');
 }
 
-function renderPaywallScreen(sub) {
+// Toggle on once there's a real, presentable user count — e.g.
+// SOCIAL_PROOF = { enabled: true, count: '2,400' }. Ships off: a
+// placeholder number would undermine the exact thing social proof is
+// supposed to build (trust in a real signal).
+const SOCIAL_PROOF = { enabled: false, count: '' };
+
+function renderPaywallScreen(sub, contextLine) {
   let heading = 'Unlock AI Features';
   let body = "Krafft's free tier covers manual food and lift logging, Quick Add, and your dashboard — no time limit. AI features (photo/text macro estimation, Ask AI) are $4.99/month after a 3-day free trial.";
   if (sub?.status === 'past_due') {
@@ -1960,6 +2011,12 @@ function renderPaywallScreen(sub) {
   }
   $('#paywallHeading').textContent = heading;
   $('#paywallBody').textContent = body;
+  const contextEl = $('#paywallContextLine');
+  contextEl.textContent = contextLine || '';
+  contextEl.classList.toggle('hidden', !contextLine);
+  const socialProofEl = $('#paywallSocialProof');
+  socialProofEl.textContent = SOCIAL_PROOF.enabled ? `Join ${SOCIAL_PROOF.count} athletes using Krafft Pro` : '';
+  socialProofEl.classList.toggle('hidden', !SOCIAL_PROOF.enabled);
   $('#paywallError').textContent = '';
   $('#paywallSubscribeBtn').disabled = false;
   $('#paywallProcessing').classList.add('hidden');
@@ -1969,8 +2026,11 @@ function renderPaywallScreen(sub) {
 // Voluntary entry point into the upgrade screen — from Profile's Subscription
 // card, or when a free user hits an AI feature. Not a gate: closeUpgradeScreen()
 // always returns to the app underneath, since free-tier access is never blocked.
-function showUpgradeScreen() {
-  renderPaywallScreen(state.subscription);
+// contextLine: an optional one-line reason specific to wherever the tap came
+// from (e.g. "Unlock analysis for workouts like this one") — shown above the
+// generic heading/body rather than the same copy for every entry point.
+function showUpgradeScreen(contextLine) {
+  renderPaywallScreen(state.subscription, contextLine);
   $('#app').classList.add('hidden');
   $('#paywallScreen').classList.remove('hidden');
 }
@@ -2553,6 +2613,7 @@ function renderAll() {
   updateStreakPill();
   updateBottomNav();
   checkAndUnlockAchievements();
+  checkStreakUpgradePrompt();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2619,6 +2680,10 @@ function updateBottomNav() {
   else if (state.activeTab === 'athlete') active = 'athlete';
   else if (state.activeTab === 'profile') active = 'profile';
   $$('.bottom-nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.bottom === active));
+  // Group Mode is Pro-gated — show the lock badge to free users at all
+  // times, not only once they tap in and hit the paywall card.
+  const groupLock = $('#groupNavLock');
+  if (groupLock) groupLock.classList.toggle('hidden', hasAccess(state.subscription));
 }
 
 // Home, Group, Athlete, and Profile are endpoint screens — nothing to jump
@@ -3626,6 +3691,15 @@ function renderDashboard() {
   const volumeSpike = computeVolumeSpike(state.lifts, getWeekStart(today));
   const showSpikeWarning = volumeSpike && volumeSpike.weekStart !== dismissedSpikeWeek;
 
+  // Item 5 of the conversion-surface-area batch: a progress-based upgrade
+  // prompt for free users who've built a real 7-day protein streak. The
+  // actual eligibility check + one-time persistence happens in
+  // checkStreakUpgradePrompt() (called from renderAll(), same pattern as
+  // checkAndUnlockAchievements()) — this just reflects whatever it decided,
+  // so a render that happens before that async check resolves doesn't
+  // flicker the banner in and back out.
+  const showStreakUpgradePrompt = streakUpgradePromptVisible && !hasAccess(state.subscription);
+
   const ws = weeklySummary();
   const activeTips = computeActiveTips();
 
@@ -3671,6 +3745,15 @@ function renderDashboard() {
     <div class="card pr-banner">
       <div class="small">⚠️ This week's lift volume is <strong style="color:var(--accent);">${volumeSpike.pctAbove}%</strong> above your recent 4-week average — consider whether that's intentional, or if you should ease off to avoid overuse injury.</div>
       <button class="btn btn-sm btn-ghost" id="spikeDismiss">✕</button>
+    </div>` : ''}
+    ${showStreakUpgradePrompt ? `
+    <div class="card pr-banner">
+      <div class="small">🔥 ${current} days of hitting your protein goal, back to back. Pro users get AI insight into patterns like this.</div>
+      ${upgradePriceLineHtml()}
+      <div class="row" style="gap:0.5rem;">
+        <button class="btn btn-sm btn-primary" id="streakUpgradeCta">See Pro Features</button>
+        <button class="btn btn-sm btn-ghost" id="streakUpgradeDismiss">✕</button>
+      </div>
     </div>` : ''}
     ${tipsHtml(activeTips)}
 
@@ -3732,6 +3815,11 @@ function renderDashboard() {
 
   const spikeDismiss = $('#spikeDismiss');
   if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderDashboard(); });
+
+  const streakUpgradeDismiss = $('#streakUpgradeDismiss');
+  if (streakUpgradeDismiss) streakUpgradeDismiss.addEventListener('click', () => { streakUpgradePromptVisible = false; renderDashboard(); });
+  const streakUpgradeCta = $('#streakUpgradeCta');
+  if (streakUpgradeCta) streakUpgradeCta.addEventListener('click', () => showUpgradeScreen(UPGRADE_CONTEXT_STREAK));
 
   const viewPlanBtn = $('#dashboardViewPlanBtn', panel);
   if (viewPlanBtn) viewPlanBtn.addEventListener('click', () => {
@@ -4107,6 +4195,11 @@ function renderLogTab() {
 function resultCardHtml(result) {
   return `
     <div class="card" id="estimateResult">
+      ${result.preview ? `
+      <div class="small" style="border:1px solid var(--accent);border-radius:8px;padding:0.6rem 0.75rem;margin-bottom:0.75rem;">
+        <strong style="color:var(--accent);">🎁 That was your one free preview.</strong> Upgrade for unlimited AI photo and text estimation.
+        <button class="btn btn-sm btn-primary" id="previewUpgradeBtn" style="display:block;margin-top:0.5rem;">Upgrade — Unlock AI Features</button>
+      </div>` : ''}
       <h3>Estimate</h3>
       <p class="muted">Confidence: ${esc(result.confidence || 'unknown')}${state.aiRemaining != null ? ` · ${state.aiRemaining} AI lookups left today` : ''}</p>
       <div class="field"><label>Food</label><input class="input" id="res_name" value="${esc(result.food_name)}"></div>
@@ -4139,6 +4232,7 @@ function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text'
     carbs_g: Number($('#res_carb').value) || 0,
     fat_g: Number($('#res_fat').value) || 0,
   });
+  $('#previewUpgradeBtn')?.addEventListener('click', () => showUpgradeScreen(UPGRADE_CONTEXT_AI_PHOTO));
   $('#logResultBtn')?.addEventListener('click', async () => {
     if (!photoFile) return logFood({ ...readValues(), source, ingredients });
     const btn = $('#logResultBtn');
@@ -4419,7 +4513,7 @@ function renderLogSubPanel() {
       // Exact match against the common foods database costs nothing — skip the AI call entirely.
       const exact = COMMON_FOODS.find((f) => f.name.toLowerCase() === description.toLowerCase());
       if (exact) { useCommonMatch(exact); return; }
-      if (!requireAIAccess()) return;
+      if (!requireAIAccess(UPGRADE_CONTEXT_AI_TEXT)) return;
       const btn = $('#aiEstimateBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span>Estimating…';
       $('#aiError').textContent = '';
       try {
@@ -4428,7 +4522,7 @@ function renderLogSubPanel() {
         $('#aiResultSlot').innerHTML = resultCardHtml(result);
         wireResultCard('ai_text', null, result.ingredients);
       } catch (err) {
-        if (err.upgradeRequired) { showUpgradeScreen(); return; }
+        if (err.upgradeRequired) { showUpgradeScreen(UPGRADE_CONTEXT_AI_TEXT); return; }
         reportError(err);
         $('#aiError').textContent = err.message;
       } finally {
@@ -4436,9 +4530,11 @@ function renderLogSubPanel() {
       }
     });
   } else if (logSubTab === 'photo') {
+    const previewEligible = proPreviewEligible();
     el.innerHTML = `
       <div class="card">
         <h3>Snap a photo</h3>
+        ${previewEligible ? `<p class="small" style="color:var(--accent);font-weight:600;margin:0 0 0.6rem;">🎁 10-day streak unlocked — here's one free AI photo-log result, on us.</p>` : ''}
         <div class="field"><input class="input" id="photoInput" type="file" accept="image/*" capture="environment"></div>
         <div class="field"><input class="input" id="photoNote" placeholder="Optional note (e.g. 'no dressing on the salad')"></div>
         <button class="btn btn-primary" id="photoEstimateBtn">Estimate Macros</button>
@@ -4448,17 +4544,18 @@ function renderLogSubPanel() {
     $('#photoEstimateBtn').addEventListener('click', async () => {
       const file = $('#photoInput').files[0];
       if (!file) { $('#photoError').textContent = 'Choose a photo first.'; return; }
-      if (!requireAIAccess()) return;
+      if (!hasAccess(state.subscription) && !proPreviewEligible() && !requireAIAccess(UPGRADE_CONTEXT_AI_PHOTO)) return;
       const btn = $('#photoEstimateBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span>Estimating…';
       $('#photoError').textContent = '';
       try {
         const { base64, mediaType } = await fileToBase64(file);
         const result = await callFunction('estimate-macros-photo', { imageBase64: base64, mediaType, note: $('#photoNote').value.trim() });
         state.aiRemaining = result.remaining;
+        if (result.preview) state.profile = { ...state.profile, pro_preview_used_at: new Date().toISOString() };
         $('#photoResultSlot').innerHTML = resultCardHtml(result);
         wireResultCard('ai_photo', file, result.ingredients);
       } catch (err) {
-        if (err.upgradeRequired) { showUpgradeScreen(); return; }
+        if (err.upgradeRequired) { showUpgradeScreen(UPGRADE_CONTEXT_AI_PHOTO); return; }
         reportError(err);
         $('#photoError').textContent = err.message;
       } finally {
@@ -4961,16 +5058,25 @@ const MORE_TAB_DESTINATIONS = [
   { tab: 'weight', title: 'Weight Log', desc: 'Track bodyweight over time with a trend chart.' },
   { tab: 'supplements', title: 'Supplement Guide', desc: 'Evidence ratings (Strong/Moderate/Limited/Weak) for common supplements.' },
   { tab: 'meals', title: 'Budget-Optimized Protein', desc: 'Foods ranked by cost per gram of protein.' },
-  { tab: 'ask', title: 'Ask Your Data', desc: 'Ask questions about your own logged history.' },
+  { tab: 'ask', title: 'Ask Your Data', desc: 'Ask questions about your own logged history.', pro: true },
 ];
+
+// Small, consistent Pro-gated indicator shown next to a feature's name
+// everywhere it appears in navigation — visible to free users at all times,
+// not only once they tap in and hit the paywall.
+function proLockIconHtml() {
+  return `<svg class="pro-lock-icon" viewBox="0 0 24 24" fill="currentColor" style="width:0.75em;height:0.75em;margin-left:0.35em;vertical-align:0.05em;color:var(--accent);" aria-label="Pro"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
+}
+
 function renderMoreTab() {
   const panel = $('#panel-more');
   if (!panel) return;
+  const paid = hasAccess(state.subscription);
   panel.innerHTML = `
     <div class="pagehead"><div class="pagetitle">More</div></div>
     ${MORE_TAB_DESTINATIONS.map((d) => `
       <div class="card">
-        <h3>${esc(d.title)}</h3>
+        <h3>${esc(d.title)}${d.pro && !paid ? proLockIconHtml() : ''}</h3>
         <p class="muted small">${esc(d.desc)}</p>
         <button class="btn btn-sm" data-more-open="${d.tab}">Open</button>
       </div>`).join('')}
@@ -5009,7 +5115,7 @@ async function handleAsk() {
   const input = $('#askInput');
   const question = input.value.trim();
   if (!question) return;
-  if (!requireAIAccess()) return;
+  if (!requireAIAccess(UPGRADE_CONTEXT_ASK_AI)) return;
   $('#askError').textContent = '';
   askMessages.push({ role: 'user', text: question });
   renderAsk();
@@ -5026,7 +5132,7 @@ async function handleAsk() {
     if (err.upgradeRequired) {
       const askBtn = $('#askBtn');
       if (askBtn) { askBtn.disabled = false; askBtn.textContent = 'Ask'; }
-      showUpgradeScreen();
+      showUpgradeScreen(UPGRADE_CONTEXT_ASK_AI);
       return;
     }
     reportError(err);
@@ -5369,6 +5475,23 @@ const LEARNING_PATHS = [
 ];
 let showLearningPaths = false;
 let showHealthSyncSetup = false;
+
+// Items 9+10 of the conversion-surface-area batch: a custom in-app cancel
+// flow (reason prompt, then a stay/pause/cancel offer) replacing a direct
+// jump into Stripe's hosted portal — see cancel-subscription.js.
+let showCancelFlow = false;
+let cancelFlowStep = 'reason'; // 'reason' | 'offer' | 'done'
+let cancelFlowReason = null;
+let cancelFlowBusy = false;
+let cancelFlowError = '';
+let cancelFlowOutcome = null; // set once an action resolves, read on the 'done' step
+const CANCELLATION_REASONS = [
+  { id: 'too_expensive', label: 'Too expensive' },
+  { id: 'not_using_enough', label: "Not using it enough" },
+  { id: 'missing_features', label: "Missing a feature I need" },
+  { id: 'found_alternative', label: 'Found an alternative' },
+  { id: 'other', label: 'Other' },
+];
 let healthSyncGeneratedToken = null; // the raw token, held in memory only between generation and leaving this screen — never persisted, never re-fetchable
 let healthSyncBusy = false;
 let openLearningPathId = null;
@@ -5540,6 +5663,79 @@ function renderHealthSyncSetup(panel) {
   });
 }
 
+// Items 9+10: custom in-app cancel flow, reached from the "Cancel
+// Subscription" link on the tier status card (not the "Manage Subscription"
+// button, which still opens Stripe's portal for payment method/billing
+// history). Same full-panel-replace convention as renderHealthSyncSetup().
+function renderCancelFlow(panel) {
+  if (cancelFlowStep === 'reason') {
+    panel.innerHTML = `
+      <div class="card">
+        <button class="btn btn-sm btn-ghost" id="cancelFlowBackBtn">← Never mind, keep my subscription</button>
+        <h3>Before you go</h3>
+        <p class="muted">Mind telling us why? Totally optional.</p>
+        <div class="row" style="flex-wrap:wrap;gap:0.5rem;">
+          ${CANCELLATION_REASONS.map((r) => `<button class="chip ${cancelFlowReason === r.id ? 'chip-active' : ''}" data-cancel-reason="${r.id}">${esc(r.label)}</button>`).join('')}
+        </div>
+        <button class="btn btn-primary" id="cancelFlowContinueBtn" style="margin-top:1rem;">Continue</button>
+      </div>`;
+    $('#cancelFlowBackBtn').addEventListener('click', () => { showCancelFlow = false; renderProfile(); });
+    $$('[data-cancel-reason]', panel).forEach((b) => b.addEventListener('click', () => {
+      cancelFlowReason = cancelFlowReason === b.dataset.cancelReason ? null : b.dataset.cancelReason;
+      renderCancelFlow(panel);
+    }));
+    $('#cancelFlowContinueBtn').addEventListener('click', () => { cancelFlowStep = 'offer'; renderCancelFlow(panel); });
+    return;
+  }
+
+  if (cancelFlowStep === 'offer') {
+    panel.innerHTML = `
+      <div class="card">
+        <h3>Wait — before you cancel</h3>
+        <p class="muted">You'll lose AI photo/text estimation, Ask AI, session analysis, and Group Mode.</p>
+        ${cancelFlowError ? `<p class="small" style="color:var(--danger);">${esc(cancelFlowError)}</p>` : ''}
+        <button class="btn btn-primary btn-block" id="cancelFlowStayBtn" ${cancelFlowBusy ? 'disabled' : ''}>Stay at $4.99/mo</button>
+        <button class="btn btn-block" id="cancelFlowPauseBtn" style="margin-top:0.5rem;" ${cancelFlowBusy ? 'disabled' : ''}>Pause Billing for 30 Days Instead</button>
+        <button class="btn btn-ghost btn-block" id="cancelFlowCancelBtn" style="margin-top:0.5rem;color:var(--danger);" ${cancelFlowBusy ? 'disabled' : ''}>${cancelFlowBusy ? 'Working…' : 'No thanks, cancel my subscription'}</button>
+      </div>`;
+    const submit = async (action) => {
+      cancelFlowBusy = true; cancelFlowError = ''; renderCancelFlow(panel);
+      try {
+        await callFunction('cancel-subscription', { action, reason: cancelFlowReason });
+        cancelFlowOutcome = action;
+        cancelFlowStep = 'done';
+        await fetchSubscription();
+      } catch (err) {
+        cancelFlowError = err.message || 'Something went wrong — try again.';
+      } finally {
+        cancelFlowBusy = false; renderCancelFlow(panel);
+      }
+    };
+    $('#cancelFlowStayBtn').addEventListener('click', () => submit('stay'));
+    $('#cancelFlowPauseBtn').addEventListener('click', () => submit('pause'));
+    $('#cancelFlowCancelBtn').addEventListener('click', () => submit('cancel'));
+    return;
+  }
+
+  // cancelFlowStep === 'done'
+  const messages = {
+    stay: { heading: "Good — you're all set.", body: 'Your subscription continues at the current price, no changes made.' },
+    pause: { heading: 'Billing paused for 30 days.', body: "You won't be charged during the pause, and your access continues as normal." },
+    cancel: { heading: 'Subscription canceled.', body: `You'll keep access through the end of your current billing period.` },
+  };
+  const m = messages[cancelFlowOutcome] || messages.stay;
+  panel.innerHTML = `
+    <div class="card">
+      <h3>${esc(m.heading)}</h3>
+      <p class="muted">${esc(m.body)}</p>
+      <button class="btn btn-primary" id="cancelFlowDoneBtn">Done</button>
+    </div>`;
+  $('#cancelFlowDoneBtn').addEventListener('click', () => {
+    showCancelFlow = false; cancelFlowStep = 'reason'; cancelFlowReason = null; cancelFlowOutcome = null;
+    renderAll();
+  });
+}
+
 // First thing on Profile, above the avatar/name — tier status reads as a
 // persistent status banner rather than personal info. Reuses the exact
 // buttons/handlers the old Settings → Subscription card used
@@ -5552,7 +5748,7 @@ function tierStatusCardHtml() {
     <span class="badge ${pro ? 'on' : ''}">${pro ? '⭐ Krafft Pro' : '🔓 Free Tier'}</span>
     <p class="muted" style="margin-top:0.5rem;">${subscriptionStatusLabel(state.subscription)}</p>
     ${pro
-      ? `<button class="btn" id="manage_subscription_btn">Manage Subscription</button>`
+      ? `<button class="btn" id="manage_subscription_btn">Manage Subscription</button><button class="btn btn-ghost btn-sm" id="cancel_subscription_btn" style="display:block;margin-top:0.5rem;">Cancel Subscription</button>`
       : `<button class="btn btn-primary" id="upgrade_tier_btn">Upgrade — Unlock AI Features</button>`}
     <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
   </div>`;
@@ -5563,6 +5759,7 @@ function renderProfile() {
   if (showLearningPaths) { renderLearningPaths(panel); return; }
   if (showUserGuide) { renderUserGuide(panel); return; }
   if (showHealthSyncSetup) { renderHealthSyncSetup(panel); return; }
+  if (showCancelFlow) { renderCancelFlow(panel); return; }
   const p = state.profile || {};
   const bs = state.bodyStats || {};
   // "Account" is identity/every-visit content (profile, goals, achievements,
@@ -5989,6 +6186,12 @@ function renderProfile() {
 
   const upgradeTierBtn = $('#upgrade_tier_btn');
   if (upgradeTierBtn) upgradeTierBtn.addEventListener('click', () => showUpgradeScreen());
+
+  const cancelSubBtn = $('#cancel_subscription_btn');
+  if (cancelSubBtn) cancelSubBtn.addEventListener('click', () => {
+    showCancelFlow = true; cancelFlowStep = 'reason'; cancelFlowReason = null; cancelFlowError = '';
+    renderProfile();
+  });
 
   const generateBtn = $('#generate_referral_code_btn');
   if (generateBtn) {
@@ -6830,6 +7033,35 @@ let liftHistoryDeleting = false;
 
 let dismissedSpikeWeek = null;
 
+// Item 5 of the conversion-surface-area batch: a one-time, server-tracked
+// "you've built a 7-day streak" upgrade prompt for free users. Same
+// fire-and-forget-from-renderAll() shape as checkAndUnlockAchievements():
+// the eligibility check + persistence happen here, off the render path, and
+// renderDashboard() just reads the resulting streakUpgradePromptVisible flag
+// — so a render that runs before this async check resolves can't flicker
+// the banner in and immediately back out once state.profile updates.
+let streakUpgradePromptVisible = false;
+let streakUpgradePromptCheckInFlight = false;
+async function checkStreakUpgradePrompt() {
+  if (!state.user || streakUpgradePromptCheckInFlight || streakUpgradePromptVisible) return;
+  if (state.profile?.streak_upgrade_prompt_shown_at) return;
+  if (hasAccess(state.subscription)) return;
+  const { current } = computeStreaks(state.historyLogs, state.goals.protein_g);
+  if (current < 7) return;
+  streakUpgradePromptCheckInFlight = true;
+  try {
+    const shownAt = new Date().toISOString();
+    const { error } = await supabase.from('profiles').update({ streak_upgrade_prompt_shown_at: shownAt }).eq('id', state.user.id);
+    if (!error) {
+      state.profile = { ...state.profile, streak_upgrade_prompt_shown_at: shownAt };
+      streakUpgradePromptVisible = true;
+      renderAll();
+    }
+  } finally {
+    streakUpgradePromptCheckInFlight = false;
+  }
+}
+
 // best (highest-weight) lift per exercise, keyed by exercise name
 function computeLiftPRs(lifts) {
   const prs = {};
@@ -7540,7 +7772,7 @@ function sessionAnalysisHtml() {
     return `<div class="card"><h3>Session Analysis</h3><p class="muted">Analysis unlocks after a few more sessions, once there's enough history to compare against.</p></div>`;
   }
   if (!hasAccess(state.subscription)) {
-    return `<div class="card"><h3>Session Analysis</h3><p class="muted">Unlock AI-written session analysis — comparing today against your recent history, with PR and plateau callouts — on the paid tier.</p><button class="btn btn-primary" id="unlockAnalysisBtn">Upgrade — Unlock AI Features</button></div>`;
+    return `<div class="card"><h3>Session Analysis</h3><p class="muted">Unlock AI-written session analysis — comparing today against your recent history, with PR and plateau callouts — on the paid tier.</p>${upgradePriceLineHtml()}<button class="btn btn-primary" id="unlockAnalysisBtn">Upgrade — Unlock AI Features</button></div>`;
   }
   return `<div class="card"><h3>Session Analysis</h3><button class="btn btn-primary" id="generateAnalysisBtn">Generate Analysis</button></div>`;
 }
@@ -7551,7 +7783,7 @@ function wireSessionAnalysisEvents(panel) {
   const genBtn = $('#generateAnalysisBtn', panel);
   if (genBtn) genBtn.addEventListener('click', generateSessionAnalysis);
   const unlockBtn = $('#unlockAnalysisBtn', panel);
-  if (unlockBtn) unlockBtn.addEventListener('click', () => showUpgradeScreen());
+  if (unlockBtn) unlockBtn.addEventListener('click', () => showUpgradeScreen(UPGRADE_CONTEXT_SESSION_ANALYSIS));
 
   const analysis = state.workoutSession?.analysis;
   if (analysis?.highlightExercise) renderSessionTrendChart(analysis.highlightExercise);
@@ -11425,9 +11657,10 @@ function athleteDashboardHtml() {
       </div>
     `) : `
       <div class="card">
-        <h3>Sport & Position Customization <span class="muted small" style="font-weight:400;">(Pro)</span></h3>
+        <h3>Sport & Position Customization${proLockIconHtml()}<span class="muted small" style="font-weight:400;"> (Pro)</span></h3>
         <p class="muted small">Unlock positional drill emphasis and the sports psychology section on the paid tier.</p>
-        <button class="btn btn-sm btn-primary" data-athlete-upgrade>Upgrade</button>
+        ${upgradePriceLineHtml()}
+        <button class="btn btn-sm btn-primary" data-athlete-upgrade="position">Upgrade</button>
       </div>
     `}
     <div class="card">
@@ -11436,9 +11669,9 @@ function athleteDashboardHtml() {
       <button class="btn btn-sm" id="athleteOpenConditioningBtn">Log Conditioning Work</button>
     </div>
     <div class="card">
-      <h3>Sports Psychology <span class="muted small" style="font-weight:400;">(Pro)</span></h3>
+      <h3>Sports Psychology${paid ? '' : proLockIconHtml()} <span class="muted small" style="font-weight:400;">(Pro)</span></h3>
       <p class="muted small">Pre-performance visualization, a post-game reset, a 3-prompt journal, a confidence bank, and a game plan — adapted from established sports psychology practice.</p>
-      ${paid ? `<button class="btn btn-sm" id="athleteOpenPsychBtn">Open</button>` : `<button class="btn btn-sm btn-primary" data-athlete-upgrade>Upgrade</button>`}
+      ${paid ? `<button class="btn btn-sm" id="athleteOpenPsychBtn">Open</button>` : `${upgradePriceLineHtml()}<button class="btn btn-sm btn-primary" data-athlete-upgrade="psych">Upgrade</button>`}
     </div>`;
 }
 
@@ -11479,7 +11712,9 @@ function wireAthleteEvents(panel) {
     athleteTabSubView = 'setup';
     renderAthleteTab();
   });
-  $$('[data-athlete-upgrade]', panel).forEach((b) => b.addEventListener('click', () => showUpgradeScreen()));
+  $$('[data-athlete-upgrade]', panel).forEach((b) => b.addEventListener('click', () => showUpgradeScreen(
+    b.dataset.athleteUpgrade === 'psych' ? UPGRADE_CONTEXT_ATHLETE_PSYCH : UPGRADE_CONTEXT_ATHLETE_POSITION
+  )));
   const openConditioningBtn = $('#athleteOpenConditioningBtn', panel);
   if (openConditioningBtn) openConditioningBtn.addEventListener('click', () => { athleteTabSubView = 'conditioning'; renderAthleteTab(); });
   const openPsychBtn = $('#athleteOpenPsychBtn', panel);
@@ -11634,6 +11869,7 @@ function groupTabHtml() {
     return `<div class="card">
       <h3>Group</h3>
       <p class="muted">Form a group of up to 10 friends with a shared streak and a leaderboard ranking everyone's weekly sessions — protected by a freeze pool the group earns together. Unlock it on the paid tier.</p>
+      ${upgradePriceLineHtml()}
       <button class="btn btn-primary" id="unlockGroupBtn">Upgrade — Unlock Group Mode</button>
     </div>`;
   }
@@ -11818,7 +12054,7 @@ async function loadGroupLeaderboard(windowKey) {
 
 function wireGroupEvents(panel) {
   const unlockBtn = $('#unlockGroupBtn', panel);
-  if (unlockBtn) unlockBtn.addEventListener('click', () => showUpgradeScreen());
+  if (unlockBtn) unlockBtn.addEventListener('click', () => showUpgradeScreen(UPGRADE_CONTEXT_GROUP));
 
   const inviteAcceptBtn = $('#groupInviteAcceptBtn', panel);
   if (inviteAcceptBtn) inviteAcceptBtn.addEventListener('click', async () => {
@@ -11836,7 +12072,7 @@ function wireGroupEvents(panel) {
         groupInvitePreview = { ...groupInvitePreview, status: result.status, groupName: result.groupName || groupInvitePreview.groupName };
       }
     } catch (err) {
-      if (err.upgradeRequired) { showUpgradeScreen(); return; }
+      if (err.upgradeRequired) { showUpgradeScreen(UPGRADE_CONTEXT_GROUP); return; }
       groupInviteActionMessage = err.message || 'Could not join the group.';
     }
     renderGroupTab();
@@ -11859,7 +12095,7 @@ function wireGroupEvents(panel) {
       groupInviteLink = `${window.location.origin}${window.location.pathname}?joinGroup=${result.inviteCode}`;
       groupInviteLinkExpiresAt = result.expiresAt;
     } catch (err) {
-      if (err.upgradeRequired) { groupInviteLinkGenerating = false; showUpgradeScreen(); return; }
+      if (err.upgradeRequired) { groupInviteLinkGenerating = false; showUpgradeScreen(UPGRADE_CONTEXT_GROUP); return; }
       toast(err.message || 'Could not generate an invite link.');
     }
     groupInviteLinkGenerating = false;
@@ -11893,7 +12129,7 @@ function wireGroupEvents(panel) {
       resetGroupTransientState();
       await loadGroup();
     } catch (err) {
-      if (err.upgradeRequired) { groupCreating = false; showUpgradeScreen(); return; }
+      if (err.upgradeRequired) { groupCreating = false; showUpgradeScreen(UPGRADE_CONTEXT_GROUP); return; }
       groupActionMessage = err.message || 'Could not create group.';
     }
     groupCreating = false;
@@ -11962,7 +12198,7 @@ function wireGroupEvents(panel) {
       groupLeaderboardData = null; // the metric just changed — the cached percentages no longer mean the same thing
       await loadGroup();
     } catch (err) {
-      if (err.upgradeRequired) { groupSettingsSaving = false; showUpgradeScreen(); return; }
+      if (err.upgradeRequired) { groupSettingsSaving = false; showUpgradeScreen(UPGRADE_CONTEXT_GROUP); return; }
       groupSettingsMessage = err.message || 'Could not save settings.';
     }
     groupSettingsSaving = false;
@@ -11976,7 +12212,7 @@ function wireGroupEvents(panel) {
       const messages = { invited: 'Invite sent.', already_invited: 'Already invited.', already_member: 'Already in this group.' };
       groupActionMessage = messages[result.status] || 'Done.';
     } catch (err) {
-      if (err.upgradeRequired) { showUpgradeScreen(); return; }
+      if (err.upgradeRequired) { showUpgradeScreen(UPGRADE_CONTEXT_GROUP); return; }
       groupActionMessage = err.message || 'Could not send invite.';
     }
     renderGroupTab();
