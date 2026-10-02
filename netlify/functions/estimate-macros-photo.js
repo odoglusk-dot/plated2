@@ -9,9 +9,14 @@ You will be shown a photo of a food or meal. Estimate its nutritional content fr
 portion sizes, visible ingredients, and typical preparation. If an optional text note accompanies the
 photo, use it to refine the estimate (e.g. it may state an ingredient or portion the photo doesn't show).
 Respond with ONLY a JSON object, no markdown fences, no prose, in exactly this shape:
-{"food_name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "confidence": "high" | "medium" | "low"}
+{"food_name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "confidence": "high" | "medium" | "low", "ingredients": [{"name": string, "calories": number}] | null}
 Set "confidence" to "low" if the photo makes portion size or ingredients genuinely hard to judge.
-All numeric fields are grams or kcal with no units attached.`;
+All numeric fields are grams or kcal with no units attached.
+Set "ingredients" to an array of the meal's visually distinguishable components (e.g. a bowl's rice,
+protein, and toppings), each with its own calorie estimate that should roughly sum to the total
+"calories" — but only when the photo genuinely shows 2 or more separable parts. Set it to null for a
+single, non-composite food (e.g. a whole apple, one slice of pizza) — don't invent a breakdown where
+there isn't a meaningful one.`;
 
 const ALLOWED_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
@@ -69,6 +74,7 @@ exports.handler = withErrorReporting(async (event) => {
       protein_g: cached.protein_g,
       carbs_g: cached.carbs_g,
       fat_g: cached.fat_g,
+      ingredients: cached.ingredients || null,
       confidence: cached.confidence || 'high',
       cached: true,
       remaining,
@@ -113,6 +119,7 @@ exports.handler = withErrorReporting(async (event) => {
           protein_g: parsed.protein_g,
           carbs_g: parsed.carbs_g,
           fat_g: parsed.fat_g,
+          ingredients: parsed.ingredients || null,
         }),
       });
     } catch {

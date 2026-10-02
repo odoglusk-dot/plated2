@@ -7,10 +7,15 @@ const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementRateLimit, cal
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Krafft, a macro-and-strength-tracking app.
 Given a short description of a food or meal, estimate its nutritional content.
 Respond with ONLY a JSON object, no markdown fences, no prose, in exactly this shape:
-{"food_name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "confidence": "high" | "medium" | "low"}
+{"food_name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "confidence": "high" | "medium" | "low", "ingredients": [{"name": string, "calories": number}] | null}
 If the description omits quantity, assume one standard serving and fold that assumption into food_name
 (e.g. "Grilled chicken breast (1, ~6oz)"). All numeric fields are grams or kcal with no units attached.
-Use standard USDA-style nutrition data as your basis for the estimate.`;
+Use standard USDA-style nutrition data as your basis for the estimate.
+Set "ingredients" to an array of the meal's distinguishable components (e.g. a bowl's rice, protein,
+and toppings), each with its own calorie estimate that should roughly sum to the total "calories" —
+but only when the description genuinely describes 2 or more separable parts. Set it to null for a
+single, non-composite food (e.g. "an apple," "a slice of pizza") — don't invent a breakdown where
+there isn't a meaningful one.`;
 
 exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -59,6 +64,7 @@ exports.handler = withErrorReporting(async (event) => {
       protein_g: cached.protein_g,
       carbs_g: cached.carbs_g,
       fat_g: cached.fat_g,
+      ingredients: cached.ingredients || null,
       confidence: 'high',
       cached: true,
       remaining,

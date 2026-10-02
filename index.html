@@ -3808,14 +3808,13 @@ async function deleteLog(id) {
 // 100% even when an AI estimate's rounding leaves calories a touch off
 // from protein*4 + carbs*4 + fat*9.
 //
-// `entry.ingredients` is never populated by any current logging path —
-// confirmed by checking food_logs' schema and every logging method's
-// response shape (manual, AI photo, AI text, barcode, Quick Add, common
-// foods search): none return or store per-ingredient data today. So the
-// "By Ingredient" section below is live code, not a stub — it'll render
-// the moment a logging path starts attaching an `ingredients` array, but
-// stays correctly absent until then rather than showing something empty
-// or fabricated.
+// `entry.ingredients` is only ever populated by the AI photo/text paths,
+// and only when the AI judged the food genuinely multi-part (see the
+// system prompts in estimate-macros.js / estimate-macros-photo.js).
+// Manual entry, barcode scans, Quick Add replays, and common-foods search
+// are each a single item with nothing to break down, so they log with
+// ingredients left null — the section below renders only when there's
+// something real to show, never an empty or fabricated breakdown.
 function calorieBreakdownPopupHtml(entry) {
   const proteinCals = (entry.protein_g || 0) * 4;
   const carbCals = (entry.carbs_g || 0) * 4;
@@ -3904,15 +3903,15 @@ function closeCalorieBreakdownPopup() {
   el.innerHTML = '';
 }
 
-async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source, photo_path, sugar_g, barcode }) {
+async function logFood({ food_name, calories, protein_g, carbs_g, fat_g, source, photo_path, sugar_g, barcode, ingredients }) {
   const { error } = await supabase.from('food_logs').insert({
     user_id: state.user.id, food_name, calories, protein_g, carbs_g, fat_g, source, photo_path: photo_path || null,
-    sugar_g: sugar_g ?? null, barcode: barcode || null,
+    sugar_g: sugar_g ?? null, barcode: barcode || null, ingredients: ingredients || null,
   });
   if (error) return toast('Could not log food: ' + error.message);
   await loadHistory();
   renderAll();
-  showCalorieBreakdownPopup({ food_name, calories, protein_g, carbs_g, fat_g, logged_at: new Date().toISOString() });
+  showCalorieBreakdownPopup({ food_name, calories, protein_g, carbs_g, fat_g, logged_at: new Date().toISOString(), ingredients });
 }
 
 async function logWater(amountOz) {
@@ -4128,7 +4127,11 @@ function resultCardHtml(result) {
 // "Snap a Photo" sub-tab — Log It uploads it to the private food-photos
 // bucket at click time (not at estimate time, since the user may still be
 // editing the macro fields) and attaches the resulting path.
-function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text'), photoFile = null) {
+// ingredients: the AI result's per-component breakdown, if any — carried
+// straight through from the API response (there's no editable UI for it
+// in this card, only the macro totals are editable) to logFood() and from
+// there into food_logs, so the post-log calorie breakdown popup has it.
+function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text'), photoFile = null, ingredients = null) {
   const readValues = () => ({
     food_name: $('#res_name').value.trim() || 'Food',
     calories: Number($('#res_cal').value) || 0,
@@ -4137,7 +4140,7 @@ function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text'
     fat_g: Number($('#res_fat').value) || 0,
   });
   $('#logResultBtn')?.addEventListener('click', async () => {
-    if (!photoFile) return logFood({ ...readValues(), source });
+    if (!photoFile) return logFood({ ...readValues(), source, ingredients });
     const btn = $('#logResultBtn');
     const originalLabel = btn.textContent;
     btn.disabled = true;
@@ -4155,7 +4158,7 @@ function wireResultCard(source = (logSubTab === 'photo' ? 'ai_photo' : 'ai_text'
       btn.disabled = false;
       btn.textContent = originalLabel;
     }
-    logFood({ ...readValues(), source, photo_path });
+    logFood({ ...readValues(), source, photo_path, ingredients });
   });
   $('#favResultBtn')?.addEventListener('click', () => saveFavorite(readValues()));
 }
@@ -4423,7 +4426,7 @@ function renderLogSubPanel() {
         const result = await callFunction('estimate-macros', { description });
         state.aiRemaining = result.remaining;
         $('#aiResultSlot').innerHTML = resultCardHtml(result);
-        wireResultCard('ai_text');
+        wireResultCard('ai_text', null, result.ingredients);
       } catch (err) {
         if (err.upgradeRequired) { showUpgradeScreen(); return; }
         reportError(err);
@@ -4453,7 +4456,7 @@ function renderLogSubPanel() {
         const result = await callFunction('estimate-macros-photo', { imageBase64: base64, mediaType, note: $('#photoNote').value.trim() });
         state.aiRemaining = result.remaining;
         $('#photoResultSlot').innerHTML = resultCardHtml(result);
-        wireResultCard('ai_photo', file);
+        wireResultCard('ai_photo', file, result.ingredients);
       } catch (err) {
         if (err.upgradeRequired) { showUpgradeScreen(); return; }
         reportError(err);
@@ -5952,7 +5955,15 @@ function renderProfile() {
     $('#calc_apply').addEventListener('click', async () => {
       await supabase.from('profiles').upsert({ id: state.user.id, age, sex, height_cm: round(heightCm, 1), activity_level: activity });
       await supabase.from('body_stats').upsert({ user_id: state.user.id, weight_kg: round(weightKg, 2), updated_at: new Date().toISOString() });
-      await supabase.from('goals').upsert(withGoalModeTracking({ user_id: state.user.id, calories: targetCalories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG, goal_mode: goalMode, updated_at: new Date().toISOString() }));
+      const goalsPayload = withGoalModeTracking({ user_id: state.user.id, calories: targetCalories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG, goal_mode: goalMode, updated_at: new Date().toISOString() });
+      // Only set goal_weight_lb when the user actually typed a target
+      // weight here — leaving it blank (a maintenance-estimate run) is not
+      // the same as wanting to clear whatever goal weight is already saved
+      // from onboarding or Settings, so this field is omitted rather than
+      // nulled when empty.
+      const calcGoalWeightInput = $('#calc_goal_weight').value;
+      if (calcGoalWeightInput) goalsPayload.goal_weight_lb = fromDisplayWeight(calcGoalWeightInput);
+      await supabase.from('goals').upsert(goalsPayload);
       toast('Goals updated from calculator');
       await Promise.all([loadProfile(), loadBodyStats(), loadGoals()]);
       renderAll();

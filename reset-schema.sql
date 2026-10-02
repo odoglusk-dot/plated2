@@ -181,6 +181,11 @@ create table food_logs (
   -- The scanned code, kept even when the lookup fails and the entry gets
   -- finished manually, so it isn't lost.
   barcode text,
+  -- Per-component breakdown ({"name","calories"}[]), only ever populated
+  -- by the AI photo/text paths for a genuinely multi-part meal — null for
+  -- every other logging method and for a single-item AI estimate. See
+  -- supabase-schema-phase33-ingredient-breakdown.sql.
+  ingredients jsonb,
   logged_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
@@ -210,6 +215,7 @@ create table food_cache (
   protein_g numeric not null,
   carbs_g numeric not null,
   fat_g numeric not null,
+  ingredients jsonb,
   created_at timestamptz not null default now()
 );
 
