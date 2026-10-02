@@ -410,6 +410,12 @@ create table subscriptions (
   stripe_subscription_id text,
   current_period_end timestamptz,
   cancel_at_period_end boolean not null default false,
+  -- Set only by the founder dashboard's manual tier-grant panel (e.g.
+  -- comping a trainer partnership) — never by the Stripe webhook. Lets
+  -- the dashboard's own revenue reporting tell a comp apart from a real
+  -- paying subscriber. See supabase-schema-phase34-dashboard-ops.sql.
+  granted_by uuid references auth.users(id) on delete set null,
+  granted_at timestamptz,
   updated_at timestamptz not null default now()
 );
 
@@ -1702,6 +1708,38 @@ create table dashboard_one_time_costs (
 );
 
 alter table dashboard_one_time_costs enable row level security;
+
+-- ── dashboard_changelog / dashboard_audit_log / dashboard_feedback ────────
+-- Founder dashboard operational tooling. Same zero-policy pattern as
+-- admin_users — see supabase-schema-phase34-dashboard-ops.sql.
+create table dashboard_changelog (
+  id uuid primary key default gen_random_uuid(),
+  entry_date date not null default current_date,
+  description text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table dashboard_changelog enable row level security;
+
+create table dashboard_audit_log (
+  id uuid primary key default gen_random_uuid(),
+  admin_user_id uuid references auth.users(id) on delete set null,
+  admin_email text,
+  action text not null,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table dashboard_audit_log enable row level security;
+
+create table dashboard_feedback (
+  id uuid primary key default gen_random_uuid(),
+  message text not null,
+  status text not null default 'open' check (status in ('open', 'resolved')),
+  created_at timestamptz not null default now()
+);
+
+alter table dashboard_feedback enable row level security;
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE

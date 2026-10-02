@@ -293,10 +293,16 @@ stripe_customer_id      text
 stripe_subscription_id  text
 current_period_end      timestamptz
 cancel_at_period_end    boolean (default: false)
+granted_by              uuid (nullable — admin user_id, founder dashboard only)
+granted_at              timestamptz (nullable)
 updated_at              timestamptz (default: now())
 ```
-**Backend writes:** `netlify/functions/stripe-webhook.js` only, using
-`SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS).
+**Backend writes:** `netlify/functions/stripe-webhook.js` (status/Stripe
+fields, using `SUPABASE_SERVICE_ROLE_KEY`, bypasses RLS) and the founder
+dashboard's `admin-grant-tier.js` (IronLog repo) for `granted_by`/
+`granted_at`/`status` only, when manually comping a tier — see
+`dashboard_changelog`/`dashboard_audit_log`/`dashboard_feedback` further
+down for the full founder-dashboard-ops picture.
 **Frontend reads:** `status, current_period_end, cancel_at_period_end` —
 RLS grants select-own and nothing else; there is deliberately no
 insert/update policy for the `authenticated` role.
@@ -829,6 +835,47 @@ simple log for non-recurring costs (LLC filing, trademark search, etc.)
 — both feed into the dashboard's net-margin calculation alongside real
 AI cost (`ai_usage`) and real Stripe fees.
 
+---
+
+### `dashboard_changelog` / `dashboard_audit_log` / `dashboard_feedback` — Operational tooling (founder dashboard)
+```sql
+-- dashboard_changelog: manually-entered record of what shipped to the main app
+id            uuid primary key
+entry_date    date not null
+description   text not null
+created_at    timestamptz
+
+-- dashboard_audit_log: append-only log of admin actions taken in the dashboard
+id              uuid primary key
+admin_user_id   uuid (nullable — survives the admin account being deleted)
+admin_email     text
+action          text not null
+details         jsonb not null default '{}'
+created_at      timestamptz
+
+-- dashboard_feedback: centralized bug reports/feedback, admin-entered for now
+id            uuid primary key
+message       text not null
+status        text not null default 'open' (check in open/resolved)
+created_at    timestamptz
+```
+**No frontend access at all** — same zero-RLS-policy pattern as
+`admin_users` (see `supabase-schema-phase34-dashboard-ops.sql`). Only the
+dashboard's Netlify functions, themselves gated behind `requireAdmin()`,
+can read or write these.
+
+`dashboard_audit_log` is written to on every tier change, changelog entry,
+and feedback status update made through the dashboard — see the module
+comment on `logAuditEntry()` in `netlify/functions/_shared.js` (IronLog
+repo) for exactly what's captured.
+
+`subscriptions` also gained two columns here: `granted_by` (the admin
+user_id who manually granted a tier, e.g. comping a trainer partnership)
+and `granted_at`. Both are nullable and only ever set by the dashboard's
+tier-grant panel — the Stripe webhook never touches them, so a real paying
+subscriber's row is unaffected.
+
+---
 
 ## Naming Rules — CONSISTENT across ALL tables
 
