@@ -206,6 +206,56 @@ async function checkAndIncrementRateLimit(userId, token) {
   return { ok: true, remaining: DAILY_AI_LIMIT - (currentCount + 1) };
 }
 
+// Item 5 of the AI cost-efficiency batch: independent daily caps per AI
+// feature, instead of every feature sharing DAILY_AI_LIMIT's one pool.
+// Describe It (estimate-macros.js) is intentionally left on the original
+// shared checkAndIncrementRateLimit()/DAILY_AI_LIMIT — nothing in that
+// batch asked for it to change, so it keeps working exactly as it does
+// today. Each feature here gets its own column on the same ai_usage row
+// (one row per user per day already existed) rather than a new table,
+// since this is the same "per-user-per-day usage ledger" the shared
+// counter already is.
+const FEATURE_DAILY_LIMITS = { photo: 20, analysis: 2, ask: 5 };
+const FEATURE_LABELS = { photo: 'Photo logging', analysis: 'Post-session analysis', ask: 'Ask AI' };
+
+async function checkAndIncrementFeatureLimit(userId, token, feature) {
+  const dailyLimit = FEATURE_DAILY_LIMITS[feature];
+  const column = `${feature}_count`;
+  const today = new Date().toISOString().slice(0, 10);
+  const base = process.env.SUPABASE_URL;
+  const headers = {
+    apikey: process.env.SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${token}`,
+    'content-type': 'application/json',
+  };
+
+  const getRes = await fetch(
+    `${base}/rest/v1/ai_usage?user_id=eq.${userId}&usage_date=eq.${today}&select=${column}`,
+    { headers }
+  );
+  if (!getRes.ok) return { ok: false, message: 'Could not check usage limit.' };
+  const rows = await getRes.json();
+  const currentCount = rows.length ? rows[0][column] : 0;
+
+  if (currentCount >= dailyLimit) {
+    return {
+      ok: false,
+      status: 429,
+      capped: true,
+      message: `${FEATURE_LABELS[feature]} limit reached (${dailyLimit}/day) — resets tomorrow.`,
+    };
+  }
+
+  const upsertRes = await fetch(`${base}/rest/v1/ai_usage`, {
+    method: 'POST',
+    headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({ user_id: userId, usage_date: today, [column]: currentCount + 1 }),
+  });
+  if (!upsertRes.ok) return { ok: false, message: 'Could not record usage.' };
+
+  return { ok: true, remaining: dailyLimit - (currentCount + 1) };
+}
+
 // Item 6 of the conversion-surface-area batch: a highly engaged free user
 // (10-day logging streak, checked client-side before ever reaching this
 // endpoint) gets exactly one real AI photo-log result as a preview. The
@@ -234,8 +284,123 @@ async function claimOneTimeProPreview(userId, token) {
   return rows.length > 0;
 }
 
-async function callAnthropic({ system, messages, maxTokens = 500 }) {
-  const model = 'claude-sonnet-5';
+// ── Lift math ─────────────────────────────────────────────────────────────
+// Shared by analyze-session.js (item 2 of the AI cost-efficiency batch —
+// the server now computes the session-analysis data summary itself instead
+// of forwarding client-built prose) and compute-training-insights.js (items
+// 3+4 — the nightly rule-based insights need the same PR/trend math).
+// Ported from the equivalent client-side functions in index.html
+// (e1RM/totalReps/computeLiftPRs/detectPlateau) — kept numerically
+// identical to them so a lift's PR/plateau status reads the same whether
+// it's shown live in the app or referenced in an AI-written analysis.
+function e1RM(weight, reps) {
+  if (!weight || !reps || reps <= 0) return 0;
+  if (reps === 1) return Math.round(weight);
+  return Math.round(weight * (1 + reps / 30));
+}
+
+function totalReps(l) {
+  if (l.reps_per_set && l.reps_per_set.length) return l.reps_per_set.reduce((a, b) => a + b, 0);
+  return (l.sets || 0) * (l.reps || 0);
+}
+
+function computeLiftPRs(lifts) {
+  const prs = {};
+  for (const l of lifts) {
+    if (!prs[l.exercise] || l.weight > prs[l.exercise].weight) prs[l.exercise] = l;
+  }
+  return prs;
+}
+
+// Generalizes the client's detectPlateau(): same "best e1RM of the last 3
+// sessions vs best of everything before that" windowing, but returns the %
+// change too instead of just a boolean, so an analysis can say *how much*
+// trending up/down rather than only yes/no. Returns null when there isn't
+// enough history (same < 4 total entries threshold as detectPlateau).
+function summarizeExerciseTrend(history) {
+  if (history.length < 4) return null;
+  const sorted = [...history].sort((a, b) => new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`));
+  const withE1RM = sorted.map((l) => ({ ...l, e1rm: e1RM(l.weight, l.reps) }));
+  const recent = withE1RM.slice(-3);
+  const prior = withE1RM.slice(0, -3);
+  if (prior.length === 0) return null;
+  const priorBest = Math.max(...prior.map((l) => l.e1rm));
+  const recentBest = Math.max(...recent.map((l) => l.e1rm));
+  const pctChange = priorBest > 0 ? Math.round(((recentBest - priorBest) / priorBest) * 100) : 0;
+  return { plateaued: recentBest <= priorBest, priorBest, recentBest, pctChange };
+}
+
+function round1(n) { return Math.round(n * 10) / 10; }
+
+// Builds the final, token-tight text sent to the Anthropic call in
+// analyze-session.js. Takes raw-ish structured lift/nutrition data the
+// client already fetched (RLS-scoped, same "client owns data access"
+// principle as before — only the SUMMARIZATION moves server-side, not the
+// querying) and computes PR flags, a numeric 1RM trend %, a volume-vs-
+// recent-average comparison, and a plateau flag — instead of the client
+// enumerating up to 5 raw historical rows per exercise for the model to
+// infer a trend from itself. Today's own sets are kept in full (that's the
+// actual subject being analyzed, not prunable history).
+function buildSessionAnalysisSummary({ weightUnit, todayDate, todayLifts, priorLifts, nutritionYesterday }) {
+  const unit = weightUnit === 'kg' ? 'kg' : 'lb';
+  const toUnit = (lb) => (weightUnit === 'kg' ? round1(lb * 0.453592) : Math.round(lb));
+  const lines = [`Session date: ${todayDate}`, '', "Today's session:"];
+
+  const byExercise = {};
+  for (const l of todayLifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
+  const priorPRs = computeLiftPRs(priorLifts);
+
+  for (const [exercise, sets] of Object.entries(byExercise)) {
+    const best = sets.reduce((max, l) => Math.max(max, l.weight), 0);
+    const volume = sets.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
+    lines.push(`- ${exercise}: ${sets.length} set(s), best weight ${toUnit(best)}${unit}, session volume ${toUnit(volume)}${unit}`);
+    sets.forEach((l) => {
+      const repsStr = l.reps_per_set && l.reps_per_set.length ? `${l.reps_per_set.join('/')} reps` : `${l.reps} reps × ${l.sets} sets`;
+      lines.push(`    ${toUnit(l.weight)}${unit} x ${repsStr}`);
+    });
+
+    const prior = priorPRs[exercise];
+    lines.push(`  PR flag: ${!prior ? 'first time this exercise has been logged' : best > prior.weight ? `yes — new best, prior best was ${toUnit(prior.weight)}${unit}` : 'no'}`);
+
+    const history = priorLifts.filter((l) => l.exercise === exercise).sort((a, b) => a.date.localeCompare(b.date));
+    if (history.length) {
+      // Volume comparison against this exercise's last 5 sessions — a
+      // comparison the original client-built prose never made at all.
+      const recentDates = Array.from(new Set(history.slice(-5).map((l) => l.date)));
+      const recentVolumes = recentDates.map((d) => history.filter((l) => l.date === d).reduce((sum, l) => sum + l.weight * totalReps(l), 0));
+      const avgVolume = recentVolumes.reduce((a, b) => a + b, 0) / recentVolumes.length;
+      if (avgVolume > 0) {
+        const pctVsAvg = Math.round(((volume - avgVolume) / avgVolume) * 100);
+        lines.push(`  Volume vs recent avg: ${pctVsAvg >= 0 ? '+' : ''}${pctVsAvg}% (recent avg ${toUnit(avgVolume)}${unit})`);
+      }
+
+      // Bounded to the last 8 prior entries for the trend/plateau calc —
+      // same recency-focused spirit as the original's 5-entry window, so a
+      // PR from years ago doesn't dominate "plateaued" forever.
+      const recentHistory = history.slice(-8).map((l) => ({ ...l }));
+      const trend = summarizeExerciseTrend([...recentHistory, ...sets.map((s) => ({ ...s, date: todayDate }))]);
+      if (trend) {
+        lines.push(`  Trend: estimated 1RM ${trend.pctChange >= 0 ? 'up' : 'down'} ${Math.abs(trend.pctChange)}% over the last 3 sessions vs before that (${toUnit(trend.priorBest)} -> ${toUnit(trend.recentBest)}${unit})`);
+        lines.push(`  Plateau flag: ${trend.plateaued ? 'yes — best estimated 1RM in the last 3 sessions has not beaten the prior best' : 'no'}`);
+      } else {
+        lines.push('  Plateau flag: no (not enough history yet to tell)');
+      }
+    } else {
+      lines.push('  No prior logged history for this exercise.');
+    }
+  }
+
+  lines.push('', 'Nutrition context (the day before this session):');
+  if (nutritionYesterday) {
+    lines.push(`${nutritionYesterday.date}: ${Math.round(nutritionYesterday.calories)} kcal (goal ${Math.round(nutritionYesterday.calorieGoal)}), protein ${Math.round(nutritionYesterday.protein_g)}g (goal ${Math.round(nutritionYesterday.proteinGoal)}g)`);
+  } else {
+    lines.push('No food logged the day before this session.');
+  }
+
+  return lines.join('\n').slice(0, 7000);
+}
+
+async function callAnthropic({ system, messages, maxTokens = 500, model = 'claude-sonnet-5' }) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -427,6 +592,13 @@ module.exports = {
   hasPaidAccess,
   claimOneTimeProPreview,
   checkAndIncrementRateLimit,
+  checkAndIncrementFeatureLimit,
+  FEATURE_DAILY_LIMITS,
+  e1RM,
+  totalReps,
+  computeLiftPRs,
+  summarizeExerciseTrend,
+  buildSessionAnalysisSummary,
   callAnthropic,
   calculateCost,
   recordUsageCost,

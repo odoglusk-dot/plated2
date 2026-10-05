@@ -4,13 +4,26 @@
 // Design decision: the CLIENT builds dataSummary (querying Supabase directly,
 // scoped safely by RLS to auth.uid()) and sends the formatted text here. This
 // function never touches the database itself — it just verifies the caller is
-// signed in, applies the shared AI rate limit, and forwards the question +
+// signed in, applies Ask AI's own daily cap (5/day, see
+// checkAndIncrementFeatureLimit() in _shared.js), and forwards the question +
 // summary to Anthropic. Kept this way (rather than having the function query
 // Supabase itself) because the frontend already has the session and the
 // query patterns for food_logs/goals/weight_log/supplement_logs in place for
 // the Dashboard/History tabs — reusing them here avoids a second, parallel
 // data-access path server-side.
-const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, captureError, withErrorReporting } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementFeatureLimit, callAnthropic, recordUsageCost, captureError, withErrorReporting } = require('./_shared');
+
+// AI cost-efficiency batch, item 1: Ask AI moved from Sonnet to Haiku-tier.
+// This task is a tightly-grounded, short-form Q&A over a pre-built text
+// summary ("answer using ONLY the summary below") — exactly the shape
+// Haiku-tier models handle well, with little of the open-ended synthesis
+// that would favor a larger model. No live Anthropic API credentials were
+// available in the sandbox this was built in, so this wasn't validated with
+// a real side-by-side comparison — spot-check real answers after deploy,
+// especially on longer/more interpretive questions ("why is my progress
+// slower this month"). If a specific question shape holds up worse than
+// Sonnet did, the fix is this one constant, not a rewrite.
+const ASK_AI_MODEL = 'claude-haiku-4-5';
 
 const SYSTEM_PROMPT = (dataSummary) => `You are Krafft's data assistant. Answer the user's question about
 their own logged nutrition/supplement/weight history using ONLY the summary below — never invent numbers
@@ -46,7 +59,7 @@ exports.handler = withErrorReporting(async (event) => {
   if (question.length > 500) return jsonResponse(400, { error: 'Question too long.' });
   if (dataSummary.length > 8000) return jsonResponse(400, { error: 'Data summary too long.' });
 
-  const rateLimit = await checkAndIncrementRateLimit(auth.user.id, auth.token);
+  const rateLimit = await checkAndIncrementFeatureLimit(auth.user.id, auth.token, 'ask');
   if (!rateLimit.ok) return jsonResponse(rateLimit.status || 500, { error: rateLimit.message });
 
   try {
@@ -54,6 +67,7 @@ exports.handler = withErrorReporting(async (event) => {
       system: SYSTEM_PROMPT(dataSummary || '(no logged data yet)'),
       messages: [{ role: 'user', content: question }],
       maxTokens: 500,
+      model: ASK_AI_MODEL,
     });
     await recordUsageCost(auth.user.id, auth.token, { model, inputTokens, outputTokens });
     return jsonResponse(200, { answer, remaining: rateLimit.remaining });

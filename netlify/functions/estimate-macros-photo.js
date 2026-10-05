@@ -2,7 +2,10 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
 // Checks food_cache first using a hash of image + note; if hit, returns immediately without using API budget.
-const { jsonResponse, verifyUser, hasPaidAccess, claimOneTimeProPreview, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
+// Gated at 20/day for paid users (item 5 of the AI cost-efficiency batch,
+// checkAndIncrementFeatureLimit() in _shared.js) — independent of the one-
+// time free-tier preview claim, which never touches this daily pool.
+const { jsonResponse, verifyUser, hasPaidAccess, claimOneTimeProPreview, checkAndIncrementFeatureLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, FEATURE_DAILY_LIMITS } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Krafft, a macro-and-strength-tracking app.
 You will be shown a photo of a food or meal. Estimate its nutritional content from what's visible —
@@ -62,21 +65,26 @@ exports.handler = withErrorReporting(async (event) => {
   const cacheKey = getPhotoCacheKey(imageBase64, note);
   const cached = await checkFoodCache(cacheKey, true);
   if (cached) {
-    // Still need to return remaining count, so fetch it without incrementing.
-    const today = new Date().toISOString().slice(0, 10);
-    const countRes = await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/ai_usage?user_id=eq.${auth.user.id}&usage_date=eq.${today}&select=count`,
-      {
-        headers: {
-          apikey: process.env.SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${auth.token}`,
-          'content-type': 'application/json',
-        },
-      }
-    );
-    const countRows = await countRes.json().catch(() => []);
-    const currentCount = countRows.length ? countRows[0].count : 0;
-    const remaining = Math.max(0, DAILY_AI_LIMIT - currentCount);
+    // The one-time preview isn't on the daily photo pool at all — only
+    // compute a "remaining" count for a real paid user, read without
+    // incrementing since a cache hit doesn't spend any budget.
+    let remaining = null;
+    if (!isPreview) {
+      const today = new Date().toISOString().slice(0, 10);
+      const countRes = await fetch(
+        `${process.env.SUPABASE_URL}/rest/v1/ai_usage?user_id=eq.${auth.user.id}&usage_date=eq.${today}&select=photo_count`,
+        {
+          headers: {
+            apikey: process.env.SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${auth.token}`,
+            'content-type': 'application/json',
+          },
+        }
+      );
+      const countRows = await countRes.json().catch(() => []);
+      const currentCount = countRows.length ? countRows[0].photo_count : 0;
+      remaining = Math.max(0, FEATURE_DAILY_LIMITS.photo - currentCount);
+    }
     return jsonResponse(200, {
       food_name: cached.food_name,
       calories: cached.calories,
@@ -91,8 +99,12 @@ exports.handler = withErrorReporting(async (event) => {
     });
   }
 
-  const rateLimit = await checkAndIncrementRateLimit(auth.user.id, auth.token);
-  if (!rateLimit.ok) return jsonResponse(rateLimit.status || 500, { error: rateLimit.message });
+  let photoRemaining = null;
+  if (!isPreview) {
+    const rateLimit = await checkAndIncrementFeatureLimit(auth.user.id, auth.token, 'photo');
+    if (!rateLimit.ok) return jsonResponse(rateLimit.status || 500, { error: rateLimit.message });
+    photoRemaining = rateLimit.remaining;
+  }
 
   const userContent = [
     {
@@ -135,7 +147,7 @@ exports.handler = withErrorReporting(async (event) => {
     } catch {
       // Cache write failure is non-fatal.
     }
-    return jsonResponse(200, { ...parsed, preview: isPreview, remaining: rateLimit.remaining });
+    return jsonResponse(200, { ...parsed, preview: isPreview, remaining: photoRemaining });
   } catch (err) {
     await captureError(err, { function: 'estimate-macros-photo', userId: auth.user.id });
     return jsonResponse(502, { error: 'Could not estimate macros from that photo.', detail: String(err.message || err) });

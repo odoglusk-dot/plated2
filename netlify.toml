@@ -18,6 +18,14 @@
 [functions."evaluate-groups"]
   schedule = "30 1 * * *"
 
+# Items 3+4 of the AI cost-efficiency batch: nightly rule-based training
+# insights, computed after evaluate-groups so "today" is fully logged by
+# the time this runs. Pure arithmetic over already-logged data (no AI call),
+# which is exactly why this can run as a batch instead of on-demand. See
+# the comment in compute-training-insights.js.
+[functions."compute-training-insights"]
+  schedule = "0 2 * * *"
+
 [[headers]]
   for = "/plated/*"
   [headers.values]

@@ -1130,6 +1130,7 @@ const state = {
   exerciseGoals: [],
   photos: [], // {id, storage_path, note, date, signedUrl} — signedUrl attached client-side after load, not a DB column
   trainingSplit: null, // {id, name, days, start_date} | null — one active split, see loadTrainingSplit()
+  trainingInsights: null, // {computed_at, insights: {...}} | null — items 3+4's nightly rule-based insights, see loadTrainingInsights()
   plan: null, // {id, goal_description, goal_type, target_exercise, event_date, phases, current_phase_index, priorities, days, equipment, avoid, started_at} | null — one active Plan, see loadPlan()
   group: null, // {id, name, currentStreak, bestStreak, freezesAvailable, roster, freezeLog, goal} | null — one active Group, see loadGroup()
   groupPendingInvites: [], // [{groupId, groupName, invitedAt}] — invites sent TO this user, see loadGroup()
@@ -2304,7 +2305,7 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadPlan(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadGroup(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus()]);
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadTrainingInsights(), loadPlan(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadGroup(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus()]);
   renderAll();
   maybeShowGroupInvitePreview();
 }
@@ -2503,6 +2504,16 @@ async function loadPhotos() {
   const paths = rows.map((r) => r.storage_path);
   const { data: signed } = await supabase.storage.from('progress-photos').createSignedUrls(paths, 60 * 60);
   state.photos = rows.map((row, i) => ({ ...row, signedUrl: signed?.[i]?.signedUrl || '' }));
+}
+
+// Items 3+4 of the AI cost-efficiency batch: reads the row
+// compute-training-insights.js computed overnight — nothing is ever
+// calculated live here, just displayed. A brand-new account, or one whose
+// first nightly run hasn't happened yet, simply has no row — the Insights
+// tab handles that as an empty/first-run state, not an error.
+async function loadTrainingInsights() {
+  const { data } = await supabase.from('training_insights').select('*').eq('user_id', state.user.id).maybeSingle();
+  state.trainingInsights = data || null;
 }
 
 async function loadTrainingSplit() {
@@ -7585,6 +7596,10 @@ const STALE_SESSION_HOURS = 3; // no new set logged this long into an active ses
 
 let analysisLoading = false;
 let analysisError = null;
+// Set once the 2/day analysis cap is hit (item 5 of the AI cost-efficiency
+// batch) — distinct from analysisError: this isn't a failure, it's shown
+// alongside whichever analysis was already generated today.
+let analysisCapped = false;
 let staleSessionPromptDismissed = false;
 
 function todaysLifts() {
@@ -7650,10 +7665,15 @@ async function endWorkoutSession() {
     .upsert({ user_id: state.user.id, date: today, ended_at: new Date().toISOString() }, { onConflict: 'user_id,date' });
   if (error) { toast('Could not end workout: ' + error.message); return; }
   analysisError = null;
+  analysisCapped = false;
   await loadWorkoutSession();
   showUndoToast('Workout ended', () => reopenWorkoutSession());
   renderLiftsTab();
-  if (sessionHistoryBaselineMet() && hasAccess(state.subscription) && !state.workoutSession?.analysis) {
+  // Regenerates on every End Workout (not just the first) so reopening to
+  // log a forgotten set and ending again reflects the updated session —
+  // bounded by the 2/day cap in analyze-session.js rather than a "only
+  // once ever" guard, which is what makes that cap meaningful at all.
+  if (sessionHistoryBaselineMet() && hasAccess(state.subscription)) {
     generateSessionAnalysis();
   }
 }
@@ -7664,56 +7684,49 @@ async function reopenWorkoutSession() {
     .upsert({ user_id: state.user.id, date: today, ended_at: null }, { onConflict: 'user_id,date' });
   if (error) { toast('Could not reopen: ' + error.message); return; }
   analysisError = null;
+  analysisCapped = false;
   staleSessionPromptDismissed = false;
   await loadWorkoutSession();
   renderLiftsTab();
 }
 
-// Client builds the summary text (today's session + recent per-exercise
-// history + light nutrition context), same design as buildDataSummary()
-// for Ask AI — the function itself never queries Supabase directly.
-function buildSessionAnalysisDataSummary() {
+// Item 2 of the AI cost-efficiency batch: the client still owns data access
+// (RLS-scoped state.lifts/state.historyLogs, already loaded for other UI)
+// but no longer formats it into prose — it just packages the raw-ish rows
+// needed (today's sets + this session's exercises' full prior history, for
+// an accurate all-time PR check + a recency-bounded trend calc) and sends
+// them to analyze-session.js, which computes the actual data summary
+// server-side via buildSessionAnalysisSummary() in _shared.js before
+// calling Claude. Keeps the "client owns data access" principle — only the
+// SUMMARIZATION moved server-side, not the querying.
+function buildSessionAnalysisPayload() {
   const today = localDateStr();
-  const today_lifts = todaysLifts();
-  const lines = [`Session date: ${today}`, '', "Today's session:"];
-
-  const byExercise = {};
-  for (const l of today_lifts) (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l);
-
-  const priorLifts = state.lifts.filter((l) => l.date < today);
-  const priorPRs = computeLiftPRs(priorLifts);
-
-  for (const [exercise, sets] of Object.entries(byExercise)) {
-    const best = sets.reduce((max, l) => Math.max(max, l.weight), 0);
-    const volume = sets.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
-    const unit = weightUnitLabel();
-    lines.push(`- ${exercise}: ${sets.length} set(s), best weight ${toDisplayWeight(best).value}${unit}, session volume ${toDisplayWeight(volume, 0).value}${unit}`);
-    sets.forEach((l) => lines.push(`    ${toDisplayWeight(l.weight).value}${unit} x ${repsDisplay(l)}`));
-
-    const history = priorLifts.filter((l) => l.exercise === exercise).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-    if (history.length) {
-      lines.push(`  Recent history for ${exercise} (most recent first):`);
-      history.forEach((l) => lines.push(`    ${l.date}: ${toDisplayWeight(l.weight).value}${unit} x ${repsDisplay(l)}, estimated 1RM ~${toDisplayWeight(e1RM(l.weight, l.reps)).value}${unit}`));
-      const combined = [...history, ...sets].sort((a, b) => a.date.localeCompare(b.date));
-      lines.push(`  Plateau flag: ${detectPlateau(combined) ? 'yes — best estimated 1RM in the last 3 sessions has not beaten the prior best' : 'no'}`);
-    } else {
-      lines.push(`  No prior logged history for ${exercise}.`);
-    }
-    const prior = priorPRs[exercise];
-    lines.push(`  PR flag: ${!prior ? 'first time this exercise has been logged' : best > prior.weight ? `yes — new best, prior best was ${toDisplayWeight(prior.weight).value}${unit}` : 'no'}`);
-  }
+  const todayLiftsList = todaysLifts();
+  const exercisesToday = new Set(todayLiftsList.map((l) => l.exercise));
+  const priorLifts = state.lifts.filter((l) => l.date < today && exercisesToday.has(l.exercise));
 
   const yesterday = subtractDays(today, 1);
   const byDay = groupByDay(state.historyLogs);
-  lines.push('', 'Nutrition context (the day before this session):');
+  let nutritionYesterday = null;
   if (byDay.has(yesterday)) {
     const t = sumMacros(byDay.get(yesterday));
-    lines.push(`${yesterday}: ${Math.round(t.calories)} kcal (goal ${Math.round(state.goals.calories)}), protein ${Math.round(t.protein_g)}g (goal ${Math.round(state.goals.protein_g)}g)`);
-  } else {
-    lines.push('No food logged the day before this session.');
+    nutritionYesterday = {
+      date: yesterday,
+      calories: t.calories,
+      protein_g: t.protein_g,
+      calorieGoal: state.goals.calories,
+      proteinGoal: state.goals.protein_g,
+    };
   }
 
-  return lines.join('\n').slice(0, 7000);
+  const pickLiftFields = (l) => ({ exercise: l.exercise, date: l.date, weight: l.weight, reps: l.reps, sets: l.sets, reps_per_set: l.reps_per_set || null });
+  return {
+    weightUnit: weightUnitLabel(),
+    todayDate: today,
+    todayLifts: todayLiftsList.map(pickLiftFields),
+    priorLifts: priorLifts.map(pickLiftFields),
+    nutritionYesterday,
+  };
 }
 
 async function generateSessionAnalysis() {
@@ -7721,15 +7734,22 @@ async function generateSessionAnalysis() {
   analysisError = null;
   renderLiftsTab();
   try {
-    const dataSummary = buildSessionAnalysisDataSummary();
-    const result = await callFunction('analyze-session', { dataSummary });
-    state.aiRemaining = result.remaining;
-    const { error } = await supabase.from('workout_sessions').upsert({
-      user_id: state.user.id, date: localDateStr(),
-      analysis: result.analysis, analysis_generated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,date' });
-    if (error) throw error;
-    await loadWorkoutSession();
+    const result = await callFunction('analyze-session', buildSessionAnalysisPayload());
+    // Item 5 of the AI cost-efficiency batch: capped at 2/day, but a soft
+    // cap — the last analysis generated today stays exactly as it is
+    // (never overwritten or cleared), just annotated with a small
+    // fine-print note instead of erroring or disappearing.
+    if (result.capped) {
+      analysisCapped = true;
+    } else {
+      state.aiRemaining = result.remaining;
+      const { error } = await supabase.from('workout_sessions').upsert({
+        user_id: state.user.id, date: localDateStr(),
+        analysis: result.analysis, analysis_generated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,date' });
+      if (error) throw error;
+      await loadWorkoutSession();
+    }
   } catch (err) {
     reportError(err);
     analysisError = err.upgradeRequired
@@ -7747,6 +7767,9 @@ function sessionCalloutIcon(type) {
 
 function sessionAnalysisHtml() {
   const analysis = state.workoutSession?.analysis;
+  // Item 5's soft cap: the fine-print note sits alongside whichever
+  // analysis was last generated today — it never replaces or hides it.
+  const cappedNoteHtml = `<p class="muted small" style="margin-top:0.6rem;margin-bottom:0;">Capped at 2 analyses per day — resets tomorrow.</p>`;
   if (analysis) {
     const hasNutritionCallout = (analysis.callouts || []).some((c) => c.type === 'nutrition');
     return `
@@ -7757,10 +7780,14 @@ function sessionAnalysisHtml() {
         <div class="session-callouts">
           ${analysis.callouts.map((c) => `<div class="session-callout">${sessionCalloutIcon(c.type)} ${esc(c.text)}</div>`).join('')}
         </div>` : ''}
+        ${analysisCapped ? cappedNoteHtml : ''}
       </div>
       ${analysis.highlightExercise ? `<div class="card"><h3>${esc(analysis.highlightExercise)} Trend</h3><canvas id="sessionTrendChart" height="220"></canvas></div>` : ''}
       ${hasNutritionCallout ? `<div class="card"><h3>Protein, Last 7 Days</h3><canvas id="sessionNutritionChart" height="180"></canvas></div>` : ''}
     `;
+  }
+  if (analysisCapped) {
+    return `<div class="card"><h3>Session Analysis</h3><p class="muted">No analysis generated for this session.</p>${cappedNoteHtml}</div>`;
   }
   if (analysisLoading) {
     return `<div class="card"><h3>Session Analysis</h3><p class="muted"><span class="spinner spinner-sm"></span> Analyzing your session…</p></div>`;
@@ -11184,6 +11211,44 @@ function correlationChartSvg(data) {
   </svg>`;
 }
 
+// ── Items 3+4: nightly rule-based training insights (read-only display) ──
+// Nothing here is computed client-side — this just renders whatever
+// compute-training-insights.js wrote to training_insights overnight. A
+// missing row (brand-new account, or the first nightly run hasn't happened
+// yet) and a row with nothing currently flagged are both normal, not
+// errors — each gets its own quiet empty-state line.
+function trainingInsightsHtml() {
+  const row = state.trainingInsights;
+  if (!row) return `<p class="muted small">Training insights update nightly — check back after your first full day of logging.</p>`;
+
+  const { insights } = row;
+  const lines = [];
+
+  if (insights.goodDayForPR?.flagged) {
+    lines.push(`🎯 Good day to attempt a PR on ${insights.goodDayForPR.exercises.map((e) => esc(e)).join(', ')} — trending up and well-fueled the last few days.`);
+  }
+  if (insights.sleepPerformance?.flagged) {
+    lines.push(`😴 Sessions after a short night's sleep have averaged ${Math.abs(insights.sleepPerformance.pctDiff)}% lower volume than sessions after a full night's sleep.`);
+  }
+  if (insights.benchmarkPacing?.hasEnoughData) {
+    const bp = insights.benchmarkPacing;
+    const verdictText = bp.verdict === 'faster' ? 'progressing faster than typical' : bp.verdict === 'slower' ? 'progressing slower than typical' : 'progressing at a typical pace';
+    lines.push(`📈 You're ${verdictText} for someone ~${bp.monthsTraining} month${bp.monthsTraining === 1 ? '' : 's'} into training (${bp.tier}).`);
+  }
+  if (insights.macroTiming?.hasEnoughData) {
+    const mt = insights.macroTiming;
+    lines.push(`🍽️ Protein logged within ${mt.windowHours}h of training: ${mt.preWorkoutHitRate}% of sessions before, ${mt.postWorkoutHitRate}% after.`);
+  }
+
+  if (!lines.length) return `<p class="muted small">Nothing flagged right now — check back tomorrow.</p>`;
+  return `
+    <div style="display:flex;flex-direction:column;gap:0.6rem;">
+      ${lines.map((l) => `<div class="small">${l}</div>`).join('')}
+    </div>
+    <p class="muted small" style="margin-top:0.6rem;margin-bottom:0;">Updates nightly — last computed ${new Date(row.computed_at).toLocaleDateString()}.</p>
+  `;
+}
+
 function correlationHtml() {
   const data = weeklyNutritionTrainingCorrelation(state.historyLogs, state.goals.protein_g, state.lifts);
   if (data.length < 2) return `<p class="muted small">Log both food and lifts for a couple of weeks to see this.</p>`;
@@ -12277,6 +12342,11 @@ function renderInsightsTab() {
       <h3>Consider a Deload</h3>
       <p style="margin:0;">🛑 This week's volume is up ${deload.volumeSpike.pctAbove}% with ${deload.plateauedCount}/${deload.totalExercises} tracked exercises plateaued — that combination often means it's time to cut volume/intensity by roughly 40–50% for a week rather than pushing harder.</p>
     </div>` : ''}
+    <div class="card">
+      <h3>This Week's Flags</h3>
+      <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Rule-based, not AI — computed overnight from your own logged data.</p>
+      ${trainingInsightsHtml()}
+    </div>
     <div class="card">
       <h3>Progress Leaderboard</h3>
       <p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Estimated-1RM trend per exercise, across all logged history.</p>

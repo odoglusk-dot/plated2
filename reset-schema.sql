@@ -386,6 +386,14 @@ create table ai_usage (
   input_tokens bigint not null default 0,
   output_tokens bigint not null default 0,
   estimated_cost_usd numeric(10, 6) not null default 0,
+  -- Independent per-feature daily caps (item 5 of the AI cost-efficiency
+  -- batch) — `count` above stays the shared pool for Describe It's existing
+  -- 13/day cap; these three track Photo (20/day), Post-Session Analysis
+  -- (2/day), and Ask AI (5/day) separately. See
+  -- checkAndIncrementFeatureLimit() in _shared.js.
+  photo_count int not null default 0,
+  analysis_count int not null default 0,
+  ask_count int not null default 0,
   primary key (user_id, usage_date)
 );
 
@@ -1675,6 +1683,19 @@ alter table cancellation_flow_events enable row level security;
 
 create policy "cancellation_flow_events: insert own" on cancellation_flow_events
   for insert with check (auth.uid() = user_id);
+
+-- ── training_insights (nightly rule-based insights, items 3+4) ──────────
+-- See supabase-schema-phase36-ai-cost-efficiency.sql for the full rationale.
+create table training_insights (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  computed_at timestamptz not null default now(),
+  insights jsonb not null default '{}'::jsonb
+);
+
+alter table training_insights enable row level security;
+
+create policy "training_insights: select own" on training_insights
+  for select using (auth.uid() = user_id);
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE
