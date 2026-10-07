@@ -98,6 +98,14 @@ create table profiles (
   -- supabase-schema-phase34-streak-upgrade-prompts.sql.
   streak_upgrade_prompt_shown_at timestamptz,
   pro_preview_used_at timestamptz,
+  -- Pro-only Home screen personalization — see supabase-schema-phase38-
+  -- home-customization.sql. home_background_path points into the
+  -- home-backgrounds storage bucket (same private/folder-per-user pattern
+  -- as progress-photos); null means "use the default hero background."
+  -- home_widget_order is a permutation of DEFAULT_HOME_WIDGET_ORDER's keys
+  -- (index.html); null/missing keys fall back to default placement.
+  home_background_path text,
+  home_widget_order text[],
   created_at timestamptz not null default now()
 );
 
@@ -808,6 +816,24 @@ create policy "food_photos_insert_own" on storage.objects for insert
 create policy "food_photos_delete_own" on storage.objects for delete
   using (bucket_id = 'food-photos' and auth.uid()::text = (storage.foldername(name))[1]);
 
+-- ── home-backgrounds storage bucket (Pro-only Home screen personalization) ──
+-- Same private/folder-per-user pattern as progress-photos and food-photos.
+-- One background per user at a time: a new upload replaces the old object
+-- client-side (delete-then-insert), and profiles.home_background_path
+-- tracks the current path. See supabase-schema-phase38-home-customization.sql.
+insert into storage.buckets (id, name, public)
+values ('home-backgrounds', 'home-backgrounds', false)
+on conflict (id) do nothing;
+
+create policy "home_backgrounds_select_own" on storage.objects for select
+  using (bucket_id = 'home-backgrounds' and auth.uid()::text = (storage.foldername(name))[1]);
+
+create policy "home_backgrounds_insert_own" on storage.objects for insert
+  with check (bucket_id = 'home-backgrounds' and auth.uid()::text = (storage.foldername(name))[1]);
+
+create policy "home_backgrounds_delete_own" on storage.objects for delete
+  using (bucket_id = 'home-backgrounds' and auth.uid()::text = (storage.foldername(name))[1]);
+
 -- ── training_splits ──────────────────────────────────────────────────
 -- One active split per user — a preset or custom weekly rotation used to
 -- show a "today's focus" hint and filter the Lifts tab, not a program
@@ -910,6 +936,14 @@ create table exercises (
   muscle_map_secondary_keys text[] not null default '{}',
   image_url text,
   video_url text,
+  -- Experience tier + top-level exercise type, and reference guidance for
+  -- conditioning work (parallel to the hypertrophy_* columns above, which
+  -- don't apply to duration/intensity-based conditioning exercises). See
+  -- supabase-schema-phase37-exercise-library-v2.sql for the full rationale.
+  experience_level text,
+  category text,
+  conditioning_duration_guidance text,
+  conditioning_intensity_guidance text,
   created_at timestamptz not null default now()
 );
 
@@ -1625,6 +1659,193 @@ insert into exercises (
  'Rotating only through the arms and shoulders. The power should start from the hips turning first, with the trunk and arms following — not the other way around.',
  'Keep your core braced through the rotation so the force transfers through your trunk instead of loading your lower back at the end range.',
  'plyometric', false, '{}', '{functional_athletic}', 'obliques', '{abs}');
+
+-- Phase 37 exercise library expansion — squat/deadlift variations +
+-- isolation/accessory work, matching the cue/hypertrophy format above.
+-- See supabase-schema-phase37-exercise-library-v2.sql for full rationale
+-- (the requested plyo/speed/agility list already exists above or in
+-- CONDITIONING_DRILLS, so nothing further was added for that category).
+insert into exercises (
+  name, muscle_group, body_region, secondary_regions, equipment,
+  cue_setup, cue_execution, cue_mistake, cue_bracing,
+  hypertrophy_rep_range, hypertrophy_rest_interval, hypertrophy_tempo, hypertrophy_mind_muscle_cue,
+  movement_type, lengthened_bias, avoid_flags, block_types,
+  muscle_map_key, muscle_map_secondary_keys, category, experience_level
+) values
+
+('Box Squat', 'Legs', 'quads', '{glutes}', 'Barbell',
+ 'Set a box or bench at or just below parallel height behind you, then set up under the bar exactly as you would for a back squat.',
+ 'Squat down under control until you sit lightly on the box, pause briefly without relaxing your hips, then drive back up.',
+ 'Crashing down onto the box and losing tension, or using it to bounce back up. Touch and go under control — the box marks depth, it''s not a resting point.',
+ 'Keep full-body tension through the pause on the box — a relaxed brace there is a common way to tweak the lower back.',
+ '5–8 reps', '2–3 min', '3-1-1 tempo — slow, controlled descent to the box',
+ 'Focus on sitting your hips back and down onto the box, not folding forward to reach it.',
+ 'compound', false, '{heavy_spinal_load}', '{strength,hypertrophy}', 'quads', '{glutes}', 'strength', 'intermediate'),
+
+('Pause Squat', 'Legs', 'quads', '{glutes}', 'Barbell',
+ 'Set up exactly as you would for a standard back squat.',
+ 'Squat down to depth, pause motionless for 2–3 seconds at the bottom, then drive up without any bounce out of the hole.',
+ 'Letting tension bleed out during the pause, or using a quick rebound to escape the bottom. Stay braced and still, then drive up from a dead stop.',
+ 'Re-confirm your brace the instant you hit the bottom position, before the pause even starts.',
+ '4–6 reps', '2–3 min', '2-3-1 tempo — 3-second pause at the bottom',
+ 'Use the pause to feel your quads and glutes under full load before driving up.',
+ 'compound', false, '{heavy_spinal_load}', '{strength,hypertrophy}', 'quads', '{glutes}', 'strength', 'intermediate'),
+
+('Sumo Deadlift', 'Pull', 'back', '{quads}', 'Barbell',
+ 'Stand with a wide stance, toes pointed out, gripping the bar inside your knees.',
+ 'Drive through the floor with your knees pushing out, extending your hips and knees together to stand the bar up.',
+ 'Letting your knees cave inward as you pull. Actively push your knees out against the floor throughout the pull.',
+ 'Brace hard before the pull and keep your chest tall — a wide stance makes it easy to let the torso collapse forward if the brace slips.',
+ '5–8 reps', '2–3 min', '1-1-2 tempo — pause at the top',
+ 'Feel the pull through your inner thighs and glutes more than your lower back.',
+ 'compound', false, '{heavy_spinal_load}', '{strength,hypertrophy}', 'glutes', '{hamstrings,quads,lowerback}', 'strength', 'intermediate'),
+
+('Deficit Deadlift', 'Pull', 'back', '{hamstrings}', 'Barbell',
+ 'Stand on a 1–2 inch plate or platform, feet hip-width apart, bar on the floor in front of you.',
+ 'Deadlift the bar from this slightly lower starting position, keeping the same hip-hinge pattern as a standard deadlift.',
+ 'Rounding the lower back to reach the extra range. If you can''t keep a neutral spine from the deficit, the deficit is too high — reduce it.',
+ 'Brace extra hard before the pull — the longer range means more time under load before lockout.',
+ '5–8 reps', '2–3 min', '1-1-2 tempo',
+ 'Focus on holding the same back position you''d use for a normal-height pull, just from lower.',
+ 'compound', true, '{heavy_spinal_load}', '{hypertrophy}', 'hamstrings', '{glutes,lowerback}', 'strength', 'advanced'),
+
+('Trap Bar Deadlift', 'Pull', 'back', '{quads}', 'Barbell',
+ 'Stand inside the trap bar, feet hip-width apart, gripping the handles at your sides.',
+ 'Drive through the floor and extend your hips and knees together to lift the bar, keeping it close to your body throughout.',
+ 'Squatting it up with an upright torso and letting the hips rise first. Keep the same hip-hinge pattern as a conventional deadlift — hips and shoulders rising together.',
+ 'Brace before you break the weight off the floor, same as any other deadlift variation.',
+ '6–10 reps', '2–3 min', '1-1-2 tempo',
+ 'A good entry point for deadlift patterning — the neutral grip and higher handle position make it the most back-friendly of the deadlift variations.',
+ 'compound', false, '{heavy_spinal_load}', '{strength,hypertrophy}', 'hamstrings', '{glutes,quads}', 'strength', 'beginner'),
+
+('Zercher Squat', 'Legs', 'quads', '{abs}', 'Barbell',
+ 'Cradle the bar in the crooks of your elbows, held tight against your torso, feet shoulder-width apart.',
+ 'Squat down keeping the bar close to your body and your torso as upright as the hold allows, then drive back up.',
+ 'Letting the bar drift away from your torso, which pitches you forward and loads the lower back more than the legs. Keep it pulled in tight the whole rep.',
+ 'Brace your core hard — the front-loaded position demands more trunk stability than a back squat.',
+ '6–10 reps', '2 min', '2-1-1 tempo',
+ 'Focus on staying upright and keeping the bar glued to your chest.',
+ 'compound', false, '{heavy_spinal_load}', '{hypertrophy}', 'quads', '{abs,glutes}', 'strength', 'advanced'),
+
+('Reverse Pec Deck', 'Pull', 'shoulders', '{back}', 'Machine',
+ 'Sit facing into the pec deck machine (reversed from the chest-fly setup), chest against the pad, grip the handles in front of you.',
+ 'With a slight bend in the elbows, pull the handles out and back in an arc until your arms are in line with your torso.',
+ 'Using momentum to fling the handles back. Keep it slow and controlled — this is a small muscle group that fatigues fast under strict form.',
+ 'Keep your chest pressed into the pad throughout so the rear delts, not your back, are doing the pulling.',
+ '12–20 reps', '60–90 sec', '2-1-2 tempo — full stretch, full contraction',
+ 'Think about squeezing your shoulder blades together at the back of the movement.',
+ 'isolation', true, '{}', '{hypertrophy}', 'delts', '{traps}', 'strength', 'beginner'),
+
+('Cable Kickback', 'Legs', 'glutes', '{hamstrings}', 'Cable',
+ 'Attach an ankle cuff to a low cable pulley, clip it to one ankle, and face the machine holding on for balance.',
+ 'Keeping a slight bend in your knee, kick your leg straight back and up by squeezing your glute, then return under control.',
+ 'Arching the lower back to generate extra range. The movement should come from the hip, not from hyperextending the spine.',
+ 'Brace your core to keep your pelvis stable — a stable base is what isolates the glute instead of the lower back taking over.',
+ '12–20 reps', '60–90 sec', '1-2-1 tempo — pause and squeeze at the top',
+ 'Focus on squeezing the glute hard at the top of each rep, not on how far your leg travels.',
+ 'isolation', true, '{}', '{hypertrophy}', 'glutes', '{hamstrings}', 'strength', 'beginner'),
+
+('Hip Abduction Machine', 'Legs', 'glutes', '{}', 'Machine',
+ 'Sit in the machine with the outside of your thighs against the pads, knees together at the start.',
+ 'Push your knees apart against the pads'' resistance, then return under control to the starting position.',
+ 'Leaning the torso to one side to generate momentum. Keep your back flat against the pad and let the glutes do the work.',
+ 'Keep your core braced and torso still so the movement stays isolated to the hips.',
+ '15–20 reps', '60–90 sec', '2-1-2 tempo',
+ 'Feel the outside of your glutes (glute medius) doing the work, not your quads.',
+ 'isolation', false, '{}', '{hypertrophy}', 'glutes', '{}', 'strength', 'beginner'),
+
+('Hip Adduction Machine', 'Legs', 'quads', '{}', 'Machine',
+ 'Sit in the machine with the insides of your thighs against the pads, knees apart at the start.',
+ 'Squeeze your knees together against the pads'' resistance, then return under control.',
+ 'Using short, bouncy reps. Control the full range in both directions for the inner-thigh muscles to actually do the work.',
+ 'Keep your core braced and hips square in the seat throughout.',
+ '15–20 reps', '60–90 sec', '2-1-2 tempo',
+ 'Focus on squeezing your inner thighs together, not just letting the pads bounce closed.',
+ 'isolation', false, '{}', '{hypertrophy}', 'quads', '{}', 'strength', 'beginner'),
+
+('Seated Leg Curl', 'Legs', 'hamstrings', '{}', 'Machine',
+ 'Sit in the machine with the pad positioned against the back of your lower legs, legs extended in front of you.',
+ 'Curl your heels down and back toward the seat by contracting your hamstrings, then return under control.',
+ 'Letting the hips rise off the seat to help the curl. Keep your hips pinned down so the hamstrings do all the work.',
+ 'Keep your core braced and back flat against the seat pad throughout.',
+ '10–15 reps', '60–90 sec', '2-1-2 tempo',
+ 'The seated hip angle changes the stretch on your hamstrings compared to lying — focus on feeling that stretch at the top of each rep.',
+ 'isolation', true, '{}', '{hypertrophy}', 'hamstrings', '{}', 'strength', 'beginner'),
+
+('Spider Curl', 'Pull', 'biceps', '{forearms}', 'Dumbbell',
+ 'Lie face-down on an incline bench set to roughly 45°, arms hanging straight down holding dumbbells.',
+ 'Curl the weight up by flexing your elbows, squeezing at the top, then lower under control to a full stretch.',
+ 'Letting the upper arms drift forward off the bench. Keep them pinned to the pad throughout so the biceps do all the lifting, with zero shoulder swing.',
+ 'Press your chest and upper arms into the pad to lock out any body English.',
+ '10–15 reps', '60–90 sec', '3-1-1 tempo — slow, controlled stretch down',
+ 'This angle emphasizes the stretch at the bottom more than a standing curl — don''t rush through it.',
+ 'isolation', true, '{}', '{hypertrophy}', 'biceps', '{forearms}', 'strength', 'intermediate'),
+
+('Cable Rope Hammer Curl', 'Pull', 'biceps', '{forearms}', 'Cable',
+ 'Attach a rope handle to a low cable pulley, grip one end in each hand with palms facing each other.',
+ 'Curl the rope up toward your shoulders keeping your palms facing in throughout (a neutral grip), then lower under control.',
+ 'Letting the elbows drift forward or swinging the torso to move the weight. Keep elbows pinned at your sides.',
+ 'Brace your core and keep your upper arms still — only the forearms should move.',
+ '10–15 reps', '60–90 sec', '2-1-2 tempo',
+ 'The neutral grip shifts emphasis onto the brachialis and forearms alongside the biceps — feel it on the outside of your upper arm.',
+ 'isolation', false, '{}', '{hypertrophy}', 'biceps', '{forearms}', 'strength', 'beginner');
+
+-- Phase 37 conditioning exercises (reference content) — hypertrophy_*
+-- columns stay null, same reasoning as the plyometric entries above.
+-- Actual logging reuses conditioning_log + CONDITIONING_DRILLS (see
+-- supabase-schema-phase37-exercise-library-v2.sql for full rationale).
+insert into exercises (
+  name, muscle_group, body_region, secondary_regions, equipment,
+  cue_setup, cue_execution, cue_mistake, cue_bracing,
+  movement_type, avoid_flags, block_types,
+  muscle_map_key, muscle_map_secondary_keys, category, experience_level,
+  conditioning_duration_guidance, conditioning_intensity_guidance
+) values
+
+('Rowing Machine', 'Full Body', 'back', '{hamstrings,biceps}', 'Machine',
+ 'Strap your feet in, grip the handle with both hands, start with knees bent and arms extended.',
+ 'Drive through your legs first, then lean back slightly and pull the handle to your lower ribs, finishing with your arms — then reverse the sequence smoothly to return.',
+ 'Pulling with the arms and back before the legs have finished driving. The power should come from your legs first — arms and back just finish the stroke.',
+ 'Keep your core braced through the drive, especially during the leg-drive phase, so the force transfers cleanly through your trunk.',
+ 'conditioning', '{}', '{}', 'lats', '{hamstrings,biceps}', 'conditioning', 'beginner',
+ '15–30 min steady-state, or 20–30 sec on / 40 sec off for intervals',
+ 'Steady-state: RPE 5–6, conversational pace. Intervals: RPE 8–9 on work periods.'),
+
+('Assault Bike', 'Full Body', 'quads', '{delts,hamstrings}', 'Machine',
+ 'Sit on the bike with hands on the moving handles and feet on the pedals, and adjust the seat so your knee has a slight bend at full extension.',
+ 'Pedal and pump the handles together, using both arms and legs to drive the fan.',
+ 'Only pedaling with the legs and letting the arms go along for the ride. Push and pull the handles actively to work the upper body too.',
+ 'Keep your core engaged to stabilize your torso as you drive through both arms and legs.',
+ 'conditioning', '{}', '{}', 'quads', '{delts,hamstrings}', 'conditioning', 'beginner',
+ '10–20 min steady-state, or 10–20 sec max-effort sprints with 1–2 min recovery for intervals',
+ 'Steady-state: RPE 5–6. Sprint intervals: all-out effort (RPE 9–10) on work periods.'),
+
+('Stair Climber', 'Legs', 'quads', '{glutes,calves}', 'Machine',
+ 'Stand on the machine with a light grip on the side or front rails — enough for balance, not to take weight off your legs.',
+ 'Step continuously, driving through your full foot on each step rather than just your toes.',
+ 'Leaning heavily on the handrails, which lets your arms take weight that should be loading your legs. Use the rails for balance only.',
+ 'Keep your torso upright and core braced rather than hunching forward over the rails.',
+ 'conditioning', '{}', '{}', 'quads', '{glutes,calves}', 'conditioning', 'beginner',
+ '10–20 min continuous',
+ 'RPE 5–7 — a pace you can sustain for the full duration without stopping.'),
+
+('Incline Treadmill Walk', 'Legs', 'glutes', '{quads,calves}', 'Machine',
+ 'Set the treadmill to an incline (commonly 10–15%) at a brisk walking pace, holding the rails only if needed for balance.',
+ 'Walk continuously at the set incline and pace for the full duration, maintaining an upright posture.',
+ 'Gripping the handrails to reduce the workload. Walking hands-free (or with just a light touch) is what makes the incline actually work your legs and cardio system.',
+ 'Keep your torso upright — leaning on the rails or hunching forward reduces how much your hips and glutes work.',
+ 'conditioning', '{}', '{}', 'glutes', '{quads,calves}', 'conditioning', 'beginner',
+ '20–45 min continuous',
+ 'RPE 4–6 — brisk but sustainable; a common low-impact alternative to running for steady cardio volume.');
+
+-- Phase 37 category/experience_level backfill, applied once after all
+-- seed inserts above (same rules as supabase-schema-phase37-exercise-
+-- library-v2.sql, for a live database that already has rows).
+update exercises set category = 'plyometric' where movement_type = 'plyometric' and category is null;
+update exercises set category = 'strength' where category is null;
+update exercises set experience_level = 'advanced' where 'power_speed' = any(block_types) and experience_level is null;
+update exercises set experience_level = 'intermediate' where movement_type = 'compound' and (avoid_flags && array['heavy_spinal_load','overhead']) and experience_level is null;
+update exercises set experience_level = 'beginner' where experience_level is null;
 
 -- ── user_achievements (milestone system) ─────────────────────────────────
 -- Definitions (title, coach-voice description, unlock condition) live in

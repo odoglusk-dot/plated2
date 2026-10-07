@@ -437,6 +437,14 @@
   .hero .hero-num { font-family: var(--font-display); font-weight: 600; font-size: 2.7rem; color: var(--text); line-height: 1.05; margin-top: 0.35rem; }
   .hero .hero-num .hero-unit { font-size: 0.95rem; font-weight: 500; color: var(--text-dim); margin-left: 0.35rem; }
   .float-card { margin-top: -28px; position: relative; z-index: 1; box-shadow: 0 16px 34px rgba(23,24,27,0.08); }
+  /* Pro-only custom Home background (item 1, personalization batch) — the
+     scrim is baked into the background-image itself (see applyHomeBackground
+     in index.html), this just keeps the hero's own text readable on it. */
+  #panel-dashboard.has-custom-home-bg { background-repeat: no-repeat; }
+  #panel-dashboard.has-custom-home-bg .hero,
+  #panel-dashboard.has-custom-home-bg .hero .eyebrow-sm,
+  #panel-dashboard.has-custom-home-bg .hero .muted { color: #fff; }
+  #panel-dashboard.has-custom-home-bg .hero .hero-unit { color: rgba(255,255,255,0.8); }
   .focus-inline { margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid var(--divider); }
   .focus-label { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; color: var(--text); }
   .float-card .stat-card-sm { background: var(--surface-2); box-shadow: none; }
@@ -1145,6 +1153,7 @@ const state = {
   achievements: [], // unlocked rows: {achievement_id, unlocked_at} — see loadAchievements()
   workoutSession: null, // today's row: {date, ended_at, analysis, analysis_generated_at} | null — see loadWorkoutSession()
   healthSyncToken: null, // {created_at, last_used_at, revoked_at} | null — see loadHealthSyncStatus(). Never the raw token itself; that's only ever seen once, at generation time.
+  homeBackgroundUrl: '', // signed URL for profile.home_background_path, or '' — see loadHomeBackgroundUrl()
   activeTab: 'dashboard',
   aiRemaining: null,
   subscription: null,
@@ -1981,6 +1990,7 @@ const UPGRADE_CONTEXT_GROUP = 'Unlock Group Mode — a shared streak and leaderb
 const UPGRADE_CONTEXT_ATHLETE_POSITION = 'Unlock positional drill emphasis for your sport.';
 const UPGRADE_CONTEXT_ATHLETE_PSYCH = 'Unlock sports psychology tools like pre-performance visualization and the confidence bank.';
 const UPGRADE_CONTEXT_STREAK = "You've built a real streak — Pro users get AI insight into patterns like this.";
+const UPGRADE_CONTEXT_HOME_CUSTOMIZE = 'Unlock a custom Home screen background and widget reordering.';
 
 // Price shown next to every inline "Upgrade" CTA in the app, not just the
 // full paywall screen — a bare "Upgrade" button with price hidden behind
@@ -2306,6 +2316,7 @@ async function enterApp(session) {
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
   await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadTrainingInsights(), loadPlan(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadGroup(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus()]);
+  await loadHomeBackgroundUrl(); // depends on state.profile, loaded above
   renderAll();
   maybeShowGroupInvitePreview();
 }
@@ -2417,6 +2428,16 @@ async function ensureProfileAndGoals(user, displayNameHint) {
 async function loadProfile() {
   const { data } = await supabase.from('profiles').select('*').eq('id', state.user.id).maybeSingle();
   state.profile = data || null;
+}
+
+// Private bucket, same signed-URL-per-load convention as loadPhotos() —
+// depends on state.profile, so it's called after loadProfile() resolves
+// rather than inside the same Promise.all batch.
+async function loadHomeBackgroundUrl() {
+  const path = state.profile?.home_background_path;
+  if (!path) { state.homeBackgroundUrl = ''; return; }
+  const { data, error } = await supabase.storage.from('home-backgrounds').createSignedUrl(path, 60 * 60);
+  state.homeBackgroundUrl = (!error && data?.signedUrl) || '';
 }
 
 async function loadGoals() {
@@ -3678,6 +3699,134 @@ function proteinByMealHtml(todayLogs, proteinGoal) {
   </div>`;
 }
 
+// Item 2 of the personalization batch: Home screen widgets, broken out of
+// renderDashboard()'s single template so they can be rendered in whatever
+// order getHomeWidgetOrder() returns. Contextual banners (achievement
+// unlock, volume spike, streak upgrade prompt, tips) are NOT widgets —
+// they stay pinned at the top of the panel regardless of widget order,
+// since they're time-sensitive alerts, not layout the user is arranging.
+function homeWidgetHtml(key, ctx) {
+  const { totals, g, calorieColor, todaysLiftVolume, trainingStreak, todayWaterOz, todayWaterEntries, current, best, ws } = ctx;
+  switch (key) {
+    case 'macros':
+      return `
+        <div class="hero">
+          <div class="eyebrow-sm">Today</div>
+          <div class="hero-num">${round(totals.protein_g)}<span class="hero-unit">g protein</span></div>
+          <div class="muted small">of ${round(g.protein_g)}g goal</div>
+        </div>
+        <div class="card float-card">
+          ${todaysFocusHeroHtml()}
+          <div class="stat-grid-2">
+            <div class="stat-card-sm">
+              <h3>Calories</h3>
+              <div class="stat-num" style="font-size:1.3rem;color:${calorieColor};">${round(totals.calories)}<span class="muted" style="font-size:0.72rem;"> / ${round(g.calories)}</span></div>
+            </div>
+            <div class="stat-card-sm">
+              <h3>Today's Volume</h3>
+              <div class="stat-num" style="font-size:1.3rem;">${toDisplayWeight(todaysLiftVolume, 0).value.toLocaleString()}<span class="muted" style="font-size:0.72rem;"> ${weightUnitLabel()}</span></div>
+            </div>
+            <div class="stat-card-sm">
+              <h3>Carbs</h3>
+              <div class="stat-num" style="font-size:1.3rem;">${round(totals.carbs_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.carbs_g)}g</span></div>
+            </div>
+            <div class="stat-card-sm">
+              <h3>Current Streak</h3>
+              <div class="stat-num" style="font-size:1.3rem;">${trainingStreak}<span class="muted" style="font-size:0.72rem;"> day${trainingStreak === 1 ? '' : 's'} training</span></div>
+            </div>
+            <div class="stat-card-sm">
+              <h3>Fat</h3>
+              <div class="stat-num" style="font-size:1.3rem;">${round(totals.fat_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.fat_g)}g</span></div>
+            </div>
+            <div class="stat-card-sm">
+              <h3>Water</h3>
+              <div class="stat-num" style="font-size:1.3rem;">${round(todayWaterOz)}oz<span class="muted" style="font-size:0.72rem;"> / ${round(g.water_oz || 64)}oz</span></div>
+            </div>
+          </div>
+        </div>`;
+    case 'todaysPlan':
+      return todaysPlanCardHtml();
+    case 'streakWater':
+      return `
+        <div class="card">
+          <p class="muted" style="margin:0 0 0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
+          <div class="row">
+            <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
+            <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
+          </div>
+          <div class="row" style="margin-top:0.5rem;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <span class="muted">💧 Water:</span>
+            <div class="chip-row">
+              <button class="chip" data-water="8">+8oz</button>
+              <button class="chip" data-water="16">+16oz</button>
+              <button class="chip" data-water="24">+24oz</button>
+            </div>
+            <div class="btn-group">
+              <input class="input mono" id="water_custom_oz" type="number" min="1" placeholder="oz" style="width:64px;padding:0.4rem 0.5rem;">
+              <button class="btn btn-sm" id="water_custom_log">Log</button>
+            </div>
+          </div>
+          ${todayWaterEntries.length ? `
+          <div style="margin-top:0.5rem;">
+            ${todayWaterEntries.map((w) => `
+              <div class="log-row" style="padding:0.3rem 0;">
+                <span class="muted small">${new Date(w.logged_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${round(w.amount_oz)}oz</span>
+                <button class="btn btn-sm btn-ghost" data-delete-water="${w.id}">✕</button>
+              </div>`).join('')}
+          </div>` : ''}
+        </div>`;
+    case 'thisWeek':
+      return `
+        <div class="card">
+          <h3>This Week</h3>
+          <div class="row" style="margin-top:0.25rem;">
+            <span class="badge on">🥩 Protein goal hit: ${ws.proteinDaysHit}/7 days</span>
+            <span class="badge">💧 Hydration goal hit: ${ws.waterDaysHit}/7 days</span>
+          </div>
+          <p class="muted" style="margin-top:0.75rem;margin-bottom:0.25rem;">Daily averages vs. goal, last 7 days:</p>
+          <p class="muted">Calories ${round(ws.avgCalories)} / ${round(g.calories)} · Protein ${round(ws.avgProtein)}g / ${round(g.protein_g)}g · Carbs ${round(ws.avgCarbs)}g / ${round(g.carbs_g)}g · Fat ${round(ws.avgFat)}g / ${round(g.fat_g)}g</p>
+          <button class="btn btn-sm" id="shareRecapBtn" style="margin-top:0.75rem;">Share weekly recap</button>
+          <div id="recapPreviewSlot"></div>
+        </div>`;
+    case 'loggedToday':
+      return `
+        <div class="card">
+          <h3>Logged Today</h3>
+          ${state.todayLogs.length === 0
+            ? `<p class="muted">Nothing logged yet — head to the Log Food tab.</p>`
+            : state.todayLogs.map((l) => `
+              <div class="log-row">
+                <div>
+                  <div class="name">${esc(l.food_name)}</div>
+                  <div class="macros">${round(l.calories)} kcal · P${round(l.protein_g)} C${round(l.carbs_g)} F${round(l.fat_g)}</div>
+                </div>
+                <button class="btn btn-sm btn-ghost" data-delete-log="${l.id}">✕</button>
+              </div>`).join('')}
+        </div>`;
+    case 'proteinByMeal':
+      return proteinByMealHtml(state.todayLogs, state.goals.protein_g);
+    default:
+      return '';
+  }
+}
+
+// Item 1 of the personalization batch: a Pro-only custom background photo
+// with a dark overlay baked right into the background-image declaration
+// (no separate scrim element needed) so card text stays legible on top.
+function applyHomeBackground(panel) {
+  if (hasAccess(state.subscription) && state.homeBackgroundUrl) {
+    panel.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), url("${state.homeBackgroundUrl}")`;
+    panel.style.backgroundSize = 'cover';
+    panel.style.backgroundPosition = 'center';
+    panel.classList.add('has-custom-home-bg');
+  } else {
+    panel.style.backgroundImage = '';
+    panel.style.backgroundSize = '';
+    panel.style.backgroundPosition = '';
+    panel.classList.remove('has-custom-home-bg');
+  }
+}
+
 function renderDashboard() {
   const totals = sumMacros(state.todayLogs);
   const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
@@ -3714,43 +3863,12 @@ function renderDashboard() {
   const ws = weeklySummary();
   const activeTips = computeActiveTips();
 
+  const widgetCtx = { totals, g, calorieColor, todaysLiftVolume, trainingStreak, todayWaterOz, todayWaterEntries, current, best, ws };
+  const widgetOrder = getHomeWidgetOrder();
+
   const panel = $('#panel-dashboard');
+  applyHomeBackground(panel);
   panel.innerHTML = `
-    <div class="hero">
-      <div class="eyebrow-sm">Today</div>
-      <div class="hero-num">${round(totals.protein_g)}<span class="hero-unit">g protein</span></div>
-      <div class="muted small">of ${round(g.protein_g)}g goal</div>
-    </div>
-    <div class="card float-card">
-      ${todaysFocusHeroHtml()}
-      <div class="stat-grid-2">
-        <div class="stat-card-sm">
-          <h3>Calories</h3>
-          <div class="stat-num" style="font-size:1.3rem;color:${calorieColor};">${round(totals.calories)}<span class="muted" style="font-size:0.72rem;"> / ${round(g.calories)}</span></div>
-        </div>
-        <div class="stat-card-sm">
-          <h3>Today's Volume</h3>
-          <div class="stat-num" style="font-size:1.3rem;">${toDisplayWeight(todaysLiftVolume, 0).value.toLocaleString()}<span class="muted" style="font-size:0.72rem;"> ${weightUnitLabel()}</span></div>
-        </div>
-        <div class="stat-card-sm">
-          <h3>Carbs</h3>
-          <div class="stat-num" style="font-size:1.3rem;">${round(totals.carbs_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.carbs_g)}g</span></div>
-        </div>
-        <div class="stat-card-sm">
-          <h3>Current Streak</h3>
-          <div class="stat-num" style="font-size:1.3rem;">${trainingStreak}<span class="muted" style="font-size:0.72rem;"> day${trainingStreak === 1 ? '' : 's'} training</span></div>
-        </div>
-        <div class="stat-card-sm">
-          <h3>Fat</h3>
-          <div class="stat-num" style="font-size:1.3rem;">${round(totals.fat_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.fat_g)}g</span></div>
-        </div>
-        <div class="stat-card-sm">
-          <h3>Water</h3>
-          <div class="stat-num" style="font-size:1.3rem;">${round(todayWaterOz)}oz<span class="muted" style="font-size:0.72rem;"> / ${round(g.water_oz || 64)}oz</span></div>
-        </div>
-      </div>
-    </div>
-    ${todaysPlanCardHtml()}
     ${achievementUnlockBannerHtml()}
     ${showSpikeWarning ? `
     <div class="card pr-banner">
@@ -3767,61 +3885,7 @@ function renderDashboard() {
       </div>
     </div>` : ''}
     ${tipsHtml(activeTips)}
-
-    <div class="card">
-      <p class="muted" style="margin:0 0 0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
-      <div class="row">
-        <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
-        <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
-      </div>
-      <div class="row" style="margin-top:0.5rem;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-        <span class="muted">💧 Water:</span>
-        <div class="chip-row">
-          <button class="chip" data-water="8">+8oz</button>
-          <button class="chip" data-water="16">+16oz</button>
-          <button class="chip" data-water="24">+24oz</button>
-        </div>
-        <div class="btn-group">
-          <input class="input mono" id="water_custom_oz" type="number" min="1" placeholder="oz" style="width:64px;padding:0.4rem 0.5rem;">
-          <button class="btn btn-sm" id="water_custom_log">Log</button>
-        </div>
-      </div>
-      ${todayWaterEntries.length ? `
-      <div style="margin-top:0.5rem;">
-        ${todayWaterEntries.map((w) => `
-          <div class="log-row" style="padding:0.3rem 0;">
-            <span class="muted small">${new Date(w.logged_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${round(w.amount_oz)}oz</span>
-            <button class="btn btn-sm btn-ghost" data-delete-water="${w.id}">✕</button>
-          </div>`).join('')}
-      </div>` : ''}
-    </div>
-
-    <div class="card">
-      <h3>This Week</h3>
-      <div class="row" style="margin-top:0.25rem;">
-        <span class="badge on">🥩 Protein goal hit: ${ws.proteinDaysHit}/7 days</span>
-        <span class="badge">💧 Hydration goal hit: ${ws.waterDaysHit}/7 days</span>
-      </div>
-      <p class="muted" style="margin-top:0.75rem;margin-bottom:0.25rem;">Daily averages vs. goal, last 7 days:</p>
-      <p class="muted">Calories ${round(ws.avgCalories)} / ${round(g.calories)} · Protein ${round(ws.avgProtein)}g / ${round(g.protein_g)}g · Carbs ${round(ws.avgCarbs)}g / ${round(g.carbs_g)}g · Fat ${round(ws.avgFat)}g / ${round(g.fat_g)}g</p>
-      <button class="btn btn-sm" id="shareRecapBtn" style="margin-top:0.75rem;">Share weekly recap</button>
-      <div id="recapPreviewSlot"></div>
-    </div>
-
-    <div class="card">
-      <h3>Logged Today</h3>
-      ${state.todayLogs.length === 0
-        ? `<p class="muted">Nothing logged yet — head to the Log Food tab.</p>`
-        : state.todayLogs.map((l) => `
-          <div class="log-row">
-            <div>
-              <div class="name">${esc(l.food_name)}</div>
-              <div class="macros">${round(l.calories)} kcal · P${round(l.protein_g)} C${round(l.carbs_g)} F${round(l.fat_g)}</div>
-            </div>
-            <button class="btn btn-sm btn-ghost" data-delete-log="${l.id}">✕</button>
-          </div>`).join('')}
-    </div>
-    ${proteinByMealHtml(state.todayLogs, state.goals.protein_g)}
+    ${widgetOrder.map((key) => homeWidgetHtml(key, widgetCtx)).join('')}
   `;
 
   const spikeDismiss = $('#spikeDismiss');
@@ -5487,6 +5551,13 @@ const LEARNING_PATHS = [
 let showLearningPaths = false;
 let showHealthSyncSetup = false;
 
+// Items 1+2 of the personalization batch: Pro-only Home screen
+// customization (background upload + widget reorder), same full-panel
+// sub-screen pattern as renderHealthSyncSetup.
+let showHomeCustomize = false;
+let homeBgUploading = false;
+let homeBgError = '';
+
 // Items 9+10 of the conversion-surface-area batch: a custom in-app cancel
 // flow (reason prompt, then a stay/pause/cancel offer) replacing a direct
 // jump into Stripe's hosted portal — see cancel-subscription.js.
@@ -5674,6 +5745,163 @@ function renderHealthSyncSetup(panel) {
   });
 }
 
+// ── Home screen customization (Pro only) ────────────────────────────────
+// Items 1+2 of the personalization batch: a custom uploaded background
+// photo (private home-backgrounds storage bucket, same folder-per-user
+// pattern as progress-photos) and drag-and-drop widget reordering
+// (SortableJS, lazy-loaded like Chart.js/ZXing elsewhere in this file).
+// Same full-panel sub-screen convention as renderHealthSyncSetup().
+const DEFAULT_HOME_WIDGET_ORDER = ['macros', 'todaysPlan', 'streakWater', 'thisWeek', 'loggedToday', 'proteinByMeal'];
+const HOME_WIDGET_LABELS = {
+  macros: "Today's Macros",
+  todaysPlan: "Today's Plan",
+  streakWater: 'Streak & Water',
+  thisWeek: 'This Week',
+  loggedToday: 'Logged Today',
+  proteinByMeal: 'Protein by Meal',
+};
+function getHomeWidgetOrder() {
+  const saved = state.profile?.home_widget_order;
+  if (!Array.isArray(saved) || !saved.length) return DEFAULT_HOME_WIDGET_ORDER.slice();
+  const valid = saved.filter((k) => DEFAULT_HOME_WIDGET_ORDER.includes(k));
+  const missing = DEFAULT_HOME_WIDGET_ORDER.filter((k) => !valid.includes(k));
+  return [...valid, ...missing];
+}
+
+let sortableJsLoadPromise = null;
+function ensureSortableJs() {
+  if (window.Sortable) return Promise.resolve();
+  if (sortableJsLoadPromise) return sortableJsLoadPromise;
+  sortableJsLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return sortableJsLoadPromise;
+}
+
+let homeWidgetSortable = null;
+async function wireHomeWidgetOrder(panel) {
+  await ensureSortableJs().catch(() => null);
+  const list = $('#homeWidgetOrderList', panel);
+  if (!list || !window.Sortable) return;
+  if (homeWidgetSortable) { homeWidgetSortable.destroy(); homeWidgetSortable = null; }
+  homeWidgetSortable = new Sortable(list, {
+    animation: 150,
+    handle: '[data-drag-handle]',
+    onEnd: async () => {
+      const newOrder = Array.from(list.children).map((el) => el.dataset.widgetKey);
+      state.profile = { ...state.profile, home_widget_order: newOrder };
+      const { error } = await supabase.from('profiles').update({ home_widget_order: newOrder }).eq('id', state.user.id);
+      if (error) toast('Could not save widget order: ' + error.message);
+      // setActiveTab() only toggles CSS visibility, it doesn't re-render —
+      // rebuild the (currently hidden) dashboard now so the new order is
+      // already in place the instant the user switches back to Home.
+      renderDashboard();
+    },
+  });
+}
+
+function renderHomeCustomize(panel) {
+  if (!hasAccess(state.subscription)) {
+    panel.innerHTML = `
+      <div class="card">
+        <button class="btn btn-sm btn-ghost" id="closeHomeCustomizeBtn">← Back</button>
+        <h3>Customize Home Screen</h3>
+        <p class="muted">Upload your own background photo and reorder your Home screen widgets — all fixed-size, just a different layout. Unlock it on the paid tier.</p>
+        ${upgradePriceLineHtml()}
+        <button class="btn btn-primary" id="unlockHomeCustomizeBtn">Upgrade — Unlock Personalization</button>
+      </div>`;
+    $('#closeHomeCustomizeBtn').addEventListener('click', () => { showHomeCustomize = false; renderProfile(); });
+    $('#unlockHomeCustomizeBtn').addEventListener('click', () => showUpgradeScreen(UPGRADE_CONTEXT_HOME_CUSTOMIZE));
+    return;
+  }
+
+  const order = getHomeWidgetOrder();
+  panel.innerHTML = `
+    <div class="card">
+      <button class="btn btn-sm btn-ghost" id="closeHomeCustomizeBtn">← Back</button>
+      <h3>Customize Home Screen</h3>
+    </div>
+
+    <div class="card">
+      <h3>Home Background</h3>
+      <p class="muted small">Upload a photo from your device to use as the Home screen background, shown with a dark overlay so text stays readable.</p>
+      ${state.homeBackgroundUrl ? `<img src="${state.homeBackgroundUrl}" alt="Home background" style="width:100%;border-radius:10px;margin:0.5rem 0;max-height:160px;object-fit:cover;">` : ''}
+      <div class="row" style="gap:0.5rem;align-items:center;">
+        <label class="btn btn-sm" for="homeBgFileInput" style="${homeBgUploading ? 'pointer-events:none;opacity:0.6;' : ''}">${homeBgUploading ? 'Uploading…' : (state.homeBackgroundUrl ? 'Change Photo' : 'Upload Photo')}</label>
+        <input type="file" id="homeBgFileInput" accept="image/*" style="display:none;" ${homeBgUploading ? 'disabled' : ''}>
+        ${state.homeBackgroundUrl ? `<button class="btn btn-sm btn-ghost" id="homeBgResetBtn" ${homeBgUploading ? 'disabled' : ''}>Reset to Default</button>` : ''}
+      </div>
+      ${homeBgError ? `<p class="small" style="color:var(--danger);margin-top:0.5rem;">${esc(homeBgError)}</p>` : ''}
+    </div>
+
+    <div class="card">
+      <h3>Reorder Widgets</h3>
+      <p class="muted small">Drag to reorder. Widgets stay the same size — only the order changes.</p>
+      <div id="homeWidgetOrderList">
+        ${order.map((key) => `
+          <div class="log-row" data-widget-key="${key}">
+            <span><span data-drag-handle style="cursor:grab;margin-right:0.5rem;color:var(--text-faint);">☰</span>${esc(HOME_WIDGET_LABELS[key] || key)}</span>
+          </div>`).join('')}
+      </div>
+      <button class="btn btn-sm btn-ghost" id="resetWidgetOrderBtn" style="margin-top:0.75rem;">Reset to Default Order</button>
+    </div>
+  `;
+
+  $('#closeHomeCustomizeBtn').addEventListener('click', () => { showHomeCustomize = false; homeBgError = ''; renderProfile(); });
+
+  $('#homeBgFileInput').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    homeBgError = '';
+    homeBgUploading = true;
+    renderHomeCustomize(panel);
+    try {
+      const blob = await resizePhotoToBlob(file, 1600);
+      const oldPath = state.profile?.home_background_path;
+      const path = `${state.user.id}/${crypto.randomUUID()}.jpg`;
+      const { error: uploadErr } = await supabase.storage.from('home-backgrounds').upload(path, blob, { contentType: 'image/jpeg' });
+      if (uploadErr) throw uploadErr;
+      const { error: updateErr } = await supabase.from('profiles').update({ home_background_path: path }).eq('id', state.user.id);
+      if (updateErr) throw updateErr;
+      if (oldPath) await supabase.storage.from('home-backgrounds').remove([oldPath]);
+      await loadProfile();
+      await loadHomeBackgroundUrl();
+      renderDashboard(); // see the widget-reorder onEnd comment above
+    } catch (err) {
+      homeBgError = err.message || 'Failed to upload background.';
+    } finally {
+      homeBgUploading = false;
+      renderHomeCustomize(panel);
+    }
+  });
+
+  const resetBgBtn = $('#homeBgResetBtn');
+  if (resetBgBtn) resetBgBtn.addEventListener('click', async () => {
+    const oldPath = state.profile?.home_background_path;
+    const { error } = await supabase.from('profiles').update({ home_background_path: null }).eq('id', state.user.id);
+    if (error) return toast('Could not reset: ' + error.message);
+    if (oldPath) await supabase.storage.from('home-backgrounds').remove([oldPath]);
+    await loadProfile();
+    await loadHomeBackgroundUrl();
+    renderDashboard();
+    renderHomeCustomize(panel);
+  });
+
+  $('#resetWidgetOrderBtn').addEventListener('click', async () => {
+    const { error } = await supabase.from('profiles').update({ home_widget_order: null }).eq('id', state.user.id);
+    if (error) return toast('Could not reset order: ' + error.message);
+    await loadProfile();
+    renderDashboard();
+    renderHomeCustomize(panel);
+  });
+
+  wireHomeWidgetOrder(panel);
+}
+
 // Items 9+10: custom in-app cancel flow, reached from the "Cancel
 // Subscription" link on the tier status card (not the "Manage Subscription"
 // button, which still opens Stripe's portal for payment method/billing
@@ -5770,6 +5998,7 @@ function renderProfile() {
   if (showLearningPaths) { renderLearningPaths(panel); return; }
   if (showUserGuide) { renderUserGuide(panel); return; }
   if (showHealthSyncSetup) { renderHealthSyncSetup(panel); return; }
+  if (showHomeCustomize) { renderHomeCustomize(panel); return; }
   if (showCancelFlow) { renderCancelFlow(panel); return; }
   const p = state.profile || {};
   const bs = state.bodyStats || {};
@@ -5906,6 +6135,13 @@ function renderProfile() {
       </div>
     </div>
 
+    <div class="settings-section-label">Personalization</div>
+    <div class="card">
+      <h3>Customize Home Screen</h3>
+      <p class="muted small" style="margin-top:-0.3rem;">Upload your own background photo and reorder your Home screen widgets.</p>
+      <button class="btn" id="openHomeCustomizeBtn">${hasAccess(state.subscription) ? 'Customize' : 'Customize (Pro)'}</button>
+    </div>
+
     <div class="settings-section-label">Krafft Athlete Mode</div>
     <div class="card">
       <h3>Krafft Athlete Mode</h3>
@@ -6034,6 +6270,7 @@ function renderProfile() {
 
   $('#openGuideBtn')?.addEventListener('click', () => { showUserGuide = true; renderProfile(); });
   $('#openHealthSyncSetupBtn')?.addEventListener('click', () => { showHealthSyncSetup = true; renderProfile(); });
+  $('#openHomeCustomizeBtn')?.addEventListener('click', () => { showHomeCustomize = true; renderProfile(); });
 
   $('#goal_save')?.addEventListener('click', async () => {
     const goals = {
@@ -7012,7 +7249,7 @@ let expandedLiftExercises = new Set();
 // which individual rows inside it (above) are expanded — defaults open.
 let liftExercisesSectionExpanded = true;
 let liftForm = {
-  exercise: '', muscleGroup: '', bodyRegion: '', weight: '', sets: 3,
+  exercise: '', bodyRegion: '', weight: '', sets: 3,
   repsPerSet: ['5', '5', '5'], warmupPerSet: [false, false, false],
   date: localDateStr(), isSuperset: false, supersetGroup: '',
   // Which Weekly Training Volume / Muscle Map muscles this specific lift
@@ -7536,7 +7773,6 @@ function drawLiftAutocompleteDropdown(wrap) {
     const val = item.dataset.acSelect;
     liftForm.exercise = val;
     liftAutocompleteOpen = false;
-    liftForm.muscleGroup = exerciseDefFor(val)?.muscle_group || DEFAULT_MUSCLE_GROUP[val] || liftForm.muscleGroup || '';
     liftForm.bodyRegion = exerciseDefFor(val)?.body_region || DEFAULT_BODY_REGION[val] || liftForm.bodyRegion || '';
     liftForm.muscleMapKeys = defaultMuscleMapKeysFor(exerciseDefFor(val));
     prefillLiftFormFromLast(val);
@@ -8116,19 +8352,11 @@ function renderLiftLog(panel) {
       </div>
       <div class="field autocomplete-wrap" id="liftExerciseWrap"></div>
       ${liftForm.exercise ? `
-      <div class="row">
-        <div class="field"><label>Muscle group</label>
-          <select id="lift_muscleGroup">
-            <option value="">Muscle group…</option>
-            ${MUSCLE_GROUPS.map((m) => `<option value="${m}" ${liftForm.muscleGroup === m ? 'selected' : ''}>${m}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field"><label>Body region (for map)</label>
-          <select id="lift_bodyRegion">
-            <option value="">Body region…</option>
-            ${BODY_REGIONS.map((r) => `<option value="${r}" ${liftForm.bodyRegion === r ? 'selected' : ''}>${BODY_REGION_LABELS[r]}</option>`).join('')}
-          </select>
-        </div>
+      <div class="field"><label>Body region (for map)</label>
+        <select id="lift_bodyRegion">
+          <option value="">Body region…</option>
+          ${BODY_REGIONS.map((r) => `<option value="${r}" ${liftForm.bodyRegion === r ? 'selected' : ''}>${BODY_REGION_LABELS[r]}</option>`).join('')}
+        </select>
       </div>
       <div class="field">
         <label>Muscles worked <span class="muted">(optional — feeds Weekly Training Volume &amp; the Muscle Map)</span></label>
@@ -8323,8 +8551,6 @@ function renderLiftLog(panel) {
     goalCardEditing = false;
     renderLiftsTab();
   }));
-  const mgSel = $('#lift_muscleGroup');
-  if (mgSel) mgSel.addEventListener('change', (e) => { liftForm.muscleGroup = e.target.value; });
   const brSel = $('#lift_bodyRegion');
   if (brSel) brSel.addEventListener('change', (e) => { liftForm.bodyRegion = e.target.value; });
   $$('[data-lift-muscle-map-key]', panel).forEach((btn) => btn.addEventListener('click', () => {
@@ -8448,7 +8674,6 @@ function renderLiftLog(panel) {
   $$('[data-suggest-exercise]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const val = btn.dataset.suggestExercise;
     liftForm.exercise = val;
-    liftForm.muscleGroup = exerciseDefFor(val)?.muscle_group || DEFAULT_MUSCLE_GROUP[val] || '';
     liftForm.bodyRegion = exerciseDefFor(val)?.body_region || DEFAULT_BODY_REGION[val] || '';
     liftForm.muscleMapKeys = defaultMuscleMapKeysFor(exerciseDefFor(val));
     prefillLiftFormFromLast(val);
@@ -8468,7 +8693,12 @@ async function addLiftFromForm() {
   if (!exercise || !liftForm.weight || repsPerSet.length === 0) return;
   if (liftForm.isSuperset && !liftForm.supersetGroup.trim()) return;
   const exerciseDef = exerciseDefFor(exercise);
-  const muscleGroup = liftForm.muscleGroup || exerciseDef?.muscle_group || DEFAULT_MUSCLE_GROUP[exercise] || 'Other';
+  // Item 3 of the personalization batch: category is inferred automatically
+  // from the exercise library — no manual Push/Pull/Other select anymore.
+  // An exercise not in the library (custom/unmatched name) and not in the
+  // small DEFAULT_MUSCLE_GROUP fallback logs with no category tag at all,
+  // rather than blocking the log or defaulting to a meaningless 'Other'.
+  const muscleGroup = exerciseDef?.muscle_group || DEFAULT_MUSCLE_GROUP[exercise] || null;
   const bodyRegion = liftForm.bodyRegion || exerciseDef?.body_region || null;
   const reps = Math.round(avgReps(repsPerSet) * 10) / 10;
   const weightNum = fromDisplayWeight(liftForm.weight);
@@ -11337,6 +11567,12 @@ const CONDITIONING_DRILLS = [
   { key: 'cone_drill', name: 'Cone Drill (e.g. 5-10-5 Shuttle)', description: 'A timed cone pattern — builds change-of-direction speed and body control.', metricType: 'time', tags: ['agility', 'lateral'] },
   { key: 'ladder_drill', name: 'Agility Ladder', description: 'Footwork patterns through a ladder — builds foot speed and coordination, not top-end speed.', metricType: 'completion', tags: ['agility'] },
   { key: 'change_of_direction', name: 'Change-of-Direction Drill (e.g. T-Drill)', description: 'A timed cut-and-accelerate pattern — builds the deceleration and re-acceleration sport actually demands.', metricType: 'time', tags: ['agility', 'reactive'] },
+  // Phase 37: steady-state/interval conditioning machines — timed, not
+  // distance or completion-based, same conditioning_log mechanism.
+  { key: 'rowing_machine', name: 'Rowing Machine', description: 'Steady-state or interval rowing — builds aerobic capacity with full-body pulling volume.', metricType: 'time', tags: ['endurance'] },
+  { key: 'assault_bike', name: 'Assault Bike', description: 'Steady-state or sprint-interval fan bike work — builds conditioning with both arms and legs driving the effort.', metricType: 'time', tags: ['endurance'] },
+  { key: 'stair_climber', name: 'Stair Climber', description: 'Continuous stepping work — builds lower-body conditioning and aerobic capacity.', metricType: 'time', tags: ['endurance'] },
+  { key: 'incline_treadmill_walk', name: 'Incline Treadmill Walk', description: 'Brisk walking at a sustained incline — a low-impact way to build steady cardio volume.', metricType: 'time', tags: ['endurance'] },
 ];
 function conditioningDrillByKey(key) { return CONDITIONING_DRILLS.find((d) => d.key === key) || CONDITIONING_DRILLS[0]; }
 
