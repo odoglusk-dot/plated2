@@ -433,18 +433,25 @@
   .settings-section-label { font-family: var(--font-body); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--text-faint); margin: 1.5rem 0 0.5rem; }
   .settings-section-label:first-child { margin-top: 0; }
-  .hero { text-align: center; padding: 0.5rem 0 2.5rem; }
+  .hero { text-align: center; padding: 0.5rem 0 2.5rem; border-radius: 10px; }
   .hero .hero-num { font-family: var(--font-display); font-weight: 600; font-size: 2.7rem; color: var(--text); line-height: 1.05; margin-top: 0.35rem; }
   .hero .hero-num .hero-unit { font-size: 0.95rem; font-weight: 500; color: var(--text-dim); margin-left: 0.35rem; }
   .float-card { margin-top: -28px; position: relative; z-index: 1; box-shadow: 0 16px 34px rgba(23,24,27,0.08); }
-  /* Pro-only custom Home background (item 1, personalization batch) — the
-     scrim is baked into the background-image itself (see applyHomeBackground
-     in index.html), this just keeps the hero's own text readable on it. */
-  #panel-dashboard.has-custom-home-bg { background-repeat: no-repeat; }
-  #panel-dashboard.has-custom-home-bg .hero,
-  #panel-dashboard.has-custom-home-bg .hero .eyebrow-sm,
-  #panel-dashboard.has-custom-home-bg .hero .muted { color: #fff; }
-  #panel-dashboard.has-custom-home-bg .hero .hero-unit { color: rgba(255,255,255,0.8); }
+  /* Pro-only custom Home background (item 1, personalization batch) —
+     scoped to .hero specifically, not the whole #panel-dashboard: that
+     panel has no fixed height (it grows with every stacked card below
+     it), so `background-size: cover` there scaled the photo to cover a
+     multi-thousand-px-tall box and zoomed into a tiny sliver of it. .hero
+     has a normal bounded height, so cover crops it like an actual banner
+     photo. The scrim is baked into the background-image itself (see
+     applyHomeBackground in index.html); these overrides just keep the
+     hero's own text readable on top of it, since each of these elements
+     sets its own color elsewhere and won't inherit a parent override.*/
+  .hero.has-custom-home-bg { background-size: cover; background-position: center; background-repeat: no-repeat; }
+  .hero.has-custom-home-bg .eyebrow-sm,
+  .hero.has-custom-home-bg .muted,
+  .hero.has-custom-home-bg .hero-num { color: #fff; }
+  .hero.has-custom-home-bg .hero-unit { color: rgba(255,255,255,0.8); }
   .focus-inline { margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid var(--divider); }
   .focus-label { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; color: var(--text); }
   .float-card .stat-card-sm { background: var(--surface-2); box-shadow: none; }
@@ -3813,17 +3820,17 @@ function homeWidgetHtml(key, ctx) {
 // Item 1 of the personalization batch: a Pro-only custom background photo
 // with a dark overlay baked right into the background-image declaration
 // (no separate scrim element needed) so card text stays legible on top.
+// Applied to .hero specifically, not the whole (unbounded-height) panel —
+// see the CSS comment above .hero.has-custom-home-bg for why.
 function applyHomeBackground(panel) {
+  const hero = $('.hero', panel);
+  if (!hero) return;
   if (hasAccess(state.subscription) && state.homeBackgroundUrl) {
-    panel.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), url("${state.homeBackgroundUrl}")`;
-    panel.style.backgroundSize = 'cover';
-    panel.style.backgroundPosition = 'center';
-    panel.classList.add('has-custom-home-bg');
+    hero.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url("${state.homeBackgroundUrl}")`;
+    hero.classList.add('has-custom-home-bg');
   } else {
-    panel.style.backgroundImage = '';
-    panel.style.backgroundSize = '';
-    panel.style.backgroundPosition = '';
-    panel.classList.remove('has-custom-home-bg');
+    hero.style.backgroundImage = '';
+    hero.classList.remove('has-custom-home-bg');
   }
 }
 
@@ -3867,7 +3874,6 @@ function renderDashboard() {
   const widgetOrder = getHomeWidgetOrder();
 
   const panel = $('#panel-dashboard');
-  applyHomeBackground(panel);
   panel.innerHTML = `
     ${achievementUnlockBannerHtml()}
     ${showSpikeWarning ? `
@@ -3887,6 +3893,7 @@ function renderDashboard() {
     ${tipsHtml(activeTips)}
     ${widgetOrder.map((key) => homeWidgetHtml(key, widgetCtx)).join('')}
   `;
+  applyHomeBackground(panel); // after innerHTML: targets the just-rendered .hero
 
   const spikeDismiss = $('#spikeDismiss');
   if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderDashboard(); });
