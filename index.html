@@ -452,6 +452,19 @@
   .hero.has-custom-home-bg .muted,
   .hero.has-custom-home-bg .hero-num { color: #fff; }
   .hero.has-custom-home-bg .hero-unit { color: rgba(255,255,255,0.8); }
+  /* Widget-reorder live preview (item 2, personalization batch) — each
+     draggable row wraps the SAME homeWidgetHtml() output the real Home
+     screen renders, so what's shown here is what reordering actually
+     produces, not a stand-in label list. The content itself is inert
+     (pointer-events: none) since it's a preview, not the live dashboard —
+     only the header bar drags. */
+  .widget-preview-row { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.75rem; overflow: hidden; background: var(--surface); }
+  .widget-preview-handle { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: var(--surface-2); border-bottom: 1px solid var(--border); cursor: grab; }
+  .widget-preview-handle:active { cursor: grabbing; }
+  .widget-preview-grip { color: var(--text-faint); font-size: 1.05rem; line-height: 1; }
+  .widget-preview-content { padding: 0.75rem; pointer-events: none; }
+  .widget-preview-content .hero { padding: 0.5rem 0 1.75rem; }
+  .widget-preview-row.sortable-ghost { opacity: 0.4; }
   .focus-inline { margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid var(--divider); }
   .focus-label { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; color: var(--text); }
   .float-card .stat-card-sm { background: var(--surface-2); box-shadow: none; }
@@ -3834,7 +3847,11 @@ function applyHomeBackground(panel) {
   }
 }
 
-function renderDashboard() {
+// Shared by renderDashboard() and the widget-reorder preview in
+// renderHomeCustomize(), so the preview shows exactly the same numbers
+// the real Home screen does rather than a second, divergable copy of
+// this math.
+function computeHomeWidgetCtx() {
   const totals = sumMacros(state.todayLogs);
   const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
   const g = state.goals;
@@ -3854,7 +3871,16 @@ function renderDashboard() {
   const todayWaterOz = todayWaterEntries.reduce((sum, w) => sum + (Number(w.amount_oz) || 0), 0);
   const todaysLiftVolume = state.lifts.filter((l) => l.date === today).reduce((sum, l) => sum + l.weight * totalReps(l), 0);
   const trainingStreak = computeTrainingStreak(state.lifts);
+  const ws = weeklySummary();
 
+  return { totals, g, calorieColor, todaysLiftVolume, trainingStreak, todayWaterOz, todayWaterEntries, current, best, ws };
+}
+
+function renderDashboard() {
+  const widgetCtx = computeHomeWidgetCtx();
+  const { current } = widgetCtx;
+
+  const today = localDateStr();
   const volumeSpike = computeVolumeSpike(state.lifts, getWeekStart(today));
   const showSpikeWarning = volumeSpike && volumeSpike.weekStart !== dismissedSpikeWeek;
 
@@ -3867,10 +3893,7 @@ function renderDashboard() {
   // flicker the banner in and back out.
   const showStreakUpgradePrompt = streakUpgradePromptVisible && !hasAccess(state.subscription);
 
-  const ws = weeklySummary();
   const activeTips = computeActiveTips();
-
-  const widgetCtx = { totals, g, calorieColor, todaysLiftVolume, trainingStreak, todayWaterOz, todayWaterEntries, current, best, ws };
   const widgetOrder = getHomeWidgetOrder();
 
   const panel = $('#panel-dashboard');
@@ -5827,6 +5850,7 @@ function renderHomeCustomize(panel) {
   }
 
   const order = getHomeWidgetOrder();
+  const widgetCtx = computeHomeWidgetCtx();
   panel.innerHTML = `
     <div class="card">
       <button class="btn btn-sm btn-ghost" id="closeHomeCustomizeBtn">← Back</button>
@@ -5847,16 +5871,23 @@ function renderHomeCustomize(panel) {
 
     <div class="card">
       <h3>Reorder Widgets</h3>
-      <p class="muted small">Drag to reorder. Widgets stay the same size — only the order changes.</p>
+      <p class="muted small">Drag the ☰ handle to reorder — this is a live preview of your actual Home screen, with today's real numbers.</p>
       <div id="homeWidgetOrderList">
         ${order.map((key) => `
-          <div class="log-row" data-widget-key="${key}">
-            <span><span data-drag-handle style="cursor:grab;margin-right:0.5rem;color:var(--text-faint);">☰</span>${esc(HOME_WIDGET_LABELS[key] || key)}</span>
+          <div class="widget-preview-row" data-widget-key="${key}">
+            <div class="widget-preview-handle" data-drag-handle>
+              <span class="widget-preview-grip">☰</span>
+              <span class="muted small">${esc(HOME_WIDGET_LABELS[key] || key)}</span>
+            </div>
+            <div class="widget-preview-content">
+              ${homeWidgetHtml(key, widgetCtx)}
+            </div>
           </div>`).join('')}
       </div>
       <button class="btn btn-sm btn-ghost" id="resetWidgetOrderBtn" style="margin-top:0.75rem;">Reset to Default Order</button>
     </div>
   `;
+  applyHomeBackground(panel); // mirrors the real Home screen's background inside the preview
 
   $('#closeHomeCustomizeBtn').addEventListener('click', () => { showHomeCustomize = false; homeBgError = ''; renderProfile(); });
 
