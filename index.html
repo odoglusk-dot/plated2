@@ -343,6 +343,16 @@
   .cb-ing-cal { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); font-weight: 600; white-space: nowrap; }
   .cb-done-btn { margin-top: 1.1rem; }
 
+  /* ── Log Weight popup ──────────────────────────────────────────────
+     Same bottom-sheet structure/behavior as the calorie breakdown popup
+     above (backdrop + swipe-to-dismiss sheet), its own instance so the
+     two features stay independent. */
+  .weight-log-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(23,24,27,0.4); }
+  .weight-log-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: var(--surface);
+    border-radius: 20px 20px 0 0; padding: 1.35rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.15); max-height: 85vh; overflow-y: auto; }
+  .weight-log-handle { width: 36px; height: 4px; background: var(--border); border-radius: 3px; margin: 0 auto 1rem; }
+
   /* ── Plate scoreboard ─────────────────────────────────────────── */
   .scoreboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
   .plate { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
@@ -1056,6 +1066,10 @@
        showCalorieBreakdownPopup() right after a food log succeeds, never
        as a gate before it. Empty/hidden the rest of the time. -->
   <div id="calorieBreakdownOverlay" class="hidden"></div>
+
+  <!-- Log Weight popup — filled in by showWeightLogPopup(), opened from
+       the "Log Weight" button on the Weight Log screen. -->
+  <div id="weightLogOverlay" class="hidden"></div>
 </div>
 
 <script type="module">
@@ -2722,7 +2736,7 @@ $('#quickLogLiftBtn').addEventListener('click', () => {
 // bottom-nav icon they're conceptually part of, purely for the bottom nav's
 // own active-state highlight — Days/Photos/Recaps/Insights are training
 // sub-screens, so viewing one still shows Lift as the active bottom-nav tab.
-const TRAINING_SUB_TABS = new Set(['lifts', 'progress', 'days', 'photos', 'recaps', 'insights']);
+const TRAINING_SUB_TABS = new Set(['lifts', 'progress', 'days', 'photos', 'recaps', 'insights', 'weight']);
 
 function updateBottomNav() {
   let active = 'home';
@@ -4950,13 +4964,10 @@ function renderWeight() {
 
   panel.innerHTML = `
     <div class="card">
-      <h3>Log Weight</h3>
-      <div class="row">
-        <div class="field"><label>Date</label><input class="input" id="wt_date" type="date" value="${localDateStr()}"></div>
-        <div class="field"><label>Weight (${weightUnitLabel()})</label><input class="input mono" id="wt_lb" type="number" step="0.1"></div>
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">Weight Log</h3>
+        <button class="btn btn-primary btn-sm" id="openWeightLogBtn" style="flex:none;">+ Log Weight</button>
       </div>
-      <div class="field"><label>Note (optional)</label><input class="input" id="wt_note"></div>
-      <button class="btn btn-primary" id="wt_save">Save</button>
     </div>
     ${weightGoalProgressHtml(sorted)}
     <div class="card">
@@ -4974,6 +4985,45 @@ function renderWeight() {
     </div>
   `;
 
+  $('#openWeightLogBtn').addEventListener('click', showWeightLogPopup);
+
+  $$('[data-wt-del]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    await supabase.from('weight_log').delete().eq('id', btn.dataset.wtDel);
+    await loadWeightLog();
+    renderAll();
+  }));
+}
+
+// Log Weight popup — same bottom-sheet pattern as showCalorieBreakdownPopup
+// (backdrop + swipe-to-dismiss sheet), its own instance of that pattern so
+// the two features stay independent. Opened from the "+ Log Weight" button
+// instead of an always-visible inline form, since the entry fields were
+// the first thing on the Weight Log screen and most visits are just to
+// check the trend/history, not to log a new entry.
+function weightLogPopupHtml() {
+  return `
+    <div class="weight-log-backdrop" id="weightLogBackdrop"></div>
+    <div class="weight-log-sheet" id="weightLogSheet">
+      <div class="weight-log-handle"></div>
+      <h3 style="margin-top:0;">Log Weight</h3>
+      <div class="row">
+        <div class="field"><label>Date</label><input class="input" id="wt_date" type="date" value="${localDateStr()}"></div>
+        <div class="field"><label>Weight (${weightUnitLabel()})</label><input class="input mono" id="wt_lb" type="number" step="0.1"></div>
+      </div>
+      <div class="field"><label>Note (optional)</label><input class="input" id="wt_note"></div>
+      <button class="btn btn-primary btn-block" id="wt_save">Save</button>
+    </div>
+  `;
+}
+
+function showWeightLogPopup() {
+  const el = $('#weightLogOverlay');
+  el.innerHTML = weightLogPopupHtml();
+  el.classList.remove('hidden');
+
+  const sheet = $('#weightLogSheet');
+  $('#weightLogBackdrop').addEventListener('click', closeWeightLogPopup);
+
   $('#wt_save').addEventListener('click', async () => {
     const logged_date = $('#wt_date').value || localDateStr();
     const weight_lb = fromDisplayWeight($('#wt_lb').value);
@@ -4982,14 +5032,35 @@ function renderWeight() {
     const { error } = await supabase.from('weight_log').insert({ user_id: state.user.id, logged_date, weight_lb, note });
     if (error) return toast('Could not save: ' + error.message);
     await Promise.all([loadWeightLog(), upsertBodyStatsWeight(weight_lb)]);
+    closeWeightLogPopup();
     renderAll();
   });
 
-  $$('[data-wt-del]', panel).forEach((btn) => btn.addEventListener('click', async () => {
-    await supabase.from('weight_log').delete().eq('id', btn.dataset.wtDel);
-    await loadWeightLog();
-    renderAll();
-  }));
+  // Swipe-down-to-dismiss, same pattern as the calorie breakdown popup.
+  let dragStartY = null;
+  const onStart = (y) => { dragStartY = y; sheet.style.transition = 'none'; };
+  const onMove = (y) => {
+    if (dragStartY === null) return;
+    const delta = Math.max(0, y - dragStartY);
+    sheet.style.transform = `translateY(${delta}px)`;
+  };
+  const onEnd = (y) => {
+    if (dragStartY === null) return;
+    const delta = Math.max(0, y - dragStartY);
+    sheet.style.transition = '';
+    if (delta > 80) closeWeightLogPopup();
+    else sheet.style.transform = '';
+    dragStartY = null;
+  };
+  sheet.addEventListener('touchstart', (e) => onStart(e.touches[0].clientY), { passive: true });
+  sheet.addEventListener('touchmove', (e) => onMove(e.touches[0].clientY), { passive: true });
+  sheet.addEventListener('touchend', (e) => onEnd(e.changedTouches[0].clientY));
+}
+
+function closeWeightLogPopup() {
+  const el = $('#weightLogOverlay');
+  el.classList.add('hidden');
+  el.innerHTML = '';
 }
 
 async function upsertBodyStatsWeight(weight_lb) {
@@ -5154,13 +5225,13 @@ function renderAsk() {
   $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAsk(); });
 }
 
-// A directory, not a rewrite — Weight/Supplements/Meals/Ask AI keep their
-// own panels/render functions exactly as they were; this just shortens
-// the path to reach them (one tap into More, then one tap to the actual
+// A directory, not a rewrite — Supplements/Meals/Ask AI keep their own
+// panels/render functions exactly as they were; this just shortens the
+// path to reach them (one tap into More, then one tap to the actual
 // screen) instead of each sitting as its own peer in the lateral nav row,
-// since none of them are daily-use.
+// since none of them are daily-use. Weight Log moved to the Progress hub
+// (training area) instead — see PROGRESS_TAB_DESTINATIONS.
 const MORE_TAB_DESTINATIONS = [
-  { tab: 'weight', title: 'Weight Log', desc: 'Track bodyweight over time with a trend chart.' },
   { tab: 'supplements', title: 'Supplement Guide', desc: 'Evidence ratings (Strong/Moderate/Limited/Weak) for common supplements.' },
   { tab: 'meals', title: 'Budget-Optimized Protein', desc: 'Foods ranked by cost per gram of protein.' },
   { tab: 'ask', title: 'Ask Your Data', desc: 'Ask questions about your own logged history.', pro: true },
@@ -10722,6 +10793,7 @@ function weeklyMuscleGroupBarSvg(weeklyData, activeMuscleGroups) {
 // path to reach them from the Lift tab's lateral nav instead of each
 // sitting as its own peer there, since none of them are daily-use.
 const PROGRESS_TAB_DESTINATIONS = [
+  { tab: 'weight', title: 'Weight Log', desc: 'Track bodyweight over time with a trend chart.' },
   { tab: 'days', title: 'Training Days & Volume', desc: 'A training heatmap, volume per day, and weekly volume by muscle group.' },
   { tab: 'photos', title: 'Progress Photos', desc: 'Track physique changes over time with your own photos.' },
   { tab: 'recaps', title: 'Monthly Recaps', desc: 'A month-by-month summary, or compare two months side by side.' },
