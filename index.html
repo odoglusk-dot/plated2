@@ -26,8 +26,12 @@
 <meta name="apple-mobile-web-app-title" content="Krafft">
 <meta name="mobile-web-app-capable" content="yes">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- Fraunces/Inter/IBM Plex Mono — self-hosted (vendor/fonts/), not loaded
+     from Google Fonts. Pre-launch fix: a CDN font request on first iOS
+     launch both breaks true offline use and leaks the user's IP to
+     Google. See the @font-face block in <style> below. -->
+<link rel="preload" href="vendor/fonts/fraunces-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 
 <!-- Error monitoring (Sentry free tier), errors-only (no tracing/replay) to
      keep this lightweight and avoid capturing extra session data for a
@@ -45,6 +49,62 @@
   }
 </script>
 <style>
+  /* Self-hosted fonts (vendor/fonts/) — replaces the old fonts.googleapis.com
+     <link>. Fraunces is the variable font (covers weights 500/600/700 used
+     across the app from one file, with font-optical-sizing: auto handling
+     the opsz axis the old Google Fonts URL requested explicitly); Inter and
+     IBM Plex Mono are static per-weight files, matching the exact weights
+     the old URL requested (Inter 400/500/600/700, Plex Mono 400/600). */
+  @font-face {
+    font-family: 'Fraunces';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('vendor/fonts/fraunces-latin-standard-normal.woff2') format('woff2-variations');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('vendor/fonts/inter-latin-400-normal.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('vendor/fonts/inter-latin-500-normal.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('vendor/fonts/inter-latin-600-normal.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('vendor/fonts/inter-latin-700-normal.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('vendor/fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('vendor/fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2');
+  }
+
   :root {
     --bg: #F4F2ED;
     --surface: #FFFFFF;
@@ -1234,10 +1294,15 @@
 </div>
 
 <script type="module">
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { Capacitor } from 'https://esm.sh/@capacitor/core@6';
-import { App as CapacitorApp } from 'https://esm.sh/@capacitor/app@6';
-import { Browser as CapacitorBrowser } from 'https://esm.sh/@capacitor/browser@6';
+// Pre-launch fix: these were loaded live from esm.sh at runtime — breaks
+// true offline use in the iOS wrapper and sends the user's IP to esm.sh on
+// every cold start. Now vendored locally (see vendor/js/, built with
+// esbuild from the real npm packages — see vendor/README.md) and copied
+// into www/ by scripts/sync-ios.mjs like every other local asset.
+import { createClient } from './vendor/js/supabase-js.js';
+import { Capacitor } from './vendor/js/capacitor-core.js';
+import { App as CapacitorApp } from './vendor/js/capacitor-app.js';
+import { Browser as CapacitorBrowser } from './vendor/js/capacitor-browser.js';
 
 // ── Configuration ────────────────────────────────────────────────────
 // Fill these in with your Supabase project's values (Project Settings → API).
@@ -5627,18 +5692,21 @@ async function saveFavorite(f) {
 
 // ── Barcode scanning (free tier — no AI) ────────────────────────────────
 // iOS Safari has no native BarcodeDetector, so scanning goes through
-// ZXing (loaded lazily from a CDN only when this sub-tab is opened, same
-// pattern as ensureChartJs() for the session-analysis charts) rather than
-// a built-in browser API. Lookups hit Open Food Facts directly per scan —
-// it's free with no rate limit that matters at this app's scale, so
-// there's no cache table here (see the phase21 migration's comment).
+// ZXing (loaded lazily only when this sub-tab is opened, same pattern as
+// ensureChartJs() for the session-analysis charts) rather than a built-in
+// browser API. Lookups hit Open Food Facts directly per scan — it's free
+// with no rate limit that matters at this app's scale, so there's no
+// cache table here (see the phase21 migration's comment).
+// Pre-launch fix: vendored locally (vendor/js/zxing-library.js) instead of
+// jsdelivr — avoids a CDN round trip on first scan and keeps barcode
+// scanning working fully offline in the iOS wrapper.
 let zxingLoadPromise = null;
 function ensureZXing() {
   if (window.ZXing) return Promise.resolve();
   if (zxingLoadPromise) return zxingLoadPromise;
   zxingLoadPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    script.src = 'vendor/js/zxing-library.js';
     script.onload = resolve;
     script.onerror = reject;
     document.head.appendChild(script);
@@ -9552,16 +9620,17 @@ function wireSessionAnalysisEvents(panel) {
   if ((analysis?.callouts || []).some((c) => c.type === 'nutrition')) renderSessionNutritionChart();
 }
 
-// Loaded lazily from a CDN only when the analysis screen actually renders
-// a chart — the one deliberate exception to the rest of this app's
-// hand-rolled-SVG chart convention, per the product spec for this feature.
+// Loaded lazily only when the analysis screen actually renders a chart —
+// the one deliberate exception to the rest of this app's hand-rolled-SVG
+// chart convention, per the product spec for this feature. Pre-launch
+// fix: vendored locally (vendor/js/chart.js) instead of jsdelivr.
 let chartJsLoadPromise = null;
 function ensureChartJs() {
   if (window.Chart) return Promise.resolve();
   if (chartJsLoadPromise) return chartJsLoadPromise;
   chartJsLoadPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
+    script.src = 'vendor/js/chart.js';
     script.onload = resolve;
     script.onerror = reject;
     document.head.appendChild(script);

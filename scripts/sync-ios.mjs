@@ -17,7 +17,10 @@ const FILES = [
   'index.html', 'manifest.json',
   'privacy.html', 'terms.html', 'support.html', 'auth-callback.html',
 ];
-const DIRS = ['icons'];
+// vendor/ holds the self-hosted JS bundles and font files (pre-launch fix —
+// see vendor/README.md) that used to be loaded live from esm.sh/jsdelivr/
+// Google Fonts at runtime.
+const DIRS = ['icons', 'vendor'];
 
 mkdirSync(www, { recursive: true });
 
