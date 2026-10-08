@@ -5,7 +5,7 @@
 // Gated at 20/day for paid users (item 5 of the AI cost-efficiency batch,
 // checkAndIncrementFeatureLimit() in _shared.js) — independent of the one-
 // time free-tier preview claim, which never touches this daily pool.
-const { jsonResponse, verifyUser, hasPaidAccess, claimOneTimeProPreview, checkAndIncrementFeatureLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, FEATURE_DAILY_LIMITS } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, hasAiConsent, claimOneTimeProPreview, checkAndIncrementFeatureLimit, callAnthropic, recordUsageCost, extractJSON, getPhotoCacheKey, checkFoodCache, cacheFood, captureError, withErrorReporting, FEATURE_DAILY_LIMITS } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Krafft, a macro-and-strength-tracking app.
 You will be shown a photo of a food or meal. Estimate its nutritional content from what's visible —
@@ -42,6 +42,9 @@ exports.handler = withErrorReporting(async (event) => {
     if (!isPreview) {
       return jsonResponse(402, { error: 'AI photo macro estimation is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
     }
+  }
+  if (!(await hasAiConsent(auth.user.id, auth.token))) {
+    return jsonResponse(403, { error: 'Agree to Krafft\'s AI data-use consent to use this feature.', consentRequired: true });
   }
 
   let payload;

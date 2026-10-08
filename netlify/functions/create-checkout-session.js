@@ -23,6 +23,14 @@ exports.handler = withErrorReporting(async (event) => {
   const auth = await verifyUser(event);
   if (!auth) return jsonResponse(401, { error: 'Sign in required.' });
 
+  let platform = 'web';
+  try {
+    const body = JSON.parse(event.body || '{}');
+    if (body.platform === 'ios') platform = 'ios';
+  } catch {
+    // Missing/invalid body — default to 'web', same as every pre-existing caller.
+  }
+
   // Derived from the browser's own Origin/Referer headers, which page JS
   // can't spoof, so it's safe to build the post-checkout redirect URLs from
   // this without hardcoding a deployment domain (or assuming the app is
@@ -70,11 +78,14 @@ exports.handler = withErrorReporting(async (event) => {
         // matters for writing to `subscriptions`.
         'subscription_data[trial_period_days]': '3',
         'subscription_data[metadata][supabase_user_id]': auth.user.id,
-        // Also set on the Checkout Session itself — checkout.session.completed
-        // isn't currently handled by stripe-webhook.js, but if that ever
-        // changes, or you inspect this event directly while debugging, the
-        // metadata will actually be there instead of empty.
+        'subscription_data[metadata][platform]': platform,
+        // Also set on the Checkout Session itself — stripe-webhook.js's
+        // checkout.session.completed handler (App Store readiness batch,
+        // item 7 — external_purchase_log) reads metadata from the SESSION,
+        // not the subscription, since that's the event that actually
+        // carries a session id + the exact amount charged.
         'metadata[supabase_user_id]': auth.user.id,
+        'metadata[platform]': platform,
         success_url: `${baseUrl}/?checkout=success`,
         cancel_url: `${baseUrl}/?checkout=cancel`,
       },

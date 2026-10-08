@@ -980,8 +980,8 @@
       <div id="consentField" class="consent-line" style="display:none;">
         <input type="checkbox" id="consentCheck">
         <label style="margin:0;color:var(--text-dim);font-weight:400;" for="consentCheck">
-          By creating an account, you agree to our <a href="TERMS_OF_SERVICE.md" target="_blank">Terms</a>
-          and <a href="PRIVACY_POLICY.md" target="_blank">Privacy Policy</a>.
+          By creating an account, you agree to our <a href="terms.html" target="_blank">Terms</a>
+          and <a href="privacy.html" target="_blank">Privacy Policy</a>.
         </label>
       </div>
       <button type="submit" class="btn btn-primary btn-block" style="margin-top:1rem;" id="authSubmitBtn">Sign In</button>
@@ -1020,6 +1020,8 @@
       <p class="muted">Check your inbox (and spam folder) and click the link to activate your account.</p>
       <button type="button" class="btn btn-primary btn-block" id="confirmBackToSignInBtn" style="margin-top:0.6rem;">Back to Sign In</button>
     </div>
+
+    <p class="muted small" style="text-align:center;margin-top:1.5rem;"><a href="privacy.html" target="_blank">Privacy</a> · <a href="terms.html" target="_blank">Terms</a> · <a href="support.html" target="_blank">Support</a></p>
   </div>
 </div>
 
@@ -1176,10 +1178,18 @@
   <!-- Log Weight popup — filled in by showWeightLogPopup(), opened from
        the "Log Weight" button on the Weight Log screen. -->
   <div id="weightLogOverlay" class="hidden"></div>
+
+  <!-- AI data-use consent popup — filled in by showAiConsentPopup(), shown
+       once before the first use of any AI feature (and again from Profile
+       if the user withdraws consent and later wants to re-enable). -->
+  <div id="aiConsentOverlay" class="hidden"></div>
 </div>
 
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { Capacitor } from 'https://esm.sh/@capacitor/core@6';
+import { App as CapacitorApp } from 'https://esm.sh/@capacitor/app@6';
+import { Browser as CapacitorBrowser } from 'https://esm.sh/@capacitor/browser@6';
 
 // ── Configuration ────────────────────────────────────────────────────
 // Fill these in with your Supabase project's values (Project Settings → API).
@@ -1191,6 +1201,65 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const SUPPORT_EMAIL = 'odoglusk+platedsupport@gmail.com';
+
+// ── iOS external-purchase flow (App Store readiness batch, item 7) ─────
+// Apple's external-purchase-link entitlement (US) lets a Reader-type app
+// send users to an outside website to buy, instead of Apple's in-app
+// purchase — but the in-app side still can't show an embedded card form or
+// a price comparison against Apple. IOS_EXTERNAL_PURCHASE_ENABLED is the
+// single switch: flip to false to hide every upgrade entry point on iOS
+// instead (e.g. if this ever moves to real Apple IAP), without touching
+// any of the call sites below.
+const IOS_EXTERNAL_PURCHASE_ENABLED = true;
+const IS_IOS_APP = Capacitor.getPlatform() === 'ios';
+function canShowIosUpgrade() { return !IS_IOS_APP || IOS_EXTERNAL_PURCHASE_ENABLED; }
+
+// Opens a Stripe-hosted URL (checkout or the billing portal) — the system
+// browser on iOS, since Apple's rule is "never an embedded purchase flow
+// in the app," same tab everywhere else (web, or iOS with the flag off
+// doesn't reach here at all — see canShowIosUpgrade()).
+let pendingIosBillingReturnAt = null;
+async function openBillingUrl(url) {
+  if (IS_IOS_APP) {
+    pendingIosBillingReturnAt = Date.now();
+    await CapacitorBrowser.open({ url });
+  } else {
+    window.location.href = url;
+  }
+}
+
+// Stripe's webhook can lag a few seconds behind the user actually finishing
+// checkout in the external browser — poll briefly after they switch back
+// to the app instead of leaving them staring at "Free Tier" until the next
+// natural reload. No-ops instantly once tier access shows up.
+async function retryTierRefetchAfterCheckout() {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const sub = await fetchSubscription();
+    if (hasAccess(sub)) { renderAll(); return; }
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+
+// Re-checks subscription status whenever the app comes back to the
+// foreground (not just after a checkout — covers e.g. a renewal that
+// lapsed while the app was backgrounded too), and runs the ~30s retry
+// loop specifically when the user just returned from the external
+// checkout/portal browser.
+// Ambient "you're offline" signal for mid-session connectivity loss (item
+// 11 of the App Store readiness batch) — bootstrapApp()'s own catch block
+// above handles the "offline at launch" case; this covers losing the
+// connection after the app is already loaded, where nothing would
+// otherwise tell the user why a save/load just silently failed.
+window.addEventListener('offline', () => toast("You're offline — showing what's already loaded. Changes will sync once you're back online."));
+window.addEventListener('online', () => toast('Back online.'));
+
+CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+  if (!isActive || !state.user) return;
+  const justReturnedFromBilling = pendingIosBillingReturnAt && (Date.now() - pendingIosBillingReturnAt < 10 * 60 * 1000);
+  pendingIosBillingReturnAt = null;
+  if (justReturnedFromBilling) retryTierRefetchAfterCheckout();
+  else fetchSubscription().then(() => renderAll());
+});
 
 // paywallScreen is static markup (not re-rendered per-frame like the tabs),
 // so its mailto link is bound once here from SUPPORT_EMAIL rather than
@@ -1896,7 +1965,11 @@ $('#forgotForm').addEventListener('submit', async (e) => {
     // Redirect back to this exact deployment (no query/hash) so Supabase's
     // recovery link lands on the same app, whether that's served at "/" or
     // at "/plated/".
-    const redirectTo = window.location.origin + window.location.pathname;
+    // Routed through auth-callback.html (not straight back to the app) so
+    // the link works the same whether it's opened on the website or tapped
+    // from the Mail app on iOS with Krafft installed — see
+    // auth-callback.html's own comment for how it hands off to the app.
+    const redirectTo = window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'auth-callback.html';
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     if (error) throw error;
     // Supabase doesn't reveal whether the email exists (by design, to avoid
@@ -1948,6 +2021,18 @@ $('#authForm').addEventListener('submit', async (e) => {
   const email = $('#email').value.trim();
   const password = $('#password').value;
   const btn = $('#authSubmitBtn');
+
+  // Catches a genuinely malformed address (no @, no domain, stray spaces)
+  // before it ever reaches Supabase — same check on both sign-in and
+  // sign-up, since a typo'd confirmation address bounces silently and the
+  // first a user hears about it is "where's my email?". Can't catch a
+  // typo'd-but-structurally-valid TLD (gmail.con) — nothing client-side
+  // can — but stops the clearly-broken cases outright.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    $('#authError').textContent = 'Enter a valid email address.';
+    return;
+  }
+
   btn.disabled = true;
 
   try {
@@ -1966,12 +2051,17 @@ $('#authForm').addEventListener('submit', async (e) => {
       if (referralCode) localStorage.setItem('pendingReferralCode', referralCode);
       const ageGateShownAt = new Date().toISOString();
       const { data, error } = await supabase.auth.signUp({
-        email, password, options: { data: {
-          display_name: displayName,
-          age_over_18: ageOver18Answer,
-          age_gate_shown_at: ageGateShownAt,
-          parental_consent_at: ageOver18Answer === false ? ageGateShownAt : null,
-        } },
+        email, password, options: {
+          // Same auth-callback.html hand-off as the password-reset flow
+          // above, so the confirmation link also works from the iOS app.
+          emailRedirectTo: window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'auth-callback.html',
+          data: {
+            display_name: displayName,
+            age_over_18: ageOver18Answer,
+            age_gate_shown_at: ageGateShownAt,
+            parental_consent_at: ageOver18Answer === false ? ageGateShownAt : null,
+          },
+        },
       });
       if (error) throw error;
       // Only write profile/goals rows here if sign-up produced an active
@@ -2011,10 +2101,11 @@ $('#paywallSubscribeBtn').addEventListener('click', async () => {
   const btn = $('#paywallSubscribeBtn');
   btn.disabled = true;
   const originalLabel = btn.textContent;
-  btn.innerHTML = '<span class="spinner spinner-sm"></span>Starting checkout…';
+  btn.innerHTML = `<span class="spinner spinner-sm"></span>${IS_IOS_APP ? 'Opening krafft.app…' : 'Starting checkout…'}`;
   try {
-    const { url } = await callFunction('create-checkout-session', {});
-    window.location.href = url;
+    const { url } = await callFunction('create-checkout-session', { platform: IS_IOS_APP ? 'ios' : 'web' });
+    await openBillingUrl(url);
+    if (IS_IOS_APP) { btn.disabled = false; btn.textContent = originalLabel; }
   } catch (err) {
     reportError(err);
     $('#paywallError').textContent = err.message || 'Could not start checkout.';
@@ -2127,6 +2218,101 @@ function proPreviewEligible() {
   return computeStreaks(state.historyLogs, state.goals.protein_g).current >= 10;
 }
 
+// ── AI data-use consent (App Store readiness batch, item 4) ────────────
+// Apple requires disclosure + affirmative consent before any user data
+// (food photos, logs, workout data) goes to a third-party AI provider.
+// Shown once, before the FIRST use of any of the 4 AI call sites (Describe
+// It, Snap a Photo, Ask AI, post-session analysis) — every one of them
+// awaits this before actually firing the network call. Declining ("Not
+// now" / backdrop dismiss / swipe-down) resolves false and leaves AI
+// features off; nothing here ever force-proceeds. The server independently
+// re-checks ai_consent_at on every AI function call (see _shared.js's
+// hasAiConsent()) — this is the UX shortcut, not the actual gate, same
+// split as requireAIAccess()/hasPaidAccess().
+let aiConsentResolve = null;
+
+function requireAiConsent() {
+  if (state.profile?.ai_consent_at) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    aiConsentResolve = resolve;
+    showAiConsentPopup();
+  });
+}
+
+function aiConsentPopupHtml() {
+  return `
+    <div class="weight-log-backdrop" id="aiConsentBackdrop"></div>
+    <div class="weight-log-sheet" id="aiConsentSheet">
+      <div class="weight-log-handle"></div>
+      <h3 style="margin-top:0;">Using AI in Krafft</h3>
+      <p class="muted">Krafft's AI features (Describe It, Snap a Photo, Ask AI, and post-session analysis) send the relevant data to a third-party AI provider (Anthropic) to generate a response — things like your food photos, food descriptions, logged meals, and workout data. It's used only to answer that one request, never used for advertising, and this consent applies to every AI feature in the app.</p>
+      <p class="muted small">You can withdraw this anytime from Profile — AI features turn back off immediately.</p>
+      <button class="btn btn-primary btn-block" id="aiConsentAgreeBtn">Agree and continue</button>
+      <button class="btn btn-block" id="aiConsentDeclineBtn" style="margin-top:0.5rem;">Not now</button>
+    </div>
+  `;
+}
+
+function showAiConsentPopup() {
+  const el = $('#aiConsentOverlay');
+  el.innerHTML = aiConsentPopupHtml();
+  el.classList.remove('hidden');
+
+  const sheet = $('#aiConsentSheet');
+  const finish = (agreed) => {
+    closeAiConsentPopup();
+    if (aiConsentResolve) { aiConsentResolve(agreed); aiConsentResolve = null; }
+  };
+  $('#aiConsentBackdrop').addEventListener('click', () => finish(false));
+  $('#aiConsentDeclineBtn').addEventListener('click', () => {
+    finish(false);
+    toast('AI features stay off. Enable them anytime from Profile.');
+  });
+  $('#aiConsentAgreeBtn').addEventListener('click', async () => {
+    const now = new Date().toISOString();
+    const { error } = await supabase.from('profiles').upsert({ id: state.user.id, ai_consent_at: now });
+    if (error) { toast('Could not save — try again.'); return; }
+    state.profile = { ...(state.profile || {}), ai_consent_at: now };
+    finish(true);
+  });
+
+  // Swipe-down-to-dismiss (= decline), same pattern as the other popups.
+  let dragStartY = null;
+  const onStart = (y) => { dragStartY = y; sheet.style.transition = 'none'; };
+  const onMove = (y) => {
+    if (dragStartY === null) return;
+    const delta = Math.max(0, y - dragStartY);
+    sheet.style.transform = `translateY(${delta}px)`;
+  };
+  const onEnd = (y) => {
+    if (dragStartY === null) return;
+    const delta = Math.max(0, y - dragStartY);
+    sheet.style.transition = '';
+    if (delta > 80) finish(false);
+    else sheet.style.transform = '';
+    dragStartY = null;
+  };
+  sheet.addEventListener('touchstart', (e) => onStart(e.touches[0].clientY), { passive: true });
+  sheet.addEventListener('touchmove', (e) => onMove(e.touches[0].clientY), { passive: true });
+  sheet.addEventListener('touchend', (e) => onEnd(e.changedTouches[0].clientY));
+}
+
+function closeAiConsentPopup() {
+  const el = $('#aiConsentOverlay');
+  el.classList.add('hidden');
+  el.innerHTML = '';
+}
+
+// Profile's "withdraw consent" action — sets ai_consent_at back to null,
+// which both the client and every AI Netlify function treat as "AI off."
+async function withdrawAiConsent() {
+  const { error } = await supabase.from('profiles').upsert({ id: state.user.id, ai_consent_at: null });
+  if (error) return toast('Could not update: ' + error.message);
+  state.profile.ai_consent_at = null;
+  toast('AI features turned off.');
+  renderAll();
+}
+
 // One short line per Pro-gated feature, reused by every entry point that
 // can land a free user on the upgrade screen for that specific feature —
 // see item 3 of the conversion-surface-area batch.
@@ -2177,7 +2363,18 @@ function renderPaywallScreen(sub, contextLine) {
   socialProofEl.textContent = SOCIAL_PROOF.enabled ? `Join ${SOCIAL_PROOF.count} athletes using Krafft Pro` : '';
   socialProofEl.classList.toggle('hidden', !SOCIAL_PROOF.enabled);
   $('#paywallError').textContent = '';
-  $('#paywallSubscribeBtn').disabled = false;
+  const subscribeBtn = $('#paywallSubscribeBtn');
+  if (canShowIosUpgrade()) {
+    subscribeBtn.classList.remove('hidden');
+    subscribeBtn.disabled = false;
+    // Neutral wording on iOS — no "subscribe"/"buy" framing in the app
+    // itself, since the actual purchase happens on the website.
+    subscribeBtn.textContent = IS_IOS_APP ? 'Continue to krafft.app to upgrade' : 'Start 3-Day Free Trial';
+  } else {
+    // IOS_EXTERNAL_PURCHASE_ENABLED is off: no path to purchase from here
+    // at all — show status only, per the App Store readiness batch.
+    subscribeBtn.classList.add('hidden');
+  }
   $('#paywallProcessing').classList.add('hidden');
   $('#paywallContent').classList.remove('hidden');
 }
@@ -2450,6 +2647,17 @@ async function enterApp(session) {
     // somewhere interactive (auth screen) they can retry from, and make
     // sure this actually gets reported since it's exactly the kind of
     // failure a real user would otherwise silently bounce off of.
+    // Exception: offline. "Sign in again" is actively wrong advice when
+    // the real problem is no connection — this almost always IS that,
+    // since it's a network call failing, so check first and say so
+    // instead, without routing it to Sentry as a real app error.
+    if (!navigator.onLine) {
+      $('#app').classList.add('hidden');
+      $('#paywallScreen').classList.add('hidden');
+      $('#authScreen').classList.remove('hidden');
+      toast("You're offline. Reconnect and try again.");
+      return;
+    }
     reportError(err);
     $('#app').classList.add('hidden');
     $('#paywallScreen').classList.add('hidden');
@@ -5329,6 +5537,7 @@ function renderLogSubPanel() {
       const exact = COMMON_FOODS.find((f) => f.name.toLowerCase() === description.toLowerCase());
       if (exact) { useCommonMatch(exact); return; }
       if (!requireAIAccess(UPGRADE_CONTEXT_AI_TEXT)) return;
+      if (!(await requireAiConsent())) return;
       const btn = $('#aiEstimateBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span>Estimating…';
       $('#aiError').textContent = '';
       try {
@@ -5360,6 +5569,7 @@ function renderLogSubPanel() {
       const file = $('#photoInput').files[0];
       if (!file) { $('#photoError').textContent = 'Choose a photo first.'; return; }
       if (!hasAccess(state.subscription) && !proPreviewEligible() && !requireAIAccess(UPGRADE_CONTEXT_AI_PHOTO)) return;
+      if (!(await requireAiConsent())) return;
       const btn = $('#photoEstimateBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-sm"></span>Estimating…';
       $('#photoError').textContent = '';
       try {
@@ -5504,6 +5714,7 @@ async function callFunction(name, body) {
   if (!res.ok) {
     const err = new Error(data.error || `Request failed (${res.status})`);
     if (data.upgradeRequired) err.upgradeRequired = true;
+    if (data.consentRequired) err.consentRequired = true;
     throw err;
   }
   return data;
@@ -5915,6 +6126,7 @@ function renderAsk() {
         <button class="btn btn-primary" id="askBtn" style="flex:none;">Ask</button>
       </div>
       <div id="askError" class="muted" style="color:var(--danger);margin-top:0.5rem;"></div>
+      <p class="muted small" style="margin-top:0.75rem;">For tracking and education, not medical advice.</p>
     </div>
   `;
   $('#askBtn').addEventListener('click', handleAsk);
@@ -5988,6 +6200,7 @@ async function handleAsk() {
   const question = input.value.trim();
   if (!question) return;
   if (!requireAIAccess(UPGRADE_CONTEXT_ASK_AI)) return;
+  if (!(await requireAiConsent())) return;
   $('#askError').textContent = '';
   askMessages.push({ role: 'user', text: question });
   renderAsk();
@@ -6640,8 +6853,11 @@ function tierStatusCardHtml() {
     <p class="muted" style="margin-top:0.5rem;">${subscriptionStatusLabel(state.subscription)}</p>
     ${pro
       ? `<button class="btn" id="manage_subscription_btn">Manage Subscription</button><button class="btn btn-ghost btn-sm" id="cancel_subscription_btn" style="display:block;margin-top:0.5rem;">Cancel Subscription</button>`
-      : `<button class="btn btn-primary" id="upgrade_tier_btn">Upgrade — Unlock AI Features</button>`}
+      : canShowIosUpgrade()
+        ? `<button class="btn btn-primary" id="upgrade_tier_btn">${IS_IOS_APP ? 'Continue to krafft.app to upgrade' : 'Upgrade — Unlock AI Features'}</button>`
+        : ''}
     <p class="muted" style="font-size:0.8rem;margin-top:0.75rem;">Questions about a charge? <a href="mailto:${SUPPORT_EMAIL}?subject=Krafft%20billing%20question">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
+    <p class="muted small" style="margin-top:0.5rem;">Krafft is for tracking and education, not medical advice.</p>
   </div>`;
 }
 
@@ -6773,16 +6989,26 @@ function renderProfile() {
       <h3>Your Data</h3>
       <p class="muted">Download everything you've logged — nutrition, lifts, and weight history — as a JSON file.</p>
       <button class="btn btn-sm" id="export_data_btn">Export My Data</button>
-      <p class="muted small" style="margin-top:0.75rem;"><a href="PRIVACY_POLICY.md">Privacy Policy</a> · <a href="TERMS_OF_SERVICE.md">Terms of Service</a></p>
+      <p class="muted small" style="margin-top:0.75rem;"><a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Service</a> · <a href="support.html">Support</a></p>
+    </div>
+    <div class="card">
+      <h3>AI Features</h3>
+      <p class="muted">Describe It, Snap a Photo, Ask AI, and Session Analysis send the relevant data (food photos, logs, workout data) to a third-party AI provider to generate a response. ${p.ai_consent_at ? `Enabled since ${new Date(p.ai_consent_at).toLocaleDateString()}.` : 'Not enabled yet.'}</p>
+      ${p.ai_consent_at
+        ? `<button class="btn btn-sm" id="disable_ai_btn">Turn Off AI Features</button>`
+        : `<button class="btn btn-sm btn-primary" id="enable_ai_btn">Turn On AI Features</button>`}
     </div>
     <div class="card">
       <h3>Delete Account</h3>
-      <p class="muted">Permanently deletes your account and all logged data. This can't be undone.</p>
+      <p class="muted">Permanently deletes your account and everything in it — food logs, workouts, photos, and your subscription — right away. This can't be undone.</p>
       <button class="btn btn-danger" id="delete_account_btn">Delete My Account</button>
       <div id="delete_confirm" class="hidden" style="margin-top:0.75rem;">
         <p class="muted">Type DELETE to confirm.</p>
         <input class="input" id="delete_confirm_input" style="margin-bottom:0.5rem;">
-        <button class="btn btn-danger" id="delete_confirm_btn">Permanently Delete</button>
+        <div class="row" style="gap:0.5rem;">
+          <button class="btn btn-danger" id="delete_confirm_btn">Permanently Delete</button>
+          <button class="btn" id="delete_cancel_btn">Cancel</button>
+        </div>
       </div>
     </div>
 
@@ -7071,7 +7297,8 @@ function renderProfile() {
     btn.innerHTML = '<span class="spinner spinner-sm"></span>Opening billing portal…';
     try {
       const { url } = await callFunction('create-portal-session', {});
-      window.location.href = url;
+      await openBillingUrl(url);
+      if (IS_IOS_APP) { btn.disabled = false; btn.textContent = originalLabel; }
     } catch (err) {
       reportError(err);
       toast('Could not open billing portal: ' + err.message);
@@ -7250,7 +7477,14 @@ function renderProfile() {
     await supabase.auth.signOut();
   });
 
+  $('#enable_ai_btn')?.addEventListener('click', async () => { if (await requireAiConsent()) renderAll(); });
+  $('#disable_ai_btn')?.addEventListener('click', withdrawAiConsent);
+
   $('#delete_account_btn')?.addEventListener('click', () => $('#delete_confirm').classList.remove('hidden'));
+  $('#delete_cancel_btn')?.addEventListener('click', () => {
+    $('#delete_confirm').classList.add('hidden');
+    $('#delete_confirm_input').value = '';
+  });
   $('#delete_confirm_btn')?.addEventListener('click', async () => {
     if ($('#delete_confirm_input').value !== 'DELETE') return toast('Type DELETE exactly to confirm.');
     try {
@@ -8619,6 +8853,7 @@ function buildSessionAnalysisPayload() {
 }
 
 async function generateSessionAnalysis() {
+  if (!(await requireAiConsent())) return;
   analysisLoading = true;
   analysisError = null;
   renderLiftsTab();
@@ -8670,6 +8905,7 @@ function sessionAnalysisHtml() {
           ${analysis.callouts.map((c) => `<div class="session-callout">${sessionCalloutIcon(c.type)} ${esc(c.text)}</div>`).join('')}
         </div>` : ''}
         ${analysisCapped ? cappedNoteHtml : ''}
+        <p class="muted small" style="margin-top:0.6rem;margin-bottom:0;">For tracking and education, not medical advice.</p>
       </div>
       ${analysis.highlightExercise ? `<div class="card"><h3>${esc(analysis.highlightExercise)} Trend</h3><canvas id="sessionTrendChart" height="220"></canvas></div>` : ''}
       ${hasNutritionCallout ? `<div class="card"><h3>Protein, Last 7 Days</h3><canvas id="sessionNutritionChart" height="180"></canvas></div>` : ''}

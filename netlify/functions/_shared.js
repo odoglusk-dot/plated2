@@ -168,6 +168,23 @@ async function hasPaidAccess(userId, token) {
   return status === 'trialing' || status === 'active';
 }
 
+// Server-side gate for AI data-use consent (App Store readiness batch,
+// item 4) — mirrors hasPaidAccess()'s split: requireAiConsent() in
+// index.html is the UX shortcut (shows the consent popup before ever
+// reaching here), this is the actual gate every AI function re-checks,
+// since a browser could otherwise call these functions directly with a
+// valid session token and no consent on file.
+async function hasAiConsent(userId, token) {
+  const base = process.env.SUPABASE_URL;
+  const res = await fetch(
+    `${base}/rest/v1/profiles?id=eq.${userId}&select=ai_consent_at`,
+    { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return false;
+  const rows = await res.json().catch(() => []);
+  return Boolean(rows[0]?.ai_consent_at);
+}
+
 // Checks + increments today's AI usage count for this user, scoped by
 // user_id (not browser/device) via RLS using the user's own JWT — so
 // switching devices or clearing local storage can't reset the cap.
@@ -590,6 +607,7 @@ module.exports = {
   jsonResponse,
   verifyUser,
   hasPaidAccess,
+  hasAiConsent,
   claimOneTimeProPreview,
   checkAndIncrementRateLimit,
   checkAndIncrementFeatureLimit,

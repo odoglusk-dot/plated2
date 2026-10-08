@@ -2,7 +2,7 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
 // Checks food_cache first; if hit, returns immediately without using API budget.
-const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, hasAiConsent, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Krafft, a macro-and-strength-tracking app.
 Given a short description of a food or meal, estimate its nutritional content.
@@ -27,6 +27,9 @@ exports.handler = withErrorReporting(async (event) => {
 
   if (!(await hasPaidAccess(auth.user.id, auth.token))) {
     return jsonResponse(402, { error: 'AI macro estimation is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
+  }
+  if (!(await hasAiConsent(auth.user.id, auth.token))) {
+    return jsonResponse(403, { error: 'Agree to Krafft\'s AI data-use consent to use this feature.', consentRequired: true });
   }
 
   let payload;

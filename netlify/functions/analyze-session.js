@@ -21,7 +21,7 @@
 // charts instead of a wall of prose. The client renders every chart itself
 // from real logged data; this function only decides what's worth
 // highlighting and writes the explanation, never generates a chart image.
-const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementFeatureLimit, callAnthropic, recordUsageCost, extractJSON, buildSessionAnalysisSummary, captureError, withErrorReporting } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, hasAiConsent, checkAndIncrementFeatureLimit, callAnthropic, recordUsageCost, extractJSON, buildSessionAnalysisSummary, captureError, withErrorReporting } = require('./_shared');
 
 const SYSTEM_PROMPT = (dataSummary) => `You are Krafft's post-workout analyst. You write a short, plain-language
 note about a single training session, compared against the user's own recent history for the same lifts — the
@@ -60,6 +60,9 @@ exports.handler = withErrorReporting(async (event) => {
 
   if (!(await hasPaidAccess(auth.user.id, auth.token))) {
     return jsonResponse(402, { error: 'Post-session analysis is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
+  }
+  if (!(await hasAiConsent(auth.user.id, auth.token))) {
+    return jsonResponse(403, { error: 'Agree to Krafft\'s AI data-use consent to use this feature.', consentRequired: true });
   }
 
   let payload;

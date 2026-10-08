@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Support — Krafft</title>
+<style>
+  :root { --bg:#F4F2ED; --surface:#FFFFFF; --border:#E2DFD6; --text:#17181B; --text-dim:#6B6A64; --accent:#8A6A3A; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; width:100%; overflow-x:hidden; }
+  body { background:var(--bg); color:var(--text); font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    padding: calc(2rem + env(safe-area-inset-top,0px)) calc(1.25rem + env(safe-area-inset-right,0px)) calc(2rem + env(safe-area-inset-bottom,0px)) calc(1.25rem + env(safe-area-inset-left,0px));
+    min-height: 100vh; min-height: 100dvh; }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  .logo { font-family: 'Fraunces', serif; font-size: 1.6rem; color: var(--accent); margin-bottom: 0.25rem; }
+  h1 { font-family: 'Fraunces', serif; font-size: 1.6rem; margin: 1.5rem 0 0.75rem; }
+  h2 { font-size: 1rem; margin: 0 0 0.3rem; }
+  p { line-height: 1.55; color: var(--text); }
+  .muted { color: var(--text-dim); font-size: 0.9rem; }
+  a { color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem 1.25rem; margin-bottom: 0.9rem; }
+  .btn { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; padding: 0.6rem 1.1rem; border-radius: 8px; font-weight: 600; font-size: 0.9rem; margin-top: 0.5rem; }
+  .flag { background: #FBEFD9; border: 1px solid #E8CF9A; border-radius: 6px; padding: 0.6rem 0.8rem; font-size: 0.85rem; margin: 0.75rem 0 1.5rem; }
+  .flag strong { color: #8A6A3A; }
+  .back { display: inline-block; margin-top: 2rem; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">KRAFFT</div>
+  <h1 style="margin-top:0.5rem;">Support</h1>
+
+  <div class="card">
+    <h2>Contact us</h2>
+    <p class="muted">Something broken, a billing question, or anything else — we read every email directly.</p>
+    <a class="btn" href="mailto:odoglusk+platedsupport@gmail.com">Email Support</a>
+  </div>
+  <div class="flag"><strong>[REVIEW BEFORE PUBLISH]</strong> Confirm this is the support address you want published before this page goes live.</div>
+
+  <h1>FAQ</h1>
+
+  <div class="card">
+    <h2>How do I cancel my subscription?</h2>
+    <p class="muted">Open Profile → Manage Subscription. That opens Stripe's billing portal, where you can cancel anytime — you keep access through the end of the period you've already paid for, and your logged data is never affected either way.</p>
+  </div>
+
+  <div class="card">
+    <h2>How do I delete my account?</h2>
+    <p class="muted">Open Profile → Settings → Delete Account, type DELETE to confirm. This is immediate and permanent — it removes your profile, logs, photos, and subscription, in-app, without needing to email anyone.</p>
+  </div>
+
+  <div class="card">
+    <h2>What data does Krafft send to AI, and can I turn it off?</h2>
+    <p class="muted">Only after you agree to it — Krafft shows a one-time consent screen before the first AI feature you use (Describe It, Snap a Photo, Ask AI, Session Analysis), explaining exactly what's sent. You can withdraw that consent anytime from Profile → AI Features, which turns every AI feature back off immediately.</p>
+  </div>
+
+  <div class="card">
+    <h2>I upgraded on iPhone — why did it open my browser?</h2>
+    <p class="muted">Subscriptions are billed through Krafft's website via Stripe, so "Upgrade" opens that checkout page in your browser rather than inside the app. Once you finish, return to Krafft — your Pro status updates automatically within about 30 seconds.</p>
+  </div>
+
+  <div class="card">
+    <h2>I never got my confirmation email.</h2>
+    <p class="muted">Check your spam folder first. If it's not there, double-check the email address you signed up with was typed correctly, then contact us and we'll help directly.</p>
+  </div>
+
+  <a class="back" href="index.html">&larr; Back to Krafft</a>
+</div>
+</body>
+</html>

@@ -19,6 +19,7 @@ drop table if exists monthly_recaps cascade;
 drop table if exists exercise_goals cascade;
 drop table if exists lifts cascade;
 drop table if exists referrals cascade;
+drop table if exists external_purchase_log cascade;
 drop table if exists subscriptions cascade;
 drop table if exists ai_usage cascade;
 drop table if exists supplement_logs cascade;
@@ -51,6 +52,9 @@ create table profiles (
   age_over_18 boolean,
   age_gate_shown_at timestamptz,
   parental_consent_at timestamptz,
+  -- Null = AI features off (never consented, or withdrawn from Profile).
+  -- See supabase-schema-phase40-app-store-readiness.sql.
+  ai_consent_at timestamptz,
   -- Referrals: this user's own shareable code, generated client-side at signup.
   referral_code text unique,
   -- Daily "haven't logged yet" reminder email opt-out (see send-reminder-emails.js).
@@ -436,6 +440,30 @@ alter table subscriptions enable row level security;
 
 create policy "subscriptions: select own" on subscriptions
   for select using (auth.uid() = user_id);
+
+-- ── external_purchase_log (App Store readiness batch, item 7) ───────────
+-- One row per successful Stripe Checkout session that originated from the
+-- iOS app — Apple's external-purchase-link entitlement requires reporting
+-- these on a schedule. Admin-only: RLS enabled with no policies at all, so
+-- only the service-role key (stripe-webhook.js writes it,
+-- admin-unreported-purchases.js reads it) can touch this table. See
+-- supabase-schema-phase40-app-store-readiness.sql.
+create table external_purchase_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  stripe_session_id text not null unique,
+  stripe_subscription_id text,
+  amount_cents int,
+  currency text,
+  platform text not null default 'ios',
+  created_at timestamptz not null default now(),
+  reported_to_apple boolean not null default false,
+  reported_at timestamptz
+);
+
+create index idx_external_purchase_log_unreported on external_purchase_log (reported_to_apple) where reported_to_apple = false;
+
+alter table external_purchase_log enable row level security;
 
 -- ── referrals ───────────────────────────────────────────────────────────
 -- One row per successful referral redemption. Written only by

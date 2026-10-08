@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Signing you in — Krafft</title>
+<style>
+  :root { --bg:#F4F2ED; --text:#17181B; --text-dim:#6B6A64; --accent:#8A6A3A; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; width:100%; overflow-x:hidden; }
+  body { background:var(--bg); color:var(--text); font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    min-height: 100vh; min-height: 100dvh; display:flex; align-items:center; justify-content:center;
+    padding: calc(1.5rem + env(safe-area-inset-top,0px)) calc(1.5rem + env(safe-area-inset-right,0px)) calc(1.5rem + env(safe-area-inset-bottom,0px)) calc(1.5rem + env(safe-area-inset-left,0px)); }
+  .box { max-width: 380px; text-align: center; }
+  .logo { font-family: 'Fraunces', serif; font-size: 1.6rem; color: var(--accent); margin-bottom: 1rem; }
+  p { color: var(--text-dim); line-height: 1.5; }
+  .spinner { width: 28px; height: 28px; border: 3px solid #E2DFD6; border-top-color: var(--accent); border-radius: 50%;
+    margin: 0 auto 1rem; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .btn { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; padding: 0.65rem 1.2rem;
+    border-radius: 8px; font-weight: 600; font-size: 0.9rem; margin-top: 1rem; }
+  #fallback { display: none; margin-top: 1.5rem; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">KRAFFT</div>
+  <div class="spinner" id="spinner"></div>
+  <p id="status">Signing you in…</p>
+
+  <div id="fallback">
+    <p>If the Krafft app didn't open automatically, continue here instead.</p>
+    <a class="btn" id="webFallbackLink" href="index.html">Continue in Browser</a>
+  </div>
+</div>
+<script>
+  // Supabase's email-confirmation and password-reset links land here with
+  // the session tokens in the URL's hash fragment (never the query string —
+  // that would get logged server-side). Two destinations from here:
+  //  1. Native app installed: hand the same fragment to krafft://auth-callback,
+  //     which Capacitor's App.addListener('appUrlOpen', ...) in index.html
+  //     picks up and turns into supabase.auth.setSession(...).
+  //  2. No native app (or the custom-scheme redirect silently fails, which
+  //     is the only signal a web page gets when an app isn't installed):
+  //     fall back to opening index.html with the same hash — supabase-js
+  //     there auto-detects a session from the URL hash on load, same as
+  //     this flow already worked before this page existed.
+  var hash = window.location.hash || '';
+  var webFallback = document.getElementById('webFallbackLink');
+  webFallback.href = 'index.html' + hash;
+
+  if (hash) {
+    try { window.location.href = 'krafft://auth-callback' + hash; } catch (e) {}
+  }
+
+  // No reliable "the app opened" signal exists from a web page, so this is
+  // a fixed wait, not a detection: give iOS a moment to switch apps, then
+  // show the fallback for anyone still looking at this page (app not
+  // installed, or they declined the app-switch prompt).
+  setTimeout(function () {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('status').textContent = hash
+      ? "Didn't get redirected?"
+      : 'This link is missing its sign-in details — request a new one from the app.';
+    document.getElementById('fallback').style.display = 'block';
+  }, 1800);
+</script>
+</body>
+</html>

@@ -1,7 +1,11 @@
 // POST — called by Stripe, not the app. Configure this URL as a webhook
 // endpoint in the Stripe Dashboard, subscribed to at least:
 //   customer.subscription.created, customer.subscription.updated,
-//   customer.subscription.deleted
+//   customer.subscription.deleted, checkout.session.completed
+// (the last one is new as of the App Store readiness batch — item 7's
+// external_purchase_log needs the Checkout Session object specifically,
+// since that's what carries a session id and the exact amount charged;
+// the subscription object alone doesn't.)
 //
 // Verifies the Stripe-Signature header itself (HMAC-SHA256 over the raw
 // body, using Node's built-in crypto) rather than pulling in the `stripe`
@@ -117,6 +121,38 @@ const SUBSCRIPTION_EVENTS = new Set([
   'customer.subscription.deleted',
 ]);
 
+// Logs one row per successful iOS-originated checkout, for Apple's
+// external-purchase-link reporting requirement (item 7, App Store
+// readiness batch) — best effort, never blocks or fails the webhook's
+// 200 response, since Stripe would otherwise retry a delivery that
+// already succeeded at its actual job (the subscription is real either
+// way; this is bookkeeping on top of it).
+async function logExternalPurchaseIfIos(session) {
+  if (session.metadata?.platform !== 'ios') return;
+  const userId = session.metadata?.supabase_user_id;
+  if (!userId) return;
+  try {
+    await fetch(`${process.env.SUPABASE_URL}/rest/v1/external_purchase_log`, {
+      method: 'POST',
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        stripe_session_id: session.id,
+        stripe_subscription_id: session.subscription || null,
+        amount_cents: session.amount_total ?? null,
+        currency: session.currency || null,
+        platform: 'ios',
+      }),
+    });
+  } catch (err) {
+    await captureError(err, { function: 'stripe-webhook:log-external-purchase', userId, sessionId: session.id });
+  }
+}
+
 exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
@@ -140,6 +176,14 @@ exports.handler = withErrorReporting(async (event) => {
     stripeEvent = JSON.parse(rawBody);
   } catch {
     return jsonResponse(400, { error: 'Invalid payload.' });
+  }
+
+  if (stripeEvent.type === 'checkout.session.completed') {
+    // Only used for the external-purchase-log bookkeeping above — the
+    // subscriptions table itself is still written exclusively from the
+    // customer.subscription.* events below, unchanged.
+    await logExternalPurchaseIfIos(stripeEvent.data?.object || {});
+    return jsonResponse(200, { received: true });
   }
 
   if (!SUBSCRIPTION_EVENTS.has(stripeEvent.type)) {

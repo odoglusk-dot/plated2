@@ -11,7 +11,7 @@
 // query patterns for food_logs/goals/weight_log/supplement_logs in place for
 // the Dashboard/History tabs — reusing them here avoids a second, parallel
 // data-access path server-side.
-const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementFeatureLimit, callAnthropic, recordUsageCost, captureError, withErrorReporting } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, hasAiConsent, checkAndIncrementFeatureLimit, callAnthropic, recordUsageCost, captureError, withErrorReporting } = require('./_shared');
 
 // AI cost-efficiency batch, item 1: Ask AI moved from Sonnet to Haiku-tier.
 // This task is a tightly-grounded, short-form Q&A over a pre-built text
@@ -44,6 +44,9 @@ exports.handler = withErrorReporting(async (event) => {
 
   if (!(await hasPaidAccess(auth.user.id, auth.token))) {
     return jsonResponse(402, { error: 'Ask AI is a paid feature — start your free trial or subscribe to use it.', upgradeRequired: true });
+  }
+  if (!(await hasAiConsent(auth.user.id, auth.token))) {
+    return jsonResponse(403, { error: 'Agree to Krafft\'s AI data-use consent to use this feature.', consentRequired: true });
   }
 
   let payload;

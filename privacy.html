@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Privacy Policy — Krafft</title>
+<style>
+  :root { --bg:#F4F2ED; --surface:#FFFFFF; --border:#E2DFD6; --text:#17181B; --text-dim:#6B6A64; --accent:#8A6A3A; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; width:100%; overflow-x:hidden; }
+  body { background:var(--bg); color:var(--text); font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    padding: calc(2rem + env(safe-area-inset-top,0px)) calc(1.25rem + env(safe-area-inset-right,0px)) calc(2rem + env(safe-area-inset-bottom,0px)) calc(1.25rem + env(safe-area-inset-left,0px));
+    min-height: 100vh; min-height: 100dvh; }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  .logo { font-family: 'Fraunces', serif; font-size: 1.6rem; color: var(--accent); margin-bottom: 0.25rem; }
+  .updated { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 2rem; }
+  h1 { font-family: 'Fraunces', serif; font-size: 1.6rem; margin: 2rem 0 0.75rem; }
+  h1:first-of-type { margin-top: 1rem; }
+  p, li { line-height: 1.55; color: var(--text); }
+  .muted { color: var(--text-dim); font-size: 0.9rem; }
+  a { color: var(--accent); }
+  .flag { background: #FBEFD9; border: 1px solid #E8CF9A; border-radius: 6px; padding: 0.6rem 0.8rem; font-size: 0.85rem; margin: 0.75rem 0; }
+  .flag strong { color: #8A6A3A; }
+  .back { display: inline-block; margin-top: 2.5rem; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">KRAFFT</div>
+  <h1 style="margin-top:0.5rem;">Privacy Policy</h1>
+  <p class="updated">Last updated: 2026-10-08</p>
+
+  <div class="flag"><strong>[REVIEW BEFORE PUBLISH]</strong> This is a starting draft, not legal advice. Have a lawyer review it — especially the Children's Privacy section below — before this is published or Krafft is available to the public.</div>
+
+  <h1>1. What we collect</h1>
+  <ul>
+    <li><strong>Account info</strong>: email address and a display name you choose.</li>
+    <li><strong>Logged data you enter</strong>: food logs, favorites, weight entries, supplement logs, lifts, training splits, and the goals/profile fields you fill in (age, sex, height, activity level, weight) — used to power the goal calculator and entirely optional beyond what's needed for core tracking.</li>
+    <li><strong>AI-related content</strong>: text descriptions and photos you submit for macro estimation, questions you ask Ask AI, and — after you end a workout — a summary of that session's lifts plus light recent nutrition context (used to generate your post-workout Session Analysis) are sent to a third-party AI provider (Anthropic), via our server, never directly from your device, to generate a response. We don't use this content to train models. This only happens after you explicitly agree to it in the app's AI consent screen, and only while you have an active subscription — you can withdraw this consent at any time from Profile, which turns these features back off.</li>
+    <li><strong>Basic usage counters</strong>: a per-day count of AI calls per account, used only to enforce daily usage limits.</li>
+    <li><strong>Referral and friend codes</strong>: your referral code, and — if you choose to add a friend or accept a friend request — the resulting connection between your account and theirs.</li>
+    <li><strong>Purchase records (iOS)</strong>: if you subscribe from the iOS app, Krafft logs the resulting Stripe checkout session and subscription id against your account, so purchases made outside Apple's in-app purchase system can be reported to Apple as required.</li>
+  </ul>
+
+  <h1>2. What we don't do</h1>
+  <ul>
+    <li>We don't sell your data.</li>
+    <li>We don't share your raw logged data (individual food logs, lifts, weight entries, etc.) with other users, ever. Every account's data is technically walled off from every other account at the database level (Row Level Security), not just hidden by the app's interface.</li>
+    <li><strong>The one exception</strong>: if you add a friend and they accept (or vice versa), that person can see three summary numbers about your training — your current streak, how many distinct exercises you've logged, and your all-time lift volume. That's it: no dates, no individual lifts, no food/weight/supplement data, no photos. Opt-in on both sides; removing a friend stops the sharing immediately.</li>
+    <li>We don't use your food/supplement/weight/lift logs for advertising, and AI-sent content is never used for advertising either.</li>
+  </ul>
+
+  <h1>3. How your data is stored</h1>
+  <p>Data is stored in a Supabase-hosted Postgres database. Photos submitted for macro estimation are sent to our serverless function and to our AI provider for processing; we don't retain a separate copy of submitted photos beyond what's needed to complete that single request.</p>
+
+  <h1>4. Your controls</h1>
+  <ul>
+    <li>Edit or delete any logged entry (food, weight, supplement, lift) at any time from within the app.</li>
+    <li>Export your logging history as a file from Settings.</li>
+    <li>Withdraw AI consent at any time from Profile — this immediately disables all AI features.</li>
+    <li>Remove a friend at any time from Profile, which immediately stops sharing your leaderboard numbers with them.</li>
+    <li>Permanently delete your account from Profile → Delete Account. This is irreversible and immediately removes your profile, goals, body stats, food logs, favorites, weight log, supplement logs, lifts, training splits, photos, and every other table that references your account — in-app, not by emailing anyone.</li>
+  </ul>
+
+  <h1>5. Children's privacy</h1>
+  <p>Krafft is not directed at children under 13, and we don't knowingly collect data from users under 13. If you are a parent or guardian and believe your child under 13 has created an account, contact us (see below) and we will delete it.</p>
+  <div class="flag"><strong>[REVIEW BEFORE PUBLISH]</strong> This section needs real legal review — requirements around minors' data (e.g. COPPA in the US, or equivalent rules elsewhere) are jurisdiction-specific and stricter than this draft reflects.</div>
+
+  <h1>6. Third parties involved in processing your data</h1>
+  <ul>
+    <li><strong>Supabase</strong> — hosts our database and handles authentication.</li>
+    <li><strong>Netlify</strong> — hosts the app and serverless functions.</li>
+    <li><strong>Anthropic</strong> — processes AI-estimation and Ask AI requests, only after you've consented and only on the paid tier.</li>
+    <li><strong>Stripe</strong> — processes subscription payments, including purchases made from the iOS app via the external website checkout. We never see or store your card details; Stripe shares back only what we need to manage your subscription.</li>
+  </ul>
+  <p>We don't add analytics or advertising trackers beyond what's needed to run the app.</p>
+
+  <h1>7. Changes to this policy</h1>
+  <p>We may update this Privacy Policy as the app changes. Material changes will be noted with an updated "Last updated" date above.</p>
+
+  <h1>8. Contact</h1>
+  <p>Questions about this policy or a data-deletion request can be directed to <a href="mailto:odoglusk+platedsupport@gmail.com">odoglusk+platedsupport@gmail.com</a>.</p>
+  <div class="flag"><strong>[REVIEW BEFORE PUBLISH]</strong> Confirm this is the contact address you want published — it's reused from the app's existing in-app support link, not a new placeholder.</div>
+
+  <a class="back" href="index.html">&larr; Back to Krafft</a>
+</div>
+</body>
+</html>

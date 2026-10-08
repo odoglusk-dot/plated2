@@ -61,6 +61,15 @@
         <tbody id="recentRows"></tbody>
       </table>
     </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;font-size:0.95rem;">Unreported external purchases (iOS)</h3>
+      <p class="muted" style="margin-top:0;">Checkouts from the iOS app not yet reported to Apple. Read-only — mark a row reported directly in Supabase (external_purchase_log.reported_to_apple/reported_at) once filed.</p>
+      <table>
+        <thead><tr><th>Date</th><th>Amount</th><th>Platform</th><th>Stripe subscription</th></tr></thead>
+        <tbody id="unreportedPurchaseRows"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -88,6 +97,7 @@ async function loadStats(password) {
     if (!res.ok) throw new Error(data.error || 'Could not load stats.');
     sessionStorage.setItem('kraftAdminPw', password);
     renderStats(data);
+    loadUnreportedPurchases(password);
   } catch (err) {
     errorEl.textContent = err.message;
   } finally {
@@ -133,6 +143,26 @@ function renderStats(data) {
       <td>${REASON_LABELS[r.reason] || r.reason || '—'}</td>
       <td>${r.outcome}</td>
     </tr>`).join('') || '<tr><td colspan="3" class="muted">No events yet.</td></tr>';
+}
+
+async function loadUnreportedPurchases(password) {
+  const tbody = document.getElementById('unreportedPurchaseRows');
+  try {
+    const res = await fetch('/.netlify/functions/admin-unreported-purchases', {
+      headers: { Authorization: 'Bearer ' + password },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not load.');
+    tbody.innerHTML = (data.rows || []).map((r) => `
+      <tr>
+        <td>${new Date(r.created_at).toLocaleDateString()}</td>
+        <td>${r.amount_cents != null ? '$' + (r.amount_cents / 100).toFixed(2) + ' ' + (r.currency || '').toUpperCase() : '—'}</td>
+        <td>${r.platform}</td>
+        <td>${r.stripe_subscription_id || '—'}</td>
+      </tr>`).join('') || '<tr><td colspan="4" class="muted">Nothing unreported.</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="error">${err.message}</td></tr>`;
+  }
 }
 
 document.getElementById('loadBtn').addEventListener('click', () => {
