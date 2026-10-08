@@ -265,14 +265,11 @@
     cursor: pointer; padding: 0; flex-shrink: 0; }
   .avatar-btn svg { width: 18px; height: 18px; display: block; }
 
-  .tab-nav { padding: 0.5rem 0.6rem; background: var(--nav-bg);
-    border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 19; }
   .tab-btn-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
   .tab-btn { flex: none; font-family: var(--font-body); letter-spacing: 0.02em; text-transform: uppercase;
     font-size: 0.72rem; font-weight: 500; padding: 0.45rem 0.85rem; border-radius: 999px; background: var(--surface-2);
     border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; white-space: nowrap; }
   .tab-btn.active { color: var(--bg); background: var(--text); border-color: var(--text); font-weight: 600; }
-  .tab-btn.scope-hidden { display: none; }
 
   main.tab-panels { padding: 1.25rem calc(1.25rem + env(safe-area-inset-right, 0px)) calc(1.25rem + 64px + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px));
     max-width: 880px; margin: 0 auto; }
@@ -1150,7 +1147,6 @@
     <section class="tab-panel as-sheet" data-tab="supplements" id="panel-supplements"></section>
     <section class="tab-panel as-sheet" data-tab="meals" id="panel-meals"></section>
     <section class="tab-panel as-sheet" data-tab="ask" id="panel-ask"></section>
-    <section class="tab-panel as-sheet" data-tab="more" id="panel-more"></section>
     <section class="tab-panel" data-tab="profile" id="panel-profile"></section>
     <section class="tab-panel as-sheet" data-tab="lifts" id="panel-lifts"></section>
     <section class="tab-panel as-sheet" data-tab="days" id="panel-days"></section>
@@ -3062,7 +3058,6 @@ function renderAll() {
   renderSupplements();
   renderMeals();
   renderAsk();
-  renderMoreTab();
   renderProfile();
   renderLiftsTab();
   renderDaysTab();
@@ -6475,39 +6470,11 @@ function renderAsk() {
   $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAsk(); });
 }
 
-// Leftover from the pre-nav-rebuild IA: 'more' is no longer reachable
-// from any nav chrome (nav rebuild Phase 2/4 gave each of these a real
-// home — Supplements is a Today module, Ask AI is the Today Coach card,
-// Budget-Optimized Protein is a Progress Tools row), but the panel/
-// render function stays for now as a safety-net deep-link target; see
-// the nav rebuild's Phase 6 cleanup for its removal.
-const MORE_TAB_DESTINATIONS = [
-  { tab: 'supplements', title: 'Supplement Guide', desc: 'Evidence ratings (Strong/Moderate/Limited/Weak) for common supplements.' },
-  { tab: 'meals', title: 'Budget-Optimized Protein', desc: 'Foods ranked by cost per gram of protein.' },
-  { tab: 'ask', title: 'Ask Your Data', desc: 'Ask questions about your own logged history.', pro: true },
-];
-
 // Small, consistent Pro-gated indicator shown next to a feature's name
 // everywhere it appears in navigation — visible to free users at all times,
 // not only once they tap in and hit the paywall.
 function proLockIconHtml() {
   return `<svg class="pro-lock-icon" viewBox="0 0 24 24" fill="currentColor" style="width:0.75em;height:0.75em;margin-left:0.35em;vertical-align:0.05em;color:var(--accent);" aria-label="Pro"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
-}
-
-function renderMoreTab() {
-  const panel = $('#panel-more');
-  if (!panel) return;
-  const paid = hasAccess(state.subscription);
-  panel.innerHTML = `
-    <div class="pagehead"><div class="pagetitle">More</div></div>
-    ${MORE_TAB_DESTINATIONS.map((d) => `
-      <div class="card">
-        <h3>${esc(d.title)}${d.pro && !paid ? proLockIconHtml() : ''}</h3>
-        <p class="muted small">${esc(d.desc)}</p>
-        <button class="btn btn-sm" data-more-open="${d.tab}">Open</button>
-      </div>`).join('')}
-  `;
-  $$('[data-more-open]', panel).forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.moreOpen)));
 }
 
 async function buildDataSummary() {
