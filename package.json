@@ -1,0 +1,8 @@
+{
+  "name": "krafft",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "sync:ios": "node scripts/sync-ios.mjs && npx cap sync ios"
+  }
+}

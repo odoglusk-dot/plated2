@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Krafft — Macro &amp; Strength Tracker</title>
 <meta name="description" content="Macro tracking and strength training in one app. Snap a photo for instant AI macros, log your lifts, and see both on one combined dashboard — 3-day free trial.">
 
@@ -70,12 +70,19 @@
     --font-mono: 'IBM Plex Mono', monospace;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; overflow-x: hidden;
+    /* iOS/Capacitor: stop the rubber-band bounce from revealing empty
+       space past the real content edges — not a visual change, just
+       disables a native scroll gesture. */
+    overscroll-behavior: none;
+  }
   body {
     background-color: var(--bg);
     color: var(--text);
     font-family: var(--font-body);
-    min-height: 100vh;
+    min-height: 100vh; /* fallback for browsers without dvh support */
+    min-height: 100dvh;
   }
   h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0; font-weight: 600; }
   .mono { font-family: var(--font-mono); }
@@ -167,7 +174,13 @@
   .badge.on { color: var(--accent); background: var(--accent-soft); }
 
   /* ── Auth screen ──────────────────────────────────────────────── */
-  #authScreen, #paywallScreen, #onboardingScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  #authScreen, #paywallScreen, #onboardingScreen {
+    min-height: 100vh; /* fallback for browsers without dvh support */
+    min-height: 100dvh;
+    display: flex; align-items: center; justify-content: center;
+    padding: calc(1.5rem + env(safe-area-inset-top, 0px)) calc(1.5rem + env(safe-area-inset-right, 0px))
+      calc(1.5rem + env(safe-area-inset-bottom, 0px)) calc(1.5rem + env(safe-area-inset-left, 0px));
+  }
   .onboarding-step-label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 0.5rem; }
   .onboarding-tier-list { list-style: none; padding: 0; margin: 0.75rem 0; font-size: 0.9rem; }
   .onboarding-tier-list li { padding: 0.3rem 0; color: var(--text-dim); }
@@ -236,7 +249,8 @@
   }
 
   /* ── App shell ────────────────────────────────────────────────── */
-  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.25rem;
+  .topbar { display: flex; align-items: center; justify-content: space-between;
+    padding: calc(0.9rem + env(safe-area-inset-top, 0px)) calc(1.25rem + env(safe-area-inset-right, 0px)) 0.9rem calc(1.25rem + env(safe-area-inset-left, 0px));
     border-bottom: 1px solid var(--border); background: var(--nav-bg); position: sticky; top: 0; z-index: 20; }
   .logo { font-size: 1.7rem; color: var(--accent); font-family: var(--font-display); letter-spacing: 0.05em; }
   .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
@@ -256,7 +270,8 @@
   .tab-btn.active { color: var(--bg); background: var(--text); border-color: var(--text); font-weight: 600; }
   .tab-btn.scope-hidden { display: none; }
 
-  main.tab-panels { padding: 1.25rem; padding-bottom: calc(1.25rem + 64px + env(safe-area-inset-bottom, 0px)); max-width: 880px; margin: 0 auto; }
+  main.tab-panels { padding: 1.25rem calc(1.25rem + env(safe-area-inset-right, 0px)) calc(1.25rem + 64px + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px));
+    max-width: 880px; margin: 0 auto; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
   .pagehead { margin-bottom: 1rem; }
@@ -287,14 +302,14 @@
   /* ── Quick-log FAB — always reachable, same two destinations (Log Food /
      Log a Lift) regardless of which tab is active. Sits just above the
      bottom nav, never inside a tab-panel, so it survives every navigation. */
-  .quick-log-fab { position: fixed; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 32;
+  .quick-log-fab { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 32;
     width: 52px; height: 52px; border-radius: 50%; background: var(--text); color: var(--bg); border: none;
     display: flex; align-items: center; justify-content: center; cursor: pointer;
     box-shadow: 0 6px 16px rgba(23,24,27,0.22); transition: transform .15s; }
   .quick-log-fab:active { transform: scale(0.94); }
   .quick-log-fab svg { width: 24px; height: 24px; }
   .quick-log-backdrop { position: fixed; inset: 0; z-index: 29; background: transparent; }
-  .quick-log-sheet { position: fixed; right: 16px; bottom: calc(144px + env(safe-area-inset-bottom, 0px)); z-index: 32;
+  .quick-log-sheet { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(144px + env(safe-area-inset-bottom, 0px)); z-index: 32;
     display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end; }
   .quick-log-sheet-item { display: flex; align-items: center; gap: 0.5rem; background: var(--surface);
     border: 1px solid var(--border); border-radius: 100px; padding: 0.6rem 1rem 0.6rem 0.8rem;
@@ -314,7 +329,7 @@
      one popup's own palette, not a redefinition of those tokens. */
   .calorie-breakdown-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(23,24,27,0.4); }
   .calorie-breakdown-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: var(--surface);
-    border-radius: 20px 20px 0 0; padding: 1.35rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 20px 20px 0 0; padding: 1.35rem calc(1.25rem + env(safe-area-inset-right, 0px)) calc(1.25rem + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px));
     box-shadow: 0 -10px 30px rgba(0,0,0,0.15); max-height: 85vh; overflow-y: auto; }
   .calorie-breakdown-handle { width: 36px; height: 4px; background: var(--border); border-radius: 3px; margin: 0 auto 1rem; }
   .cb-eyebrow { font-family: var(--font-body); font-weight: 600; font-size: 0.66rem; letter-spacing: 0.1em;
@@ -349,7 +364,7 @@
      two features stay independent. */
   .weight-log-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(23,24,27,0.4); }
   .weight-log-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: var(--surface);
-    border-radius: 20px 20px 0 0; padding: 1.35rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 20px 20px 0 0; padding: 1.35rem calc(1.25rem + env(safe-area-inset-right, 0px)) calc(1.25rem + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px));
     box-shadow: 0 -10px 30px rgba(0,0,0,0.15); max-height: 85vh; overflow-y: auto; }
   .weight-log-handle { width: 36px; height: 4px; background: var(--border); border-radius: 3px; margin: 0 auto 1rem; }
 
@@ -497,7 +512,8 @@
      click meant for the nav underneath it. The navbar itself also gets a
      z-index bump while editing (below) so it always wins pointer capture
      over this bar in the rare case they still overlap mid-drag. */
-  .edit-top-bar { position: fixed; left: 12px; right: 12px; z-index: 32; display: flex; align-items: center;
+  .edit-top-bar { position: fixed; left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px));
+    z-index: 32; display: flex; align-items: center;
     gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
   .edit-readout-chip { background: rgba(23,20,15,0.65); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     color: #fff; font-family: var(--font-mono); font-size: 0.68rem; padding: 0.3rem 0.75rem; border-radius: 100px;
@@ -4020,10 +4036,27 @@ const NAVBAR_POSITIONS = [
 function navbarSizeByKey(key) { return NAVBAR_SIZES.find((s) => s.key === key) || NAVBAR_SIZES[1]; }
 function navbarPosLabel(key) { return (NAVBAR_POSITIONS.find((p) => p.key === key) || NAVBAR_POSITIONS[2]).label; }
 
+// Reads a CSS env(safe-area-inset-*) as a real px number — needed wherever
+// JS computes pixel positions directly (the draggable navbar) instead of
+// letting a CSS calc() handle it. A single hidden probe element's computed
+// padding is the standard way to pull env() values into JS.
+let safeAreaProbe = null;
+function safeAreaInset(side) {
+  if (!safeAreaProbe) {
+    safeAreaProbe = document.createElement('div');
+    safeAreaProbe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;'
+      + 'padding-top:env(safe-area-inset-top,0px);padding-right:env(safe-area-inset-right,0px);'
+      + 'padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);';
+    document.body.appendChild(safeAreaProbe);
+  }
+  const prop = 'padding' + side[0].toUpperCase() + side.slice(1);
+  return parseFloat(getComputedStyle(safeAreaProbe)[prop]) || 0;
+}
+
 function navPosTop(posKey, height) {
   const viewH = window.innerHeight;
-  if (posKey === 'top') return 16;
-  if (posKey === 'bottom') return viewH - 14 - height;
+  if (posKey === 'top') return 16 + safeAreaInset('top');
+  if (posKey === 'bottom') return viewH - 14 - height - safeAreaInset('bottom');
   return Math.round((viewH - height) / 2);
 }
 function navNearestSizeKey(width) {
@@ -4042,7 +4075,11 @@ function applyNavbarLayout(withTransition) {
   if (!nav) return;
   const size = navbarSizeByKey(state.navbarPrefs.size);
   const top = navPosTop(state.navbarPrefs.position, size.height);
-  const left = Math.round((window.innerWidth - size.width) / 2);
+  // Center within the safe area, not the full screen width — matters in
+  // landscape on a notched device where the usable width is narrower.
+  const safeLeft = safeAreaInset('left'), safeRight = safeAreaInset('right');
+  const usableWidth = window.innerWidth - safeLeft - safeRight;
+  const left = safeLeft + Math.round((usableWidth - size.width) / 2);
   nav.classList.toggle('dragging', !withTransition);
   nav.style.width = size.width + 'px';
   nav.style.height = size.height + 'px';

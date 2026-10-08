@@ -1,0 +1,8 @@
+{
+  "appId": "com.krafft.app",
+  "appName": "Krafft",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never"
+  }
+}
