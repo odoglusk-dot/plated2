@@ -4441,6 +4441,8 @@ function renderEditChrome() {
   if (!editingScreenKey) {
     if (overlay) overlay.remove();
     $('#bottomNav')?.classList.remove('editing-navbar');
+    const panels = $('.tab-panels');
+    if (panels) panels.style.paddingTop = '';
     return;
   }
   if (!overlay) {
@@ -4465,15 +4467,29 @@ function renderEditChrome() {
   });
   $('#bottomNav')?.classList.add('editing-navbar');
   wireNavbarDrag();
+  reserveSpaceForEditBar();
+}
+
+// The edit top bar is position:fixed so it floats above scrolled content —
+// without this, it sits on top of (and obscures) whatever the screen
+// renders at its very top, like the Background Photo card's own heading.
+function reserveSpaceForEditBar() {
+  const panels = $('.tab-panels');
+  const bar = document.getElementById('editTopBar');
+  if (panels && bar) panels.style.paddingTop = (bar.getBoundingClientRect().bottom + 12) + 'px';
 }
 
 // Keeps the top bar clear of the navbar when the nav itself has been
 // dragged to the 'top' position — otherwise they'd occupy the exact same
 // screen edge (see the CSS comment above .edit-top-bar).
 function editTopBarOffset() {
-  const base = 12;
+  // The app's own sticky header (.topbar) sits at the top of the viewport
+  // too — without this, the fixed edit bar floats on top of and obscures
+  // the KRAFFT logo/streak pill instead of sitting cleanly below them.
+  const topbar = document.querySelector('.topbar');
+  const base = (topbar ? topbar.getBoundingClientRect().height : 60) + 10;
   if (state.navbarPrefs.position !== 'top') return base;
-  return 16 + navbarSizeByKey(state.navbarPrefs.size).height + 10;
+  return base + navbarSizeByKey(state.navbarPrefs.size).height + 10;
 }
 
 function updateEditReadout(text) {
@@ -4481,6 +4497,7 @@ function updateEditReadout(text) {
   if (chip) chip.textContent = text;
   const bar = document.getElementById('editTopBar');
   if (bar) bar.style.top = editTopBarOffset() + 'px';
+  reserveSpaceForEditBar();
 }
 
 // Mouse-based dragging on desktop otherwise starts highlighting page text
