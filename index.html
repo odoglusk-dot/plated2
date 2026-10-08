@@ -7297,6 +7297,11 @@ let liftForm = {
   muscleMapKeys: [],
 };
 let showWarmupRamp = false;
+// Collapsed by default — the muscle-tag chip grid was the single biggest
+// chunk of vertical space in the log-a-lift form, pushing weight/reps
+// below the fold for an entirely optional field. Same sticky-toggle
+// convention as showWarmupRamp.
+let liftMuscleDetailExpanded = false;
 let liftFormError = '';
 let liftFormSaving = false;
 let prBanner = null; // { exercise, weight, improvement } — dismissed manually, not auto-timed
@@ -8397,13 +8402,17 @@ function renderLiftLog(panel) {
         </select>
       </div>
       <div class="field">
-        <label>Muscles worked <span class="muted">(optional — feeds Weekly Training Volume &amp; the Muscle Map)</span></label>
-        <div class="chip-row">
+        <div class="row" style="justify-content:space-between;align-items:center;gap:0.5rem;">
+          <label style="margin:0;">Muscles worked <span class="muted">(optional)</span></label>
+          <button type="button" class="btn btn-sm btn-ghost" id="muscleDetailToggle" style="flex:none;">${liftMuscleDetailExpanded ? 'Hide' : (liftForm.muscleMapKeys.length ? 'Edit' : 'Add')}</button>
+        </div>
+        ${liftForm.muscleMapKeys.length ? `<p class="muted small" style="margin:0.25rem 0 0;">Primary: ${esc(MUSCLE_MAP_KEY_LABELS[liftForm.muscleMapKeys[0]])}${liftForm.muscleMapKeys.length > 1 ? ` · Secondary: ${liftForm.muscleMapKeys.slice(1).map((k) => esc(MUSCLE_MAP_KEY_LABELS[k])).join(', ')}` : ''}</p>` : ''}
+        ${liftMuscleDetailExpanded ? `
+        <div class="chip-row" style="margin-top:0.5rem;">
           ${MUSCLE_MAP_KEYS.map((k) => `<button type="button" class="chip ${liftForm.muscleMapKeys.includes(k) ? 'chip-active' : ''}" data-lift-muscle-map-key="${k}">${esc(MUSCLE_MAP_KEY_LABELS[k])}</button>`).join('')}
         </div>
-        <p class="muted small" style="margin-top:0.4rem;">${liftForm.muscleMapKeys.length
-          ? `Primary: ${esc(MUSCLE_MAP_KEY_LABELS[liftForm.muscleMapKeys[0]])}${liftForm.muscleMapKeys.length > 1 ? ` · Secondary: ${liftForm.muscleMapKeys.slice(1).map((k) => esc(MUSCLE_MAP_KEY_LABELS[k])).join(', ')}` : ''}`
-          : `First tap sets the primary muscle; more taps count as secondary (half weight). Leave blank to fall back to this exercise's library defaults, if any.`}</p>
+        <p class="muted small" style="margin-top:0.4rem;">First tap sets the primary muscle; more taps count as secondary (half weight). Leave blank to fall back to this exercise's library defaults, if any. Feeds Weekly Training Volume &amp; the Muscle Map.</p>
+        ` : ''}
       </div>
       <div class="field" id="liftLiveComparison">${liveComparisonHtml(liftForm.exercise, lifts)}</div>
       ` : ''}
@@ -8591,6 +8600,8 @@ function renderLiftLog(panel) {
   }));
   const brSel = $('#lift_bodyRegion');
   if (brSel) brSel.addEventListener('change', (e) => { liftForm.bodyRegion = e.target.value; });
+  const muscleDetailToggle = $('#muscleDetailToggle', panel);
+  if (muscleDetailToggle) muscleDetailToggle.addEventListener('click', () => { liftMuscleDetailExpanded = !liftMuscleDetailExpanded; renderLiftsTab(); });
   $$('[data-lift-muscle-map-key]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const k = btn.dataset.liftMuscleMapKey;
     const idx = liftForm.muscleMapKeys.indexOf(k);
