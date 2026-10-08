@@ -514,7 +514,7 @@
   .hero-bg-layer.has-photo { transform: scale(1.15); }
   .hero-bg-fade { position: absolute; inset: 0; z-index: 0;
     background: linear-gradient(180deg, rgba(23,20,15,0.12) 0%, rgba(23,20,15,0.05) 45%, var(--bg) 96%); pointer-events: none; }
-  .hero > *:not(.hero-bg-layer):not(.hero-bg-fade) { position: relative; z-index: 1; }
+  .hero > *:not(.hero-bg-layer):not(.hero-bg-fade):not(.hero-tap-target) { position: relative; z-index: 1; }
   /* Text-shadow for contrast (not a flat dark scrim) — matches the
      prototype's .herotext treatment exactly: white text relies on the
      shadow, the fade above is for blending into the page background at
@@ -535,6 +535,24 @@
     background: rgba(255,255,255,0.14); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
     border-color: rgba(255,255,255,0.25); color: #fff; }
   .pagehead .customize-gear-btn { margin-left: auto; }
+
+  /* protein_hero's tap target (nav rebuild Phase 2) — a transparent
+     full-cover button under the gear icon (z-index 1 vs. the gear's 2),
+     so tapping anywhere else on the hero opens the macro breakdown sheet
+     without stealing the gear's own click. */
+  .hero-tap-target { position: absolute; inset: 0; z-index: 1; border: none; background: transparent; padding: 0; cursor: pointer; }
+  .hero-bar { position: relative; z-index: 1; height: 7px; background: rgba(255,255,255,0.18); border-radius: 9px; margin-top: 0.85rem; overflow: hidden; }
+  .hero-bar i { display: block; height: 100%; background: var(--gold, #C7A15E); }
+  .streak-pill { cursor: pointer; }
+
+  /* Progress screen (nav rebuild Phase 4): Week/Month/Year window and
+     Overview|Insights switch, matching the reference mockup's .seg. */
+  .seg-control { display: flex; background: var(--divider); border-radius: 12px; padding: 3px; }
+  .seg-control span { flex: 1; text-align: center; padding: 0.5rem; border-radius: 10px; font-weight: 500;
+    color: var(--text-dim); cursor: pointer; font-size: 0.88rem; }
+  .seg-control span.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+  .protein-avg-cols { height: 64px; display: flex; align-items: flex-end; gap: 8px; margin-top: 0.6rem; }
+  .protein-avg-cols i { flex: 1; background: var(--gold, #C7A15E); border-radius: 5px; min-height: 4px; }
 
   /* Dim scrim shown over a screen's whole content area while editing. */
   .edit-scrim { position: fixed; inset: 0; z-index: 25; background: rgba(23,20,15,0.3); pointer-events: none; }
@@ -1199,6 +1217,19 @@
   <!-- Log Weight popup — filled in by showWeightLogPopup(), opened from
        the "Log Weight" button on the Weight Log screen. -->
   <div id="weightLogOverlay" class="hidden"></div>
+
+  <!-- Today's protein_hero tap target — full-day macro breakdown, filled
+       in by showMacroBreakdownPopup() (nav rebuild Phase 2). -->
+  <div id="macroBreakdownOverlay" class="hidden"></div>
+
+  <!-- Streak chip tap target (topbar + You) — streak + achievements grid
+       combined, filled in by showStreakAchievementsPopup(). Replaces the
+       achievements grid's old standalone placement; see Decision #6. -->
+  <div id="streakAchievementsOverlay" class="hidden"></div>
+
+  <!-- Today's meals module row tap target — edit/delete a single food
+       log entry, filled in by showMealEditPopup(entry). -->
+  <div id="mealEditOverlay" class="hidden"></div>
 
   <!-- AI data-use consent popup — filled in by showAiConsentPopup(), shown
        once before the first use of any AI feature (and again from Profile
@@ -2111,6 +2142,7 @@ $('#authForm').addEventListener('submit', async (e) => {
 });
 
 $('#avatarBtn').addEventListener('click', () => setActiveTab('profile'));
+$('#streakPill').addEventListener('click', showStreakAchievementsPopup);
 
 $('#paywallSignOutBtn').addEventListener('click', async () => {
   await supabase.auth.signOut();
@@ -3273,6 +3305,10 @@ function sumMacros(logs) {
   }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
 }
 
+function shortDayLabel(dayStr) {
+  return new Date(`${dayStr}T00:00:00`).toLocaleDateString([], { weekday: 'short' });
+}
+
 function groupByDay(logs) {
   const map = new Map();
   for (const l of logs) {
@@ -4217,9 +4253,10 @@ function proteinByMealHtml(todayLogs, proteinGoal) {
 // of module order, since they're time-sensitive alerts, not layout the
 // user is arranging.
 function homeWidgetHtml(key, ctx) {
-  const { totals, g, calorieColor, todaysLiftVolume, trainingStreak, todayWaterOz, todayWaterEntries, current, best, ws } = ctx;
+  const { totals, g, todayWaterOz, latestWeight, supplementsToday, mealsPrevDays } = ctx;
   switch (key) {
-    case 'macros':
+    case 'protein_hero': {
+      const pct = g.protein_g ? Math.min(100, Math.round((totals.protein_g / g.protein_g) * 100)) : 0;
       return `
         <div class="hero" id="nutritionHero">
           <div class="hero-bg-layer"></div>
@@ -4228,100 +4265,263 @@ function homeWidgetHtml(key, ctx) {
           <div class="eyebrow-sm">Today</div>
           <div class="hero-num">${round(totals.protein_g)}<span class="hero-unit">g protein</span></div>
           <div class="muted small">of ${round(g.protein_g)}g goal</div>
-        </div>
-        <div class="card float-card">
-          ${todaysFocusHeroHtml()}
-          <div class="stat-grid-2">
-            <div class="stat-card-sm">
-              <h3>Calories</h3>
-              <div class="stat-num" style="font-size:1.3rem;color:${calorieColor};">${round(totals.calories)}<span class="muted" style="font-size:0.72rem;"> / ${round(g.calories)}</span></div>
-            </div>
-            <div class="stat-card-sm">
-              <h3>Today's Volume</h3>
-              <div class="stat-num" style="font-size:1.3rem;">${toDisplayWeight(todaysLiftVolume, 0).value.toLocaleString()}<span class="muted" style="font-size:0.72rem;"> ${weightUnitLabel()}</span></div>
-            </div>
-            <div class="stat-card-sm">
-              <h3>Carbs</h3>
-              <div class="stat-num" style="font-size:1.3rem;">${round(totals.carbs_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.carbs_g)}g</span></div>
-            </div>
-            <div class="stat-card-sm">
-              <h3>Current Streak</h3>
-              <div class="stat-num" style="font-size:1.3rem;">${trainingStreak}<span class="muted" style="font-size:0.72rem;"> day${trainingStreak === 1 ? '' : 's'} training</span></div>
-            </div>
-            <div class="stat-card-sm">
-              <h3>Fat</h3>
-              <div class="stat-num" style="font-size:1.3rem;">${round(totals.fat_g)}g<span class="muted" style="font-size:0.72rem;"> / ${round(g.fat_g)}g</span></div>
-            </div>
-            <div class="stat-card-sm">
-              <h3>Water</h3>
-              <div class="stat-num" style="font-size:1.3rem;">${round(todayWaterOz)}oz<span class="muted" style="font-size:0.72rem;"> / ${round(g.water_oz || 64)}oz</span></div>
-            </div>
-          </div>
+          <div class="hero-bar"><i style="width:${pct}%"></i></div>
+          <button class="hero-tap-target" id="proteinHeroTapTarget" aria-label="View today's full macro breakdown"></button>
         </div>`;
-    case 'todaysPlan':
-      return todaysPlanCardHtml();
-    case 'streakWater':
+    }
+    case 'meals':
       return `
         <div class="card">
-          <p class="muted" style="margin:0 0 0.5rem;">Your goal is what you're aiming for — the shaded range is a healthy zone around it, not a strict rule.</p>
-          <div class="row">
-            <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
-            <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
+          <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
+            <h3 style="margin:0;">Meals</h3>
+            <span class="muted small">${round(totals.calories)} kcal</span>
           </div>
-          <div class="row" style="margin-top:0.5rem;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-            <span class="muted">💧 Water:</span>
-            <div class="chip-row">
-              <button class="chip" data-water="8">+8oz</button>
-              <button class="chip" data-water="16">+16oz</button>
-              <button class="chip" data-water="24">+24oz</button>
-            </div>
-            <div class="btn-group">
-              <input class="input mono" id="water_custom_oz" type="number" min="1" placeholder="oz" style="width:64px;padding:0.4rem 0.5rem;">
-              <button class="btn btn-sm" id="water_custom_log">Log</button>
-            </div>
-          </div>
-          ${todayWaterEntries.length ? `
-          <div style="margin-top:0.5rem;">
-            ${todayWaterEntries.map((w) => `
-              <div class="log-row" style="padding:0.3rem 0;">
-                <span class="muted small">${new Date(w.logged_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${round(w.amount_oz)}oz</span>
-                <button class="btn btn-sm btn-ghost" data-delete-water="${w.id}">✕</button>
-              </div>`).join('')}
-          </div>` : ''}
-        </div>`;
-    case 'thisWeek':
-      return `
-        <div class="card">
-          <h3>This Week</h3>
-          <div class="row" style="margin-top:0.25rem;">
-            <span class="badge on">🥩 Protein goal hit: ${ws.proteinDaysHit}/7 days</span>
-            <span class="badge">💧 Hydration goal hit: ${ws.waterDaysHit}/7 days</span>
-          </div>
-          <p class="muted" style="margin-top:0.75rem;margin-bottom:0.25rem;">Daily averages vs. goal, last 7 days:</p>
-          <p class="muted">Calories ${round(ws.avgCalories)} / ${round(g.calories)} · Protein ${round(ws.avgProtein)}g / ${round(g.protein_g)}g · Carbs ${round(ws.avgCarbs)}g / ${round(g.carbs_g)}g · Fat ${round(ws.avgFat)}g / ${round(g.fat_g)}g</p>
-          <button class="btn btn-sm" id="shareRecapBtn" style="margin-top:0.75rem;">Share weekly recap</button>
-          <div id="recapPreviewSlot"></div>
-        </div>`;
-    case 'loggedToday':
-      return `
-        <div class="card">
-          <h3>Logged Today</h3>
           ${state.todayLogs.length === 0
-            ? `<p class="muted">Nothing logged yet — head to the Log Food tab.</p>`
+            ? `<p class="muted">Nothing logged yet today — tap + to add your first one.</p>`
             : state.todayLogs.map((l) => `
-              <div class="log-row">
+              <div class="log-row" data-meal-row="${l.id}" style="cursor:pointer;">
                 <div>
                   <div class="name">${esc(l.food_name)}</div>
                   <div class="macros">${round(l.calories)} kcal · P${round(l.protein_g)} C${round(l.carbs_g)} F${round(l.fat_g)}</div>
                 </div>
-                <button class="btn btn-sm btn-ghost" data-delete-log="${l.id}">✕</button>
+                <span class="mono muted small">${round(l.protein_g)}g</span>
               </div>`).join('')}
+          <div class="log-row" id="mealsPrevDaysToggle" style="cursor:pointer;">
+            <span class="muted small">Previous days</span>
+            <span class="muted small">${mealsPreviousDaysExpanded ? '▾' : (mealsPrevDays.length ? mealsPrevDays.slice(0, 3).map((d) => shortDayLabel(d.day)).join(' · ') + '  ›' : 'None yet')}</span>
+          </div>
+          ${mealsPreviousDaysExpanded ? (mealsPrevDays.length === 0 ? `<p class="muted small">No earlier days logged yet.</p>` : mealsPrevDays.map((d) => `
+            <div class="log-row" style="padding:0.3rem 0;">
+              <span class="muted small">${shortDayLabel(d.day)} · ${d.day}</span>
+              <span class="muted small">${round(d.totals.calories)} kcal · P${round(d.totals.protein_g)}g</span>
+            </div>`).join('')) : ''}
         </div>`;
-    case 'proteinByMeal':
-      return proteinByMealHtml(state.todayLogs, state.goals.protein_g);
+    case 'todays_lift':
+      return todaysLiftSummaryHtml();
+    case 'water':
+      return `
+        <div class="card" id="todayWaterCard">
+          <h3>Water</h3>
+          <div class="stat-num" style="font-size:1.3rem;">${round(todayWaterOz)}<span class="muted" style="font-size:0.72rem;"> / ${round(g.water_oz || 64)}oz</span></div>
+          <div class="chip-row" style="margin-top:0.5rem;">
+            <button class="chip" data-water="8">+8oz</button>
+            <button class="chip" data-water="16">+16oz</button>
+          </div>
+        </div>`;
+    case 'weight': {
+      const wd = latestWeight ? toDisplayWeight(latestWeight.weight_lb, 1) : null;
+      return `
+        <div class="card" id="todayWeightCard" style="cursor:pointer;">
+          <h3>Weight</h3>
+          ${wd
+            ? `<div class="stat-num" style="font-size:1.3rem;">${wd.value}<span class="muted" style="font-size:0.72rem;"> ${wd.unit}</span></div><div class="muted small">${latestWeight.logged_date}</div>`
+            : `<p class="muted small">No entries yet — tap to log one.</p>`}
+        </div>`;
+    }
+    case 'supplements':
+      return `
+        <div class="card">
+          <div class="log-row" id="supplementsModuleToggle" style="cursor:pointer;">
+            <span>Supplements</span>
+            <span class="muted small">${supplementsToday.length} logged today ${supplementsModuleExpanded ? '▾' : '›'}</span>
+          </div>
+          ${supplementsModuleExpanded ? `
+          <div style="margin-top:0.5rem;">
+            ${supplementsToday.length === 0 ? `<p class="muted small">Nothing logged yet today.</p>` :
+              supplementsToday.map((s) => `<div class="muted small" style="padding:0.2rem 0;">${esc(s.supplement_name)}${s.dose ? ' · ' + esc(s.dose) : ''}</div>`).join('')}
+            <button class="btn btn-sm" id="supplementsModuleOpenBtn" style="margin-top:0.4rem;">Log / View Guide</button>
+          </div>` : ''}
+        </div>`;
+    case 'coach':
+      return `
+        <div class="card" id="coachModuleCard" style="cursor:pointer;">
+          <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
+            <h3 style="margin:0;">Coach</h3><span class="muted">›</span>
+          </div>
+          <p class="muted small" style="margin-top:0.3rem;">"How am I doing on protein this week?" — ask anything about your logged history.</p>
+        </div>`;
     default:
       return '';
   }
+}
+
+// Today's lift card — compact single-action summary (Start / Continue
+// workout / Choose a workout), per the reference mockup. The detailed
+// per-exercise breakdown (todaysLiftModuleHtml, the today_lift
+// customizable screen) still exists unchanged and is reachable from the
+// Lift sheet's Training sub-tab; this is deliberately a short glance
+// card, not a second copy of that breakdown.
+function todaysLiftSummaryHtml() {
+  const ctx = computeTodaysLiftCtx();
+  const activeBlock = state.profile?.active_training_block;
+  const hasPlanned = !!(activeBlock || state.plan);
+  let label, sub;
+  if (!ctx.empty && !ctx.ended) {
+    label = 'Continue';
+    sub = `${ctx.exerciseCount} exercise${ctx.exerciseCount === 1 ? '' : 's'} so far${ctx.elapsedLabel ? ' · ' + ctx.elapsedLabel : ''}`;
+  } else if (!ctx.empty && ctx.ended) {
+    label = 'View';
+    sub = `${ctx.exerciseCount} exercise${ctx.exerciseCount === 1 ? '' : 's'} · complete`;
+  } else if (hasPlanned) {
+    label = 'Start';
+    sub = todaysFocusLabel();
+  } else {
+    label = 'Choose a workout';
+    sub = 'Nothing planned for today';
+  }
+  return `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
+        <h3 style="margin:0;">Today's Lift</h3>
+        <span class="muted small">${esc(sub)}</span>
+      </div>
+      <div class="row" style="justify-content:flex-end;border-top:none;padding-top:0.5rem;">
+        <button class="btn btn-primary btn-sm" id="todaysLiftCardBtn">${esc(label)}</button>
+      </div>
+    </div>`;
+}
+
+// One-line focus label reused by todaysLiftSummaryHtml's "Start" sub-text
+// — the split day's label when a split is set, else generic.
+function todaysFocusLabel() {
+  const split = state.trainingSplit;
+  if (!split) return 'Planned workout ready';
+  const idx = computeSplitDayIndex(split, localDateStr());
+  return split.days[idx]?.label || 'Planned workout ready';
+}
+
+// ── Today's full macro breakdown sheet (protein_hero tap target) ───────
+// Aggregate-vs-goal view for the whole day, distinct from
+// calorieBreakdownPopupHtml() (which is scoped to one just-logged entry)
+// — reuses that popup's visual pattern (backdrop + sheet + handle +
+// swipe-to-dismiss) and proteinByMealHtml()'s existing per-entry list.
+function macroBreakdownSheetHtml() {
+  const totals = sumMacros(state.todayLogs);
+  const g = state.goals;
+  const row = (label, have, goal, unit) => `
+    <div class="row" style="justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--divider);">
+      <span class="muted">${label}</span>
+      <span class="mono">${round(have)}${unit} <span class="muted small">/ ${round(goal)}${unit}</span></span>
+    </div>`;
+  return `
+    <div class="calorie-breakdown-backdrop" id="macroBreakdownBackdrop"></div>
+    <div class="calorie-breakdown-sheet" id="macroBreakdownSheet">
+      <div class="calorie-breakdown-handle"></div>
+      <div class="cb-eyebrow">Today</div>
+      <div class="cb-title">Macro Breakdown</div>
+      <div class="cb-hero">
+        <div class="cb-hero-num">${round(totals.calories)}</div>
+        <div class="cb-hero-label">calories · of ${round(g.calories)} goal</div>
+      </div>
+      ${row('Protein', totals.protein_g, g.protein_g, 'g')}
+      ${row('Carbs', totals.carbs_g, g.carbs_g, 'g')}
+      ${row('Fat', totals.fat_g, g.fat_g, 'g')}
+      <div style="margin-top:0.75rem;">${proteinByMealHtml(state.todayLogs, g.protein_g)}</div>
+      <button class="btn btn-primary btn-block cb-done-btn" id="macroBreakdownDoneBtn">Done</button>
+    </div>`;
+}
+
+function showMacroBreakdownPopup() {
+  const el = $('#macroBreakdownOverlay');
+  el.innerHTML = macroBreakdownSheetHtml();
+  el.classList.remove('hidden');
+  $('#macroBreakdownBackdrop').addEventListener('click', closeMacroBreakdownPopup);
+  $('#macroBreakdownDoneBtn').addEventListener('click', closeMacroBreakdownPopup);
+  const infoBtn = $('#proteinByMealInfoBtn', el);
+  if (infoBtn) infoBtn.addEventListener('click', () => { proteinByMealInfoExpanded = !proteinByMealInfoExpanded; showMacroBreakdownPopup(); });
+}
+function closeMacroBreakdownPopup() {
+  const el = $('#macroBreakdownOverlay');
+  el.classList.add('hidden');
+  el.innerHTML = '';
+}
+
+// ── Streak & achievements sheet (streak chip tap target) ───────────────
+// Decision #6 of the nav rebuild: one sheet replaces the separate
+// Achievements page — combines the existing current/best streak numbers
+// (computeStreaks) with the existing achievements grid (achievementsGridHtml,
+// still used verbatim) rather than building either concept twice.
+function streakAchievementsSheetHtml() {
+  const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
+  return `
+    <div class="weight-log-backdrop" id="streakAchievementsBackdrop"></div>
+    <div class="weight-log-sheet" id="streakAchievementsSheet" style="max-height:80vh;overflow-y:auto;">
+      <div class="weight-log-handle"></div>
+      <h3 style="margin-top:0;">Streak &amp; Achievements</h3>
+      <div class="row">
+        <span class="badge on">🔥 Current streak: ${current} day${current === 1 ? '' : 's'}</span>
+        <span class="badge">🏆 Best streak: ${best} day${best === 1 ? '' : 's'}</span>
+      </div>
+      <p class="muted small" style="margin-top:1rem;">${state.achievements.length} of ${ACHIEVEMENT_LIBRARY.length} achievements unlocked.</p>
+      ${achievementsGridHtml()}
+    </div>`;
+}
+function showStreakAchievementsPopup() {
+  const el = $('#streakAchievementsOverlay');
+  el.innerHTML = streakAchievementsSheetHtml();
+  el.classList.remove('hidden');
+  $('#streakAchievementsBackdrop').addEventListener('click', closeStreakAchievementsPopup);
+  $$('[data-achievement-share]', el).forEach((btn) => btn.addEventListener('click', () => shareAchievement(btn.dataset.achievementShare)));
+}
+function closeStreakAchievementsPopup() {
+  const el = $('#streakAchievementsOverlay');
+  el.classList.add('hidden');
+  el.innerHTML = '';
+}
+
+// ── Meal row edit sheet (Meals module row tap target) ───────────────────
+// Lets the user fix a logged entry's numbers directly from Today instead
+// of only being able to delete and re-log — the one new piece of editing
+// UI this phase needed; everything else reuses an existing surface.
+function mealEditSheetHtml(entry) {
+  return `
+    <div class="weight-log-backdrop" id="mealEditBackdrop"></div>
+    <div class="weight-log-sheet" id="mealEditSheet">
+      <div class="weight-log-handle"></div>
+      <h3 style="margin-top:0;">Edit Entry</h3>
+      <div class="field"><label>Food</label><input class="input" id="me_name" value="${esc(entry.food_name)}"></div>
+      <div class="row">
+        <div class="field"><label>Calories</label><input class="input mono" id="me_cal" type="number" value="${round(entry.calories)}"></div>
+        <div class="field"><label>Protein (g)</label><input class="input mono" id="me_protein" type="number" value="${round(entry.protein_g)}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Carbs (g)</label><input class="input mono" id="me_carbs" type="number" value="${round(entry.carbs_g)}"></div>
+        <div class="field"><label>Fat (g)</label><input class="input mono" id="me_fat" type="number" value="${round(entry.fat_g)}"></div>
+      </div>
+      <button class="btn btn-primary btn-block" id="me_save">Save</button>
+      <button class="btn btn-block btn-ghost" id="me_delete" style="margin-top:0.5rem;color:var(--danger);">Delete Entry</button>
+    </div>`;
+}
+function showMealEditPopup(entryId) {
+  const entry = state.todayLogs.find((l) => l.id === entryId);
+  if (!entry) return;
+  const el = $('#mealEditOverlay');
+  el.innerHTML = mealEditSheetHtml(entry);
+  el.classList.remove('hidden');
+  $('#mealEditBackdrop').addEventListener('click', closeMealEditPopup);
+  $('#me_save').addEventListener('click', async () => {
+    const updates = {
+      food_name: $('#me_name').value.trim() || entry.food_name,
+      calories: Number($('#me_cal').value) || 0,
+      protein_g: Number($('#me_protein').value) || 0,
+      carbs_g: Number($('#me_carbs').value) || 0,
+      fat_g: Number($('#me_fat').value) || 0,
+    };
+    const { error } = await supabase.from('food_logs').update(updates).eq('id', entryId);
+    if (error) return toast('Could not save: ' + error.message);
+    await loadHistory();
+    closeMealEditPopup();
+    renderAll();
+  });
+  $('#me_delete').addEventListener('click', async () => {
+    closeMealEditPopup();
+    await deleteLog(entryId);
+  });
+}
+function closeMealEditPopup() {
+  const el = $('#mealEditOverlay');
+  el.classList.add('hidden');
+  el.innerHTML = '';
 }
 
 // Customizable Screen Layout (phase39): a Pro-only global background
@@ -4536,10 +4736,23 @@ const MODULE_SPAN_LABELS = { half: 'Half', full: 'Full' };
 // screen's own job (homeWidgetHtml for nutrition_home, etc.), kept
 // separate so this registry doesn't need to know every screen's markup.
 const SCREEN_MODULE_DEFS = {
+  // Nav rebuild Phase 2: Today's 7 self-contained modules, in the order
+  // from krafft-option1-reference.html (protein_hero, meals, todays_lift,
+  // water + weight side-by-side, supplements, coach). Any module order a
+  // user saved under the old key set (macros/todaysPlan/streakWater/
+  // thisWeek/loggedToday/proteinByMeal) is dropped automatically by
+  // getScreenModuleLayout()'s def.order.includes(k) filter — those keys
+  // no longer exist, so saved rows for them are just ignored, same as any
+  // other "using defaults" case.
   nutrition_home: {
-    order: ['macros', 'todaysPlan', 'streakWater', 'thisWeek', 'loggedToday', 'proteinByMeal'],
-    labels: { macros: "Today's Macros", todaysPlan: "Today's Plan", streakWater: 'Streak & Water', thisWeek: 'This Week', loggedToday: 'Logged Today', proteinByMeal: 'Protein by Meal' },
-    defaults: { macros: { span: 'full', height: 'standard' }, todaysPlan: { span: 'full', height: 'standard' }, streakWater: { span: 'full', height: 'standard' }, thisWeek: { span: 'full', height: 'standard' }, loggedToday: { span: 'full', height: 'standard' }, proteinByMeal: { span: 'full', height: 'standard' } },
+    order: ['protein_hero', 'meals', 'todays_lift', 'water', 'weight', 'supplements', 'coach'],
+    labels: { protein_hero: 'Protein', meals: 'Meals', todays_lift: "Today's Lift", water: 'Water', weight: 'Weight', supplements: 'Supplements', coach: 'Coach' },
+    defaults: {
+      protein_hero: { span: 'full', height: 'standard' }, meals: { span: 'full', height: 'standard' },
+      todays_lift: { span: 'full', height: 'standard' }, water: { span: 'half', height: 'standard' },
+      weight: { span: 'half', height: 'standard' }, supplements: { span: 'full', height: 'standard' },
+      coach: { span: 'full', height: 'standard' },
+    },
   },
   today_lift: {
     order: ['summary', 'exercises'],
@@ -4914,7 +5127,18 @@ function computeHomeWidgetCtx() {
   const trainingStreak = computeTrainingStreak(state.lifts);
   const ws = weeklySummary();
 
-  return { totals, g, calorieColor, todaysLiftVolume, trainingStreak, todayWaterOz, todayWaterEntries, current, best, ws };
+  const sortedWeight = [...state.weightLog].sort((a, b) => a.logged_date.localeCompare(b.logged_date));
+  const latestWeight = sortedWeight.length ? sortedWeight[sortedWeight.length - 1] : null;
+
+  const supplementsToday = state.supplementLogs.filter((s) => localDateStr(new Date(s.logged_at)) === today);
+
+  // "Previous days" for the meals module — grouped history excluding
+  // today, most recent first, capped the same way the old History tab
+  // caps its initial view (7 days is plenty for a collapsed glance row).
+  const byDay = groupByDay(state.historyLogs.filter((l) => localDateStr(new Date(l.logged_at)) !== today));
+  const mealsPrevDays = Array.from(byDay.keys()).sort().reverse().slice(0, 7).map((day) => ({ day, totals: sumMacros(byDay.get(day)) }));
+
+  return { totals, g, calorieColor, calorieRange, todaysLiftVolume, trainingStreak, todayWaterOz, todayWaterEntries, current, best, ws, latestWeight, supplementsToday, mealsPrevDays };
 }
 
 function renderDashboard() {
@@ -4973,17 +5197,6 @@ function renderDashboard() {
   const streakUpgradeCta = $('#streakUpgradeCta');
   if (streakUpgradeCta) streakUpgradeCta.addEventListener('click', () => showUpgradeScreen(UPGRADE_CONTEXT_STREAK));
 
-  const viewPlanBtn = $('#dashboardViewPlanBtn', panel);
-  if (viewPlanBtn) viewPlanBtn.addEventListener('click', () => {
-    showPlanBuilder = false;
-    showBlockBuilder = false;
-    showExerciseGlossary = false;
-    liftsSelectedExercise = null;
-    liftsSubTab = 'training';
-    setActiveTab('lifts');
-    renderLiftsTab();
-  });
-
   wireAchievementBanner(panel);
 
   $$('[data-tip-learnmore]', panel).forEach((btn) => btn.addEventListener('click', () => {
@@ -4996,41 +5209,37 @@ function renderDashboard() {
     renderDashboard();
   }));
 
-  $('#shareRecapBtn').addEventListener('click', async () => {
-    const btn = $('#shareRecapBtn');
-    const original = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Generating…';
-    try {
-      const data = computeWeeklyRecapData();
-      const canvas = await generateWeeklyRecapCanvas(data);
-      const dataUrl = canvas.toDataURL('image/png');
-      $('#recapPreviewSlot').innerHTML = `
-        <div class="recap-preview">
-          <img src="${dataUrl}" alt="Weekly recap">
-          <a class="btn btn-sm btn-primary" href="${dataUrl}" download="krafft-weekly-recap.png">Download image</a>
-        </div>`;
-    } catch (err) {
-      toast('Could not generate the recap image.');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = original;
-    }
+  // ── Today's module interactions (nav rebuild Phase 2) ─────────────────
+  const heroTap = $('#proteinHeroTapTarget', panel);
+  if (heroTap) heroTap.addEventListener('click', showMacroBreakdownPopup);
+
+  $$('[data-meal-row]', panel).forEach((row) => row.addEventListener('click', () => showMealEditPopup(row.dataset.mealRow)));
+  const mealsPrevToggle = $('#mealsPrevDaysToggle', panel);
+  if (mealsPrevToggle) mealsPrevToggle.addEventListener('click', () => { mealsPreviousDaysExpanded = !mealsPreviousDaysExpanded; renderDashboard(); });
+
+  const liftCardBtn = $('#todaysLiftCardBtn', panel);
+  if (liftCardBtn) liftCardBtn.addEventListener('click', () => {
+    showPlanBuilder = false;
+    showBlockBuilder = false;
+    showExerciseGlossary = false;
+    liftsSelectedExercise = null;
+    liftsSubTab = 'training';
+    renderLiftsTab();
+    setActiveTab('lifts');
   });
 
-  $$('[data-delete-log]', panel).forEach((btn) => btn.addEventListener('click', () => deleteLog(btn.dataset.deleteLog)));
-  const proteinByMealInfoBtn = $('#proteinByMealInfoBtn', panel);
-  if (proteinByMealInfoBtn) proteinByMealInfoBtn.addEventListener('click', () => { proteinByMealInfoExpanded = !proteinByMealInfoExpanded; renderDashboard(); });
   $$('[data-water]', panel).forEach((btn) => btn.addEventListener('click', () => logWater(Number(btn.dataset.water))));
-  $$('[data-delete-water]', panel).forEach((btn) => btn.addEventListener('click', () => deleteWaterLog(btn.dataset.deleteWater)));
-  const logCustomWater = () => {
-    const input = $('#water_custom_oz');
-    const amount = Number(input.value);
-    if (!amount || amount <= 0) return toast('Enter an amount in oz first.');
-    logWater(amount);
-  };
-  $('#water_custom_log').addEventListener('click', logCustomWater);
-  $('#water_custom_oz').addEventListener('keydown', (e) => { if (e.key === 'Enter') logCustomWater(); });
+
+  const weightCard = $('#todayWeightCard', panel);
+  if (weightCard) weightCard.addEventListener('click', showWeightLogPopup);
+
+  const supToggle = $('#supplementsModuleToggle', panel);
+  if (supToggle) supToggle.addEventListener('click', () => { supplementsModuleExpanded = !supplementsModuleExpanded; renderDashboard(); });
+  const supOpenBtn = $('#supplementsModuleOpenBtn', panel);
+  if (supOpenBtn) supOpenBtn.addEventListener('click', () => setActiveTab('supplements'));
+
+  const coachCard = $('#coachModuleCard', panel);
+  if (coachCard) coachCard.addEventListener('click', () => setActiveTab('ask'));
 }
 
 async function deleteLog(id) {
@@ -6262,12 +6471,12 @@ function renderAsk() {
   $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAsk(); });
 }
 
-// A directory, not a rewrite — Supplements/Meals/Ask AI keep their own
-// panels/render functions exactly as they were; this just shortens the
-// path to reach them (one tap into More, then one tap to the actual
-// screen) instead of each sitting as its own peer in the lateral nav row,
-// since none of them are daily-use. Weight Log moved to the Progress hub
-// (training area) instead — see PROGRESS_TAB_DESTINATIONS.
+// Leftover from the pre-nav-rebuild IA: 'more' is no longer reachable
+// from any nav chrome (nav rebuild Phase 2/4 gave each of these a real
+// home — Supplements is a Today module, Ask AI is the Today Coach card,
+// Budget-Optimized Protein is a Progress Tools row), but the panel/
+// render function stays for now as a safety-net deep-link target; see
+// the nav rebuild's Phase 6 cleanup for its removal.
 const MORE_TAB_DESTINATIONS = [
   { tab: 'supplements', title: 'Supplement Guide', desc: 'Evidence ratings (Strong/Moderate/Limited/Weak) for common supplements.' },
   { tab: 'meals', title: 'Budget-Optimized Protein', desc: 'Foods ranked by cost per gram of protein.' },
@@ -8296,6 +8505,24 @@ let liftHistoryConfirmDeleteId = null;
 let liftHistoryDeleting = false;
 
 let dismissedSpikeWeek = null;
+
+// Today screen module UI state (nav rebuild Phase 2) — both start
+// collapsed, matching the reference mockup's "collapsed row that expands
+// inline" behavior for Supplements and "Previous days" under Meals.
+let mealsPreviousDaysExpanded = false;
+let supplementsModuleExpanded = false;
+
+// Progress screen state (nav rebuild Phase 4) — Decision #5's "Overview |
+// Insights" switch, and the Week/Month/Year window the spec says applies
+// to both. The window currently drives only the Protein Avg chart (the
+// one new per-window number this phase added); the rest of Progress's
+// cards are each already computed over their own fixed window (all-time
+// PRs, last-7-days hard sets, etc.) and weren't rewired to this control
+// — flagged in the nav rebuild's final report rather than silently
+// half-wiring a dozen existing cards to a control they were never built
+// around.
+let progressOverviewTab = 'overview';
+let progressWindow = 'week';
 
 // Item 5 of the conversion-surface-area batch: a one-time, server-tracked
 // "you've built a 7-day streak" upgrade prompt for free users. Same
@@ -11748,26 +11975,196 @@ function weeklyMuscleGroupBarSvg(weeklyData, activeMuscleGroups) {
 // panels/render functions exactly as they were; this just shortens the
 // path to reach them from the Lift tab's lateral nav instead of each
 // sitting as its own peer there, since none of them are daily-use.
-const PROGRESS_TAB_DESTINATIONS = [
-  { tab: 'weight', title: 'Weight Log', desc: 'Track bodyweight over time with a trend chart.' },
-  { tab: 'days', title: 'Training Days & Volume', desc: 'A training heatmap, volume per day, and weekly volume by muscle group.' },
-  { tab: 'photos', title: 'Progress Photos', desc: 'Track physique changes over time with your own photos.' },
-  { tab: 'recaps', title: 'Monthly Recaps', desc: 'A month-by-month summary, or compare two months side by side.' },
-  { tab: 'insights', title: 'Training Insights', desc: 'Muscle balance, strength ratios, progress trends, recovery, and the Friends Leaderboard.' },
-];
+// Nav rebuild Phase 4: Progress is now one screen with a Week/Month/Year
+// window and an Overview | Insights switch (Decision #5), not a hub of
+// five destinations. Weight Log, Progress Photos, and Monthly Recaps
+// didn't fit either Overview or Insights as written in the batch spec —
+// per Decision #8 they're reachable from here via the History link at
+// the foot of Overview (see progressHistoryLinksHtml()) rather than
+// inventing a new home for each; flagged in the final report.
+function proteinAvgChartHtml(windowKey) {
+  const days = windowKey === 'week' ? 7 : windowKey === 'month' ? 30 : 365;
+  const byDay = groupByDay(state.historyLogs);
+  const series = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    series.push(sumMacros(byDay.get(localDateStr(d)) || []).protein_g);
+  }
+  const avg = series.length ? series.reduce((a, b) => a + b, 0) / series.length : 0;
+  if (windowKey === 'week') {
+    const max = Math.max(1, ...series);
+    return `
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
+          <h3 style="margin:0;">Protein Avg</h3><span class="mono">${round(avg)}g</span>
+        </div>
+        <div class="protein-avg-cols">${series.map((v) => `<i style="height:${Math.max(4, Math.round((v / max) * 100))}%"></i>`).join('')}</div>
+      </div>`;
+  }
+  return `
+    <div class="card">
+      <h3>Protein Avg</h3>
+      <div class="stat-num" style="font-size:1.4rem;">${round(avg)}g<span class="muted small"> / day, last ${days} days</span></div>
+    </div>`;
+}
+
+function topInsightCardHtml() {
+  const deload = computeDeloadSignal(state.lifts);
+  const text = deload.suggest
+    ? `🛑 This week's volume is up ${deload.volumeSpike.pctAbove}% with ${deload.plateauedCount}/${deload.totalExercises} exercises plateaued — consider a deload.`
+    : 'Tap to see your training balance, strength ratios, recovery, and more.';
+  return `
+    <div class="card" id="topInsightCard" style="cursor:pointer;">
+      <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
+        <h3 style="margin:0;">Top Insight</h3><span class="muted">›</span>
+      </div>
+      <p class="muted small" style="margin-top:0.3rem;">${esc(text)}</p>
+    </div>`;
+}
+
+function progressStatHalfCardsHtml() {
+  const prCount = Object.keys(computeLiftPRs(state.lifts)).length;
+  const setsTotals = computeWeeklyHardSetsByMuscle(state.lifts, state.exercises);
+  const setsTotal = Math.round(Object.values(setsTotals).reduce((a, b) => a + b, 0));
+  return `
+    <div class="stat-grid-2">
+      <div class="stat-card-sm"><h3>PRs</h3><div class="stat-num" style="font-size:1.4rem;">${prCount}</div></div>
+      <div class="stat-card-sm"><h3>Sets / wk</h3><div class="stat-num" style="font-size:1.4rem;">${setsTotal}</div></div>
+    </div>`;
+}
+
+function muscleMapRowHtml() {
+  return `
+    <div class="card" id="progressMuscleMapRow" style="cursor:pointer;">
+      <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
+        <h3 style="margin:0;">Muscle Map</h3><span class="muted">›</span>
+      </div>
+      <p class="muted small" style="margin-top:0.3rem;">Weekly hard sets by muscle group, and your all-time balance.</p>
+    </div>`;
+}
+function plansBlocksRowHtml() {
+  const active = state.profile?.active_training_block;
+  const plan = state.plan;
+  const sub = plan ? `${esc(plan.goal_description)} · phase ${plan.current_phase_index + 1} of ${plan.phases.length}`
+    : active ? 'Training block in progress' : 'No plan or block active — tap to build one';
+  return `
+    <div class="card" id="progressPlansBlocksRow" style="cursor:pointer;">
+      <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
+        <h3 style="margin:0;">Plans &amp; Blocks</h3><span class="muted">›</span>
+      </div>
+      <p class="muted small" style="margin-top:0.3rem;">${sub}</p>
+    </div>`;
+}
+
+// Weight Log / Progress Photos / Monthly Recaps didn't fit Overview or
+// Insights as specified — kept reachable here as plain link rows per
+// Decision #8, rather than only via a deep link nothing points at.
+function progressHistoryLinksHtml() {
+  return `
+    <div class="muted small" style="text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.4rem;">History</div>
+    <div class="card" id="progressWeightRow" style="cursor:pointer;"><div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;"><span>Weight Log</span><span class="muted small">›</span></div></div>
+    <div class="card" id="progressPhotosRow" style="cursor:pointer;"><div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;"><span>Progress Photos</span><span class="muted small">›</span></div></div>
+    <div class="card" id="progressRecapsRow" style="cursor:pointer;"><div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;"><span>Monthly Recaps</span><span class="muted small">›</span></div></div>`;
+}
+
+// Decision #4's "Tools" section. Exercise Library and Budget-Optimized
+// Protein are real, separate screens; a standalone "warm-up/1RM
+// calculator" destination does not exist in the current app — the warm-
+// up ramp is inline on the Log-a-Lift form and 1RM tracking is on each
+// exercise's own detail page inside the Library — so there's no second
+// screen to link here without building a redundant one. Flagged as a
+// deviation in the final report rather than inventing a duplicate.
+function progressToolsSectionHtml() {
+  return `
+    <div class="muted small" style="text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.4rem;">Tools</div>
+    <div class="card" id="progressExerciseLibraryRow" style="cursor:pointer;"><div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;"><span>Exercise Library <span class="muted small">— includes 1RM tracking</span></span><span class="muted small">›</span></div></div>
+    <div class="card" id="progressBudgetProteinRow" style="cursor:pointer;"><div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;"><span>Budget-Optimized Protein</span><span class="muted small">›</span></div></div>`;
+}
+
+// The old Training/Social sub-tabs' exact cards, now grouped under
+// headings instead of a toggle — same functions, same data, per
+// Decision #5 ("grouped under 3-4 headings, scrolling normally").
+function progressInsightsHtml() {
+  const lifts = state.lifts;
+  const deload = computeDeloadSignal(lifts);
+  return `
+    <div class="muted small" style="text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.4rem;">Training</div>
+    <div class="card"><h3>Training Balance</h3><p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Share of all-time volume by muscle group.</p>${muscleBalanceHtml(lifts)}</div>
+    <div class="card"><h3>Strength Ratios</h3>${strengthRatiosHtml(lifts)}</div>
+    <div class="card"><h3>Rep Range Distribution</h3>${repRangeDistributionHtml(lifts)}</div>
+    <div class="card"><h3>Weekly Training Frequency</h3>${weeklyFrequencyChartHtml(lifts)}</div>
+    ${deload.suggest ? `
+    <div class="card" style="border-color:var(--danger);">
+      <h3>Consider a Deload</h3>
+      <p style="margin:0;">🛑 This week's volume is up ${deload.volumeSpike.pctAbove}% with ${deload.plateauedCount}/${deload.totalExercises} tracked exercises plateaued — that combination often means it's time to cut volume/intensity by roughly 40–50% for a week rather than pushing harder.</p>
+    </div>` : ''}
+
+    <div class="muted small" style="text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.4rem;">Progress &amp; Goals</div>
+    <div class="card"><h3>This Week's Flags</h3><p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Rule-based, not AI — computed overnight from your own logged data.</p>${trainingInsightsHtml()}</div>
+    <div class="card"><h3>Progress Leaderboard</h3><p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Estimated-1RM trend per exercise, across all logged history.</p>${progressLeaderboardHtml(lifts)}</div>
+    <div class="card"><h3>Recovery — Days Since Trained</h3>${recoveryHtml(lifts)}</div>
+    <div class="card"><h3>Goals Overview</h3>${goalsOverviewHtml(lifts, state.exerciseGoals)}</div>
+
+    <div class="muted small" style="text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.4rem;">Nutrition &amp; Social</div>
+    <div class="card"><h3>Nutrition × Training</h3><p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Weekly protein-goal consistency vs. lift volume — your own logged data, grouped by week.</p>${correlationHtml()}</div>
+    <div class="card"><h3>Friends Leaderboard</h3><p class="muted small" style="margin-top:-0.4rem;margin-bottom:0.5rem;">Current streak, exercises tracked, and career volume — add friends from your Profile.</p>${friendsLeaderboardHtml()}</div>
+  `;
+}
+
 function renderProgressTab() {
   const panel = $('#panel-progress');
   if (!panel) return;
   panel.innerHTML = `
     <div class="pagehead"><div class="pagetitle">Progress</div></div>
-    ${PROGRESS_TAB_DESTINATIONS.map((d) => `
-      <div class="card">
-        <h3>${esc(d.title)}</h3>
-        <p class="muted small">${esc(d.desc)}</p>
-        <button class="btn btn-sm" data-progress-open="${d.tab}">Open</button>
-      </div>`).join('')}
+    <div class="seg-control">
+      ${[['week', 'Week'], ['month', 'Month'], ['year', 'Year']].map(([k, l]) => `<span class="${progressWindow === k ? 'on' : ''}" data-progress-window="${k}">${l}</span>`).join('')}
+    </div>
+    <div class="seg-control" style="margin-top:0.5rem;">
+      <span class="${progressOverviewTab === 'overview' ? 'on' : ''}" data-progress-view="overview">Overview</span>
+      <span class="${progressOverviewTab === 'insights' ? 'on' : ''}" data-progress-view="insights">Insights</span>
+    </div>
+    ${progressOverviewTab === 'overview' ? `
+      ${proteinAvgChartHtml(progressWindow)}
+      ${topInsightCardHtml()}
+      ${progressStatHalfCardsHtml()}
+      ${muscleMapRowHtml()}
+      ${plansBlocksRowHtml()}
+      ${progressToolsSectionHtml()}
+      ${progressHistoryLinksHtml()}
+    ` : progressInsightsHtml()}
   `;
-  $$('[data-progress-open]', panel).forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.progressOpen)));
+
+  $$('[data-progress-window]', panel).forEach((el) => el.addEventListener('click', () => { progressWindow = el.dataset.progressWindow; renderProgressTab(); }));
+  $$('[data-progress-view]', panel).forEach((el) => el.addEventListener('click', () => { progressOverviewTab = el.dataset.progressView; renderProgressTab(); }));
+
+  const topInsight = $('#topInsightCard', panel);
+  if (topInsight) topInsight.addEventListener('click', () => { progressOverviewTab = 'insights'; renderProgressTab(); });
+
+  const openLiftsTraining = () => { liftsSubTab = 'training'; renderLiftsTab(); setActiveTab('lifts'); };
+  const muscleMapRow = $('#progressMuscleMapRow', panel);
+  if (muscleMapRow) muscleMapRow.addEventListener('click', openLiftsTraining);
+  const plansRow = $('#progressPlansBlocksRow', panel);
+  if (plansRow) plansRow.addEventListener('click', openLiftsTraining);
+
+  const libRow = $('#progressExerciseLibraryRow', panel);
+  if (libRow) libRow.addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); setActiveTab('lifts'); });
+  const budgetRow = $('#progressBudgetProteinRow', panel);
+  if (budgetRow) budgetRow.addEventListener('click', () => setActiveTab('meals'));
+
+  const weightRow = $('#progressWeightRow', panel);
+  if (weightRow) weightRow.addEventListener('click', () => setActiveTab('weight'));
+  const photosRow = $('#progressPhotosRow', panel);
+  if (photosRow) photosRow.addEventListener('click', () => setActiveTab('photos'));
+  const recapsRow = $('#progressRecapsRow', panel);
+  if (recapsRow) recapsRow.addEventListener('click', () => setActiveTab('recaps'));
+
+  $$('[data-insight-open]', panel).forEach((el) => el.addEventListener('click', () => {
+    liftsSelectedExercise = el.dataset.insightOpen;
+    liftHistoryEditingId = null;
+    goalCardEditing = false;
+    renderLiftsTab();
+    setActiveTab('lifts');
+  }));
 }
 
 let daysExpandedDate = null;
