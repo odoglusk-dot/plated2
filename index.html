@@ -269,10 +269,10 @@
   .profile-hero-name { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; color: var(--text); }
 
   /* ── Bottom nav (primary) ─────────────────────────────────────── */
-  .bottom-nav { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex;
-    background: var(--nav-bg); border: 1px solid var(--border); border-radius: 100px;
-    box-shadow: 0 6px 18px rgba(23,24,27,0.06);
-    padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom, 0px)); }
+  /* .bottom-nav's position/size/transition rules now live with the rest
+     of the Customize Screen CSS further down (phase39) — it went from a
+     fixed full-width bar to a draggable/resizable floating pill whose
+     left/top/width/height are set by JS, not static here. */
   .bottom-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
     background: transparent; border: none; border-radius: 100px; color: var(--text-faint); cursor: pointer; padding: 0.5rem 0.2rem; }
   .bottom-nav-icon { display: block; line-height: 0; }
@@ -447,34 +447,122 @@
   .hero .hero-num { font-family: var(--font-display); font-weight: 600; font-size: 2.7rem; color: var(--text); line-height: 1.05; margin-top: 0.35rem; }
   .hero .hero-num .hero-unit { font-size: 0.95rem; font-weight: 500; color: var(--text-dim); margin-left: 0.35rem; }
   .float-card { margin-top: -28px; position: relative; z-index: 1; box-shadow: 0 16px 34px rgba(23,24,27,0.08); }
-  /* Pro-only custom Home background (item 1, personalization batch) —
-     scoped to .hero specifically, not the whole #panel-dashboard: that
-     panel has no fixed height (it grows with every stacked card below
-     it), so `background-size: cover` there scaled the photo to cover a
-     multi-thousand-px-tall box and zoomed into a tiny sliver of it. .hero
-     has a normal bounded height, so cover crops it like an actual banner
-     photo. The scrim is baked into the background-image itself (see
-     applyHomeBackground in index.html); these overrides just keep the
-     hero's own text readable on top of it, since each of these elements
-     sets its own color elsewhere and won't inherit a parent override.*/
-  .hero.has-custom-home-bg { background-size: cover; background-position: center; background-repeat: no-repeat; }
-  .hero.has-custom-home-bg .eyebrow-sm,
-  .hero.has-custom-home-bg .muted,
-  .hero.has-custom-home-bg .hero-num { color: #fff; }
-  .hero.has-custom-home-bg .hero-unit { color: rgba(255,255,255,0.8); }
-  /* Widget-reorder live preview (item 2, personalization batch) — each
-     draggable row wraps the SAME homeWidgetHtml() output the real Home
-     screen renders, so what's shown here is what reordering actually
-     produces, not a stand-in label list. The content itself is inert
-     (pointer-events: none) since it's a preview, not the live dashboard —
-     only the header bar drags. */
-  .widget-preview-row { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.75rem; overflow: hidden; background: var(--surface); }
-  .widget-preview-handle { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: var(--surface-2); border-bottom: 1px solid var(--border); cursor: grab; }
-  .widget-preview-handle:active { cursor: grabbing; }
-  .widget-preview-grip { color: var(--text-faint); font-size: 1.05rem; line-height: 1; }
-  .widget-preview-content { padding: 0.75rem; pointer-events: none; }
-  .widget-preview-content .hero { padding: 0.5rem 0 1.75rem; }
-  .widget-preview-row.sortable-ghost { opacity: 0.4; }
+  /* ── Customizable Screen Layout (Pro feature, phase39) ────────────
+     Replaces the simpler phase38 Home-only background+reorder system.
+     Pixel values, thresholds, and transition timing copied directly from
+     the attached prototype (krafft-customize-screen-demo-v3.html) per
+     the batch doc's instruction to match it exactly, not approximate it —
+     only the color tokens are swapped for this app's existing --accent/
+     --surface/etc. variables instead of the prototype's hardcoded hexes. */
+
+  /* Background photo + blur — global per user, rendered behind .hero on
+     whichever screen has one (currently just nutrition_home/Home). Same
+     blur+scale-up treatment as the prototype's .bg-layer. */
+  .hero { position: relative; overflow: hidden; }
+  .hero-bg-layer { position: absolute; top: -20px; left: -20px; right: -20px; bottom: -20px; z-index: 0;
+    background-size: cover; background-position: center; pointer-events: none; }
+  .hero-bg-layer.has-photo { transform: scale(1.15); }
+  .hero-bg-fade { position: absolute; inset: 0; z-index: 0;
+    background: linear-gradient(180deg, rgba(23,20,15,0.12) 0%, rgba(23,20,15,0.05) 45%, var(--bg) 96%); pointer-events: none; }
+  .hero > *:not(.hero-bg-layer):not(.hero-bg-fade) { position: relative; z-index: 1; }
+  /* Text-shadow for contrast (not a flat dark scrim) — matches the
+     prototype's .herotext treatment exactly: white text relies on the
+     shadow, the fade above is for blending into the page background at
+     the bottom, not for text contrast. */
+  .hero.has-custom-bg .eyebrow-sm,
+  .hero.has-custom-bg .muted,
+  .hero.has-custom-bg .hero-num { color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,0.4); }
+  .hero.has-custom-bg .hero-unit { color: #F0ECE2; text-shadow: 0 1px 6px rgba(0,0,0,0.35); }
+
+  /* Edit-mode entry point: a gear icon on any customizable screen's
+     pagehead/hero, consistent with "when customizing a screen, have it
+     take you there" rather than a separate settings page. */
+  .customize-gear-btn { width: 30px; height: 30px; border-radius: 50%; background: var(--surface-2);
+    border: 1px solid var(--border); color: var(--text-dim); display: flex; align-items: center; justify-content: center;
+    flex: none; cursor: pointer; }
+  .customize-gear-btn svg { width: 16px; height: 16px; }
+  .hero .customize-gear-btn { position: absolute; top: 14px; right: 0; z-index: 2;
+    background: rgba(255,255,255,0.14); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border-color: rgba(255,255,255,0.25); color: #fff; }
+  .pagehead .customize-gear-btn { margin-left: auto; }
+
+  /* Dim scrim shown over a screen's whole content area while editing. */
+  .edit-scrim { position: fixed; inset: 0; z-index: 25; background: rgba(23,20,15,0.3); pointer-events: none; }
+  /* Readout chip + Done/Reset controls, merged into one top bar — kept
+     off the bottom of the screen entirely (its JS-computed `top` also
+     ducks below the nav when the nav itself is dragged to the 'top'
+     position) specifically because a fixed bottom control bar collided
+     with the navbar's own default bottom position: same bounding box,
+     same screen edge, and the bar's higher z-index silently ate every
+     click meant for the nav underneath it. The navbar itself also gets a
+     z-index bump while editing (below) so it always wins pointer capture
+     over this bar in the rare case they still overlap mid-drag. */
+  .edit-top-bar { position: fixed; left: 12px; right: 12px; z-index: 32; display: flex; align-items: center;
+    gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
+  .edit-readout-chip { background: rgba(23,20,15,0.65); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    color: #fff; font-family: var(--font-mono); font-size: 0.68rem; padding: 0.3rem 0.75rem; border-radius: 100px;
+    pointer-events: none; flex: none; }
+  .edit-top-bar .btn { flex: none; }
+
+  /* Draggable/resizable module grid — snap-to-fit, not freeform: on
+     release it always locks to one of the preset span/height values. */
+  .module-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; align-items: start; }
+  /* Height/overflow clipping lives on .module-card-inner, never on
+     .module-card itself — the grip/resize-handle/readout chip are
+     absolutely positioned relative to .module-card and the resize handle
+     deliberately sits half outside its bounds (bottom:-8px;right:-8px);
+     an overflow:hidden on .module-card would clip the handle right where
+     the user needs to grab it. This is the exact hit-testing bug the
+     prototype's own build notes warn about — clip the inner content
+     wrapper instead, leave the card (and its handle) unclipped. */
+  .module-card { position: relative; transition: grid-column 0.2s, outline-color 0.2s; }
+  .module-card[data-span="half"] { grid-column: span 1; }
+  .module-card[data-span="full"] { grid-column: span 2; }
+  .module-card.dragging { opacity: 0.55; }
+  body.customizing .module-card { outline: 2px dashed var(--accent); outline-offset: 2px; border-radius: 4px; }
+  /* A module with no content (e.g. "Today's Plan" when no block is active)
+     collapses to 0 height. Outside edit mode that's correct — nothing
+     renders. But while customizing, a 0-height card's absolutely-positioned
+     grip/handle overlap the next card's own grip, so the native hit test
+     grabs the wrong module. Reserve just enough room for the grip while
+     editing; the normal dashboard view is unaffected. */
+  body.customizing .module-card-inner { min-height: 44px; }
+  .module-card-inner { overflow: hidden; transition: height 0.2s; }
+  .module-card[data-h="compact"] .module-card-inner { height: 110px; }
+  .module-card[data-h="standard"] .module-card-inner { height: auto; }
+  .module-card[data-h="expanded"] .module-card-inner { height: auto; padding-bottom: 0.75rem; }
+  .module-grip { display: none; position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(23,20,15,0.08); align-items: center; justify-content: center;
+    font-size: 11px; color: var(--accent); cursor: grab; z-index: 3; touch-action: none; letter-spacing: -1px; }
+  body.customizing .module-grip { display: flex; }
+  .module-grip:active { cursor: grabbing; }
+  .module-resize-handle { display: none; position: absolute; width: 16px; height: 16px; bottom: -8px; right: -8px;
+    background: var(--text); border: 2px solid var(--surface); border-radius: 50%; z-index: 3; cursor: nwse-resize; touch-action: none; }
+  body.customizing .module-resize-handle { display: block; }
+  .module-readout-chip { display: none; position: absolute; top: 8px; left: 8px; z-index: 3;
+    background: rgba(23,20,15,0.65); backdrop-filter: blur(6px); color: #fff;
+    font-family: var(--font-mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; }
+  .module-card.showreadout .module-readout-chip { display: block; }
+
+  /* Floating draggable/resizable bottom nav — replaces the old fixed
+     full-width bar. Same rounded-pill treatment, now positionable. */
+  .bottom-nav { position: fixed; z-index: 30; display: flex; justify-content: space-between; align-items: center;
+    background: var(--nav-bg); border: 1px solid var(--border); border-radius: 100px;
+    box-shadow: 0 6px 18px rgba(23,24,27,0.06); padding: 0.4rem;
+    touch-action: none; user-select: none;
+    transition: left 0.22s cubic-bezier(.2,.8,.2,1), top 0.22s cubic-bezier(.2,.8,.2,1), width 0.22s cubic-bezier(.2,.8,.2,1), height 0.22s cubic-bezier(.2,.8,.2,1); }
+  .bottom-nav.dragging { transition: none; }
+  .navbar-edit-outline { position: absolute; inset: -4px; border: 2px dashed var(--accent); border-radius: 100px; pointer-events: none; display: none; }
+  .editing-navbar .navbar-edit-outline { display: block; }
+  .editing-navbar.bottom-nav { cursor: grab; z-index: 34; }
+  .editing-navbar.bottom-nav:active { cursor: grabbing; }
+  .navbar-resize-handle { position: absolute; width: 18px; height: 18px; bottom: -9px; right: -9px;
+    background: var(--text); border: 2px solid var(--surface); border-radius: 50%;
+    display: none; z-index: 5; cursor: nwse-resize; touch-action: none; }
+  .editing-navbar .navbar-resize-handle { display: block; }
+  /* Mouse-drag text-selection bug fix (see clearTextSelection() in
+     index.html) — disabled globally only while a drag is actually live. */
+  body.ui-dragging, body.ui-dragging * { user-select: none !important; -webkit-user-select: none !important; }
   .focus-inline { margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid var(--divider); }
   .focus-label { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; color: var(--text); }
   .float-card .stat-card-sm { background: var(--surface-2); box-shadow: none; }
@@ -1018,6 +1106,7 @@
   </footer>
 
   <nav class="bottom-nav" id="bottomNav">
+    <div class="navbar-edit-outline"></div>
     <button class="bottom-nav-btn" data-bottom="home" aria-label="Home">
       <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9"/></svg></span>
       <span class="bottom-nav-label">Home</span>
@@ -1042,6 +1131,7 @@
       <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg></span>
       <span class="bottom-nav-label">Profile</span>
     </button>
+    <div class="navbar-resize-handle" id="navbarResizeHandle"></div>
   </nav>
 
   <!-- Always-reachable quick-log action — same two destinations
@@ -1187,7 +1277,15 @@ const state = {
   achievements: [], // unlocked rows: {achievement_id, unlocked_at} — see loadAchievements()
   workoutSession: null, // today's row: {date, ended_at, analysis, analysis_generated_at} | null — see loadWorkoutSession()
   healthSyncToken: null, // {created_at, last_used_at, revoked_at} | null — see loadHealthSyncStatus(). Never the raw token itself; that's only ever seen once, at generation time.
-  homeBackgroundUrl: '', // signed URL for profile.home_background_path, or '' — see loadHomeBackgroundUrl()
+  // Customizable Screen Layout (phase39) — navbarPrefs/backgroundPrefs
+  // are global per account; screenModules is keyed by screen_key, each
+  // value the raw array of DB rows for that screen (or undefined =
+  // "using defaults"). See loadNavbarPrefs/loadBackgroundPrefs/
+  // loadScreenModules and getScreenModuleLayout().
+  navbarPrefs: { size: 'standard', position: 'bottom' },
+  backgroundPrefs: { photo_url: null, blur_amount: 22 },
+  backgroundSignedUrl: '', // signed URL for backgroundPrefs.photo_url, or ''
+  screenModules: {},
   activeTab: 'dashboard',
   aiRemaining: null,
   subscription: null,
@@ -2024,7 +2122,7 @@ const UPGRADE_CONTEXT_GROUP = 'Unlock Group Mode — a shared streak and leaderb
 const UPGRADE_CONTEXT_ATHLETE_POSITION = 'Unlock positional drill emphasis for your sport.';
 const UPGRADE_CONTEXT_ATHLETE_PSYCH = 'Unlock sports psychology tools like pre-performance visualization and the confidence bank.';
 const UPGRADE_CONTEXT_STREAK = "You've built a real streak — Pro users get AI insight into patterns like this.";
-const UPGRADE_CONTEXT_HOME_CUSTOMIZE = 'Unlock a custom Home screen background and widget reordering.';
+const UPGRADE_CONTEXT_CUSTOMIZE_SCREEN = 'Unlock screen customization — a background photo, and a draggable/resizable layout.';
 
 // Price shown next to every inline "Upgrade" CTA in the app, not just the
 // full paywall screen — a bare "Upgrade" button with price hidden behind
@@ -2349,8 +2447,9 @@ async function enterApp(session) {
 // ══════════════════════════════════════════════════════════════════
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
-  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadTrainingInsights(), loadPlan(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadGroup(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus()]);
-  await loadHomeBackgroundUrl(); // depends on state.profile, loaded above
+  await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadTrainingInsights(), loadPlan(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadGroup(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus(), loadNavbarPrefs(), loadScreenModules()]);
+  await loadBackgroundPrefs(); // separate: chains a signed-URL fetch off backgroundPrefs once loaded
+  applyNavbarLayout(true);
   renderAll();
   maybeShowGroupInvitePreview();
 }
@@ -2464,14 +2563,34 @@ async function loadProfile() {
   state.profile = data || null;
 }
 
+// Customizable Screen Layout (phase39) — one row per user for navbar/
+// background, absence of a row falling back to the shipped default.
+async function loadNavbarPrefs() {
+  const { data } = await supabase.from('user_navbar_prefs').select('*').eq('user_id', state.user.id).maybeSingle();
+  state.navbarPrefs = data || { size: 'standard', position: 'bottom' };
+}
+
 // Private bucket, same signed-URL-per-load convention as loadPhotos() —
-// depends on state.profile, so it's called after loadProfile() resolves
-// rather than inside the same Promise.all batch.
-async function loadHomeBackgroundUrl() {
-  const path = state.profile?.home_background_path;
-  if (!path) { state.homeBackgroundUrl = ''; return; }
-  const { data, error } = await supabase.storage.from('home-backgrounds').createSignedUrl(path, 60 * 60);
-  state.homeBackgroundUrl = (!error && data?.signedUrl) || '';
+// depends on state.backgroundPrefs, so it's called separately rather than
+// inside the same Promise.all batch as loadNavbarPrefs/loadScreenModules.
+async function loadBackgroundPrefs() {
+  const { data } = await supabase.from('user_background_prefs').select('*').eq('user_id', state.user.id).maybeSingle();
+  state.backgroundPrefs = data || { photo_url: null, blur_amount: 22 };
+  state.backgroundSignedUrl = '';
+  if (state.backgroundPrefs.photo_url) {
+    const { data: signed, error } = await supabase.storage.from('background-photos').createSignedUrl(state.backgroundPrefs.photo_url, 60 * 60);
+    if (!error && signed?.signedUrl) state.backgroundSignedUrl = signed.signedUrl;
+  }
+}
+
+// One row per module per screen per user — grouped client-side by
+// screen_key so getScreenModuleLayout() can look up a screen's rows
+// without re-querying.
+async function loadScreenModules() {
+  const { data } = await supabase.from('user_screen_modules').select('*').eq('user_id', state.user.id);
+  const grouped = {};
+  (data || []).forEach((row) => { (grouped[row.screen_key] = grouped[row.screen_key] || []).push(row); });
+  state.screenModules = grouped;
 }
 
 async function loadGoals() {
@@ -3733,18 +3852,21 @@ function proteinByMealHtml(todayLogs, proteinGoal) {
   </div>`;
 }
 
-// Item 2 of the personalization batch: Home screen widgets, broken out of
-// renderDashboard()'s single template so they can be rendered in whatever
-// order getHomeWidgetOrder() returns. Contextual banners (achievement
-// unlock, volume spike, streak upgrade prompt, tips) are NOT widgets —
-// they stay pinned at the top of the panel regardless of widget order,
-// since they're time-sensitive alerts, not layout the user is arranging.
+// nutrition_home's module content, keyed the same way the module grid
+// (phase39) orders/sizes them — see getScreenModuleLayout(). Contextual
+// banners (achievement unlock, volume spike, streak upgrade prompt, tips)
+// are NOT modules — they stay pinned at the top of the panel regardless
+// of module order, since they're time-sensitive alerts, not layout the
+// user is arranging.
 function homeWidgetHtml(key, ctx) {
   const { totals, g, calorieColor, todaysLiftVolume, trainingStreak, todayWaterOz, todayWaterEntries, current, best, ws } = ctx;
   switch (key) {
     case 'macros':
       return `
-        <div class="hero">
+        <div class="hero" id="nutritionHero">
+          <div class="hero-bg-layer"></div>
+          <div class="hero-bg-fade"></div>
+          <button class="customize-gear-btn" id="customizeGearBtn-nutrition_home" aria-label="Customize this screen">${gearIconSvg()}</button>
           <div class="eyebrow-sm">Today</div>
           <div class="hero-num">${round(totals.protein_g)}<span class="hero-unit">g protein</span></div>
           <div class="muted small">of ${round(g.protein_g)}g goal</div>
@@ -3844,27 +3966,541 @@ function homeWidgetHtml(key, ctx) {
   }
 }
 
-// Item 1 of the personalization batch: a Pro-only custom background photo
-// with a dark overlay baked right into the background-image declaration
-// (no separate scrim element needed) so card text stays legible on top.
-// Applied to .hero specifically, not the whole (unbounded-height) panel —
-// see the CSS comment above .hero.has-custom-home-bg for why.
-function applyHomeBackground(panel) {
-  const hero = $('.hero', panel);
-  if (!hero) return;
-  if (hasAccess(state.subscription) && state.homeBackgroundUrl) {
-    hero.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url("${state.homeBackgroundUrl}")`;
-    hero.classList.add('has-custom-home-bg');
+// Customizable Screen Layout (phase39): a Pro-only global background
+// photo + blur, applied to whichever .hero element is passed in (the
+// .hero-bg-layer child, not the .hero itself — matches the prototype's
+// .bg-layer treatment exactly: blur + 1.15x scale on the layer, a
+// separate gradient fade for blending into the page at the bottom, and
+// text-shadow (not a flat scrim) for text contrast — see the CSS above
+// .hero-bg-layer / .hero.has-custom-bg).
+function applyHeroBackground(heroEl) {
+  if (!heroEl) return;
+  const layer = $('.hero-bg-layer', heroEl);
+  if (!layer) return;
+  if (hasAccess(state.subscription) && state.backgroundSignedUrl) {
+    layer.style.backgroundImage = `url("${state.backgroundSignedUrl}")`;
+    layer.style.filter = `blur(${state.backgroundPrefs.blur_amount}px)`;
+    layer.classList.add('has-photo');
+    heroEl.classList.add('has-custom-bg');
   } else {
-    hero.style.backgroundImage = '';
-    hero.classList.remove('has-custom-home-bg');
+    layer.style.backgroundImage = '';
+    layer.style.filter = '';
+    layer.classList.remove('has-photo');
+    heroEl.classList.remove('has-custom-bg');
   }
 }
 
-// Shared by renderDashboard() and the widget-reorder preview in
-// renderHomeCustomize(), so the preview shows exactly the same numbers
-// the real Home screen does rather than a second, divergable copy of
-// this math.
+// Small gear icon reused as the "Customize this screen" entry point on
+// every customizable screen's pagehead/hero.
+function gearIconSvg() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CUSTOMIZABLE SCREEN LAYOUT (phase39) — draggable/resizable bottom nav,
+// drag-reorder/resize module grid per screen, global background photo +
+// blur. Drag/resize/snap mechanics, thresholds, and transition timing are
+// copied directly from the attached prototype (krafft-customize-screen-
+// demo-v3.html) per the batch doc's instruction to match it exactly —
+// only the fixed SCREEN_W/SCREEN_H constants there become the live
+// viewport here, since this runs in a real browser, not a fixed-size
+// phone mockup.
+// ══════════════════════════════════════════════════════════════════
+
+const NAVBAR_SIZES = [
+  { key: 'compact', label: 'Compact', width: 176, height: 48 },
+  { key: 'standard', label: 'Standard', width: 256, height: 56 },
+  { key: 'expanded', label: 'Expanded', width: 264, height: 68 },
+];
+const NAVBAR_POSITIONS = [
+  { key: 'top', label: 'Top' },
+  { key: 'center', label: 'Center' },
+  { key: 'bottom', label: 'Bottom' },
+];
+function navbarSizeByKey(key) { return NAVBAR_SIZES.find((s) => s.key === key) || NAVBAR_SIZES[1]; }
+function navbarPosLabel(key) { return (NAVBAR_POSITIONS.find((p) => p.key === key) || NAVBAR_POSITIONS[2]).label; }
+
+function navPosTop(posKey, height) {
+  const viewH = window.innerHeight;
+  if (posKey === 'top') return 16;
+  if (posKey === 'bottom') return viewH - 14 - height;
+  return Math.round((viewH - height) / 2);
+}
+function navNearestSizeKey(width) {
+  let best = NAVBAR_SIZES[0], bestDiff = Infinity;
+  NAVBAR_SIZES.forEach((s) => { const d = Math.abs(s.width - width); if (d < bestDiff) { bestDiff = d; best = s; } });
+  return best.key;
+}
+function navNearestPosKey(top, height) {
+  let best = NAVBAR_POSITIONS[0], bestDiff = Infinity;
+  NAVBAR_POSITIONS.forEach((p) => { const d = Math.abs(navPosTop(p.key, height) - top); if (d < bestDiff) { bestDiff = d; best = p; } });
+  return best.key;
+}
+
+function applyNavbarLayout(withTransition) {
+  const nav = $('#bottomNav');
+  if (!nav) return;
+  const size = navbarSizeByKey(state.navbarPrefs.size);
+  const top = navPosTop(state.navbarPrefs.position, size.height);
+  const left = Math.round((window.innerWidth - size.width) / 2);
+  nav.classList.toggle('dragging', !withTransition);
+  nav.style.width = size.width + 'px';
+  nav.style.height = size.height + 'px';
+  nav.style.left = left + 'px';
+  nav.style.top = top + 'px';
+  syncFabPosition();
+}
+
+// The quick-log FAB sits just above the bottom nav when the nav is in
+// its default bottom position — now that the nav can move, the FAB's
+// offset has to track it instead of a hard-coded CSS value.
+function syncFabPosition() {
+  const fab = $('#quickLogFab');
+  const nav = $('#bottomNav');
+  if (!fab || !nav) return;
+  if (state.navbarPrefs.position === 'bottom') {
+    const navHeight = parseInt(nav.style.height, 10) || 56;
+    fab.style.bottom = `calc(${navHeight + 28}px + env(safe-area-inset-bottom, 0px))`;
+  } else {
+    fab.style.bottom = `calc(24px + env(safe-area-inset-bottom, 0px))`;
+  }
+}
+
+async function persistNavbarPrefs() {
+  const { error } = await supabase.from('user_navbar_prefs').upsert(
+    { user_id: state.user.id, size: state.navbarPrefs.size, position: state.navbarPrefs.position },
+    { onConflict: 'user_id' }
+  );
+  if (error) toast('Could not save nav layout: ' + error.message);
+}
+
+async function resetNavbarPrefs() {
+  const { error } = await supabase.from('user_navbar_prefs').delete().eq('user_id', state.user.id);
+  if (error) return toast('Could not reset nav layout: ' + error.message);
+  state.navbarPrefs = { size: 'standard', position: 'bottom' };
+  applyNavbarLayout(true);
+  updateEditReadout(`${navbarSizeByKey('standard').label} · ${navbarPosLabel('bottom')}`);
+}
+
+let navbarDragState = null;
+let navbarResizeState = null;
+
+// Wired once at bootstrap — the handlers themselves check editingScreenKey
+// so dragging is only live while some screen is in edit mode.
+function wireNavbarDrag() {
+  const nav = $('#bottomNav');
+  const handle = $('#navbarResizeHandle');
+  if (!nav || !handle || nav.dataset.dragWired) return;
+  nav.dataset.dragWired = '1';
+
+  nav.addEventListener('pointerdown', (e) => {
+    if (!editingScreenKey || e.target === handle || handle.contains(e.target)) return;
+    e.preventDefault();
+    document.body.classList.add('ui-dragging');
+    nav.setPointerCapture(e.pointerId);
+    navbarDragState = { startX: e.clientX, startY: e.clientY, startLeft: parseInt(nav.style.left, 10), startTop: parseInt(nav.style.top, 10) };
+  });
+  nav.addEventListener('pointermove', (e) => {
+    if (!navbarDragState) return;
+    const w = parseInt(nav.style.width, 10), h = parseInt(nav.style.height, 10);
+    const dx = e.clientX - navbarDragState.startX, dy = e.clientY - navbarDragState.startY;
+    const newLeft = Math.max(0, Math.min(window.innerWidth - w, navbarDragState.startLeft + dx));
+    const newTop = Math.max(0, Math.min(window.innerHeight - h, navbarDragState.startTop + dy));
+    nav.classList.add('dragging');
+    nav.style.left = newLeft + 'px'; nav.style.top = newTop + 'px';
+    updateEditReadout('moving…');
+  });
+  const endNavDrag = async () => {
+    if (!navbarDragState) return;
+    navbarDragState = null;
+    document.body.classList.remove('ui-dragging');
+    const newPos = navNearestPosKey(parseInt(nav.style.top, 10), parseInt(nav.style.height, 10));
+    state.navbarPrefs.position = newPos;
+    applyNavbarLayout(true);
+    updateEditReadout(`${navbarSizeByKey(state.navbarPrefs.size).label} · ${navbarPosLabel(newPos)}`);
+    await persistNavbarPrefs();
+  };
+  nav.addEventListener('pointerup', endNavDrag);
+  nav.addEventListener('pointercancel', () => { navbarDragState = null; document.body.classList.remove('ui-dragging'); });
+
+  handle.addEventListener('pointerdown', (e) => {
+    if (!editingScreenKey) return;
+    e.preventDefault(); e.stopPropagation();
+    document.body.classList.add('ui-dragging');
+    handle.setPointerCapture(e.pointerId);
+    navbarResizeState = { startX: e.clientX, startY: e.clientY, startW: parseInt(nav.style.width, 10), startH: parseInt(nav.style.height, 10) };
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!navbarResizeState) return;
+    const dx = e.clientX - navbarResizeState.startX, dy = e.clientY - navbarResizeState.startY;
+    const newW = Math.max(150, Math.min(window.innerWidth - 20, navbarResizeState.startW + dx));
+    const newH = Math.max(40, Math.min(90, navbarResizeState.startH + dy));
+    nav.classList.add('dragging');
+    nav.style.width = newW + 'px'; nav.style.height = newH + 'px';
+    updateEditReadout('resizing…');
+  });
+  const endNavResize = async () => {
+    if (!navbarResizeState) return;
+    navbarResizeState = null;
+    document.body.classList.remove('ui-dragging');
+    const newSize = navNearestSizeKey(parseInt(nav.style.width, 10));
+    state.navbarPrefs.size = newSize;
+    applyNavbarLayout(true);
+    updateEditReadout(`${navbarSizeByKey(newSize).label} · ${navbarPosLabel(state.navbarPrefs.position)}`);
+    await persistNavbarPrefs();
+  };
+  handle.addEventListener('pointerup', endNavResize);
+  handle.addEventListener('pointercancel', () => { navbarResizeState = null; document.body.classList.remove('ui-dragging'); });
+}
+
+// ── Module grid (per-screen content cards) ──────────────────────────
+const MODULE_HEIGHTS = ['compact', 'standard', 'expanded'];
+const MODULE_HEIGHT_LABELS = { compact: 'Compact', standard: 'Standard', expanded: 'Expanded' };
+const MODULE_SPAN_LABELS = { half: 'Half', full: 'Full' };
+
+// Identity/labels/defaults per screen — actual content rendering is each
+// screen's own job (homeWidgetHtml for nutrition_home, etc.), kept
+// separate so this registry doesn't need to know every screen's markup.
+const SCREEN_MODULE_DEFS = {
+  nutrition_home: {
+    order: ['macros', 'todaysPlan', 'streakWater', 'thisWeek', 'loggedToday', 'proteinByMeal'],
+    labels: { macros: "Today's Macros", todaysPlan: "Today's Plan", streakWater: 'Streak & Water', thisWeek: 'This Week', loggedToday: 'Logged Today', proteinByMeal: 'Protein by Meal' },
+    defaults: { macros: { span: 'full', height: 'standard' }, todaysPlan: { span: 'full', height: 'standard' }, streakWater: { span: 'full', height: 'standard' }, thisWeek: { span: 'full', height: 'standard' }, loggedToday: { span: 'full', height: 'standard' }, proteinByMeal: { span: 'full', height: 'standard' } },
+  },
+  today_lift: {
+    order: ['summary', 'exercises'],
+    labels: { summary: 'Session Summary', exercises: 'Exercises' },
+    defaults: { summary: { span: 'full', height: 'standard' }, exercises: { span: 'full', height: 'standard' } },
+  },
+  profile: {
+    order: ['tier', 'identity'],
+    labels: { tier: 'Tier Status', identity: 'Profile' },
+    defaults: { tier: { span: 'full', height: 'standard' }, identity: { span: 'full', height: 'standard' } },
+  },
+};
+
+// Absence of rows for a screen means "using the shipped default layout"
+// — mirrors the same fallback pattern the earlier phase38 widget-order
+// system used, now per-module instead of one array column.
+function getScreenModuleLayout(screenKey) {
+  const def = SCREEN_MODULE_DEFS[screenKey];
+  const saved = state.screenModules[screenKey];
+  if (!saved || !saved.length) {
+    return def.order.map((key) => ({ key, span: def.defaults[key].span, height: def.defaults[key].height }));
+  }
+  const savedByKey = {};
+  saved.forEach((r) => { savedByKey[r.module_key] = r; });
+  const savedKeys = saved.slice().sort((a, b) => a.sort_order - b.sort_order).map((r) => r.module_key).filter((k) => def.order.includes(k));
+  const missing = def.order.filter((k) => !savedKeys.includes(k));
+  const orderedKeys = [...savedKeys, ...missing];
+  return orderedKeys.map((key) => {
+    const row = savedByKey[key];
+    return { key, span: row?.span || def.defaults[key].span, height: row?.height_size || def.defaults[key].height };
+  });
+}
+
+function moduleGridHtml(screenKey, contentFn) {
+  const layout = getScreenModuleLayout(screenKey);
+  return `<div class="module-grid" id="moduleGrid-${screenKey}">
+    ${layout.map(({ key, span, height }) => `
+      <div class="module-card" data-module-key="${key}" data-span="${span}" data-h="${height}">
+        <div class="module-grip" data-module-grip>⠿</div>
+        <div class="module-readout-chip">${MODULE_SPAN_LABELS[span]} · ${MODULE_HEIGHT_LABELS[height]}</div>
+        <div class="module-card-inner">${contentFn(key)}</div>
+        <div class="module-resize-handle" data-module-resize></div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function flipModules(grid, mutate) {
+  const items = Array.from(grid.children);
+  const firstRects = items.map((el) => [el, el.getBoundingClientRect()]);
+  mutate();
+  firstRects.forEach(([el, f]) => {
+    const l = el.getBoundingClientRect();
+    const dx = f.left - l.left, dy = f.top - l.top;
+    if (dx || dy) {
+      el.style.transition = 'none';
+      el.style.transform = `translate(${dx}px,${dy}px)`;
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform 0.25s cubic-bezier(.2,.8,.2,1)';
+        el.style.transform = '';
+      });
+    }
+  });
+}
+
+async function persistModuleOrder(screenKey, grid) {
+  const keys = Array.from(grid.children).map((el) => el.dataset.moduleKey);
+  const layoutByKey = {};
+  getScreenModuleLayout(screenKey).forEach((m) => { layoutByKey[m.key] = m; });
+  const rows = keys.map((key, i) => ({
+    user_id: state.user.id, screen_key: screenKey, module_key: key, sort_order: i,
+    span: layoutByKey[key]?.span || 'full', height_size: layoutByKey[key]?.height || 'standard',
+  }));
+  const { error } = await supabase.from('user_screen_modules').upsert(rows, { onConflict: 'user_id,screen_key,module_key' });
+  if (error) toast('Could not save layout: ' + error.message);
+  state.screenModules[screenKey] = rows;
+}
+
+async function persistModuleResize(screenKey, moduleKey, span, height, grid) {
+  const keys = Array.from(grid.children).map((el) => el.dataset.moduleKey);
+  const sortOrder = Math.max(0, keys.indexOf(moduleKey));
+  const row = { user_id: state.user.id, screen_key: screenKey, module_key: moduleKey, sort_order: sortOrder, span, height_size: height };
+  const { error } = await supabase.from('user_screen_modules').upsert([row], { onConflict: 'user_id,screen_key,module_key' });
+  if (error) toast('Could not save size: ' + error.message);
+  const layout = state.screenModules[screenKey] || [];
+  const idx = layout.findIndex((r) => r.module_key === moduleKey);
+  if (idx === -1) layout.push(row); else layout[idx] = row;
+  state.screenModules[screenKey] = layout;
+}
+
+async function resetScreenModules(screenKey) {
+  const { error } = await supabase.from('user_screen_modules').delete().eq('user_id', state.user.id).eq('screen_key', screenKey);
+  if (error) return toast('Could not reset layout: ' + error.message);
+  delete state.screenModules[screenKey];
+}
+
+// Wired fresh on every render of a customizable screen (the module cards
+// themselves are rebuilt each render, unlike the navbar which is a
+// single persistent DOM node wired once).
+function wireModuleGrid(panel, screenKey) {
+  const grid = $(`#moduleGrid-${screenKey}`, panel);
+  if (!grid) return;
+  Array.from(grid.querySelectorAll('.module-card')).forEach((mod) => {
+    const grip = mod.querySelector('[data-module-grip]');
+    let dragState = null;
+    grip.addEventListener('pointerdown', (e) => {
+      if (!editingScreenKey) return;
+      e.preventDefault();
+      document.body.classList.add('ui-dragging');
+      dragState = { lastTarget: null };
+      mod.classList.add('dragging');
+      grip.setPointerCapture(e.pointerId);
+    });
+    grip.addEventListener('pointermove', (e) => {
+      if (!dragState) return;
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      const targetMod = target ? target.closest('.module-card') : null;
+      if (targetMod && targetMod !== mod && targetMod !== dragState.lastTarget && targetMod.parentElement === grid) {
+        dragState.lastTarget = targetMod;
+        flipModules(grid, () => {
+          const all = Array.from(grid.children);
+          if (all.indexOf(mod) < all.indexOf(targetMod)) grid.insertBefore(mod, targetMod.nextSibling);
+          else grid.insertBefore(mod, targetMod);
+        });
+      }
+    });
+    const endModDrag = async () => {
+      if (!dragState) return;
+      dragState = null;
+      mod.classList.remove('dragging');
+      document.body.classList.remove('ui-dragging');
+      await persistModuleOrder(screenKey, grid);
+    };
+    grip.addEventListener('pointerup', endModDrag);
+    grip.addEventListener('pointercancel', endModDrag);
+
+    const handle = mod.querySelector('[data-module-resize]');
+    let rs = null;
+    handle.addEventListener('pointerdown', (e) => {
+      if (!editingScreenKey) return;
+      e.preventDefault(); e.stopPropagation();
+      document.body.classList.add('ui-dragging');
+      handle.setPointerCapture(e.pointerId);
+      rs = { startX: e.clientX, startY: e.clientY, startSpan: mod.dataset.span, startHIdx: MODULE_HEIGHTS.indexOf(mod.dataset.h) };
+      mod.classList.add('showreadout');
+    });
+    handle.addEventListener('pointermove', (e) => {
+      if (!rs) return;
+      const dx = e.clientX - rs.startX, dy = e.clientY - rs.startY;
+      const span = dx > 36 ? 'full' : (dx < -36 ? 'half' : rs.startSpan);
+      const hIdx = Math.max(0, Math.min(MODULE_HEIGHTS.length - 1, rs.startHIdx + Math.round(dy / 55)));
+      const height = MODULE_HEIGHTS[hIdx];
+      mod.dataset.span = span; mod.dataset.h = height;
+      const chip = mod.querySelector('.module-readout-chip');
+      if (chip) chip.textContent = `${MODULE_SPAN_LABELS[span]} · ${MODULE_HEIGHT_LABELS[height]}`;
+    });
+    const endModResize = async () => {
+      if (!rs) return;
+      rs = null;
+      document.body.classList.remove('ui-dragging');
+      setTimeout(() => mod.classList.remove('showreadout'), 900);
+      await persistModuleResize(screenKey, mod.dataset.moduleKey, mod.dataset.span, mod.dataset.h, grid);
+    };
+    handle.addEventListener('pointerup', endModResize);
+    handle.addEventListener('pointercancel', () => { rs = null; document.body.classList.remove('ui-dragging'); });
+  });
+}
+
+// ── Global background photo + blur controls (shown in edit mode on
+// nutrition_home — the only screen with a .hero to preview it against) ──
+function backgroundControlsHtml() {
+  return `<div class="card">
+    <h3>Background Photo</h3>
+    <p class="muted small">Shown blurred behind this screen's hero. Applies app-wide wherever a hero exists.</p>
+    <div class="row" style="gap:0.5rem;align-items:center;">
+      <label class="btn btn-sm" for="bgPhotoInput">${state.backgroundSignedUrl ? 'Change Photo' : 'Choose Background Photo'}</label>
+      <input type="file" id="bgPhotoInput" accept="image/*" style="display:none;">
+      ${state.backgroundSignedUrl ? `<button class="btn btn-sm btn-ghost" id="bgResetBtn">Reset to Gradient</button>` : ''}
+    </div>
+    <div style="margin-top:0.75rem;">
+      <label class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Background Blur</label>
+      <input type="range" id="bgBlurSlider" min="0" max="36" value="${state.backgroundPrefs.blur_amount}" style="width:100%;margin-top:0.4rem;">
+    </div>
+  </div>`;
+}
+
+function wireBackgroundControls(panel, onChange) {
+  const fileInput = $('#bgPhotoInput', panel);
+  if (fileInput) fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const blob = await resizePhotoToBlob(file, 1600);
+      const oldPath = state.backgroundPrefs.photo_url;
+      const path = `${state.user.id}/${crypto.randomUUID()}.jpg`;
+      const { error: uploadErr } = await supabase.storage.from('background-photos').upload(path, blob, { contentType: 'image/jpeg' });
+      if (uploadErr) throw uploadErr;
+      const { error: updateErr } = await supabase.from('user_background_prefs').upsert(
+        { user_id: state.user.id, photo_url: path, blur_amount: state.backgroundPrefs.blur_amount },
+        { onConflict: 'user_id' }
+      );
+      if (updateErr) throw updateErr;
+      if (oldPath) await supabase.storage.from('background-photos').remove([oldPath]);
+      await loadBackgroundPrefs();
+      onChange();
+    } catch (err) {
+      toast(err.message || 'Failed to upload background.');
+    }
+  });
+  const resetBtn = $('#bgResetBtn', panel);
+  if (resetBtn) resetBtn.addEventListener('click', async () => {
+    const oldPath = state.backgroundPrefs.photo_url;
+    const { error } = await supabase.from('user_background_prefs').upsert(
+      { user_id: state.user.id, photo_url: null, blur_amount: state.backgroundPrefs.blur_amount },
+      { onConflict: 'user_id' }
+    );
+    if (error) return toast('Could not reset: ' + error.message);
+    if (oldPath) await supabase.storage.from('background-photos').remove([oldPath]);
+    await loadBackgroundPrefs();
+    onChange();
+  });
+  const slider = $('#bgBlurSlider', panel);
+  if (slider) {
+    // Live preview on every tick (matches the prototype's blurSlider
+    // 'input' handler); the actual write only fires on 'change' (release)
+    // — the debounce the batch doc asks for, for free, from the input type.
+    slider.addEventListener('input', (e) => {
+      const val = Number(e.target.value);
+      state.backgroundPrefs.blur_amount = val;
+      const layer = $('.hero-bg-layer', panel);
+      if (layer && layer.classList.contains('has-photo')) layer.style.filter = `blur(${val}px)`;
+    });
+    slider.addEventListener('change', async (e) => {
+      const { error } = await supabase.from('user_background_prefs').upsert(
+        { user_id: state.user.id, photo_url: state.backgroundPrefs.photo_url, blur_amount: Number(e.target.value) },
+        { onConflict: 'user_id' }
+      );
+      if (error) toast('Could not save blur: ' + error.message);
+    });
+  }
+}
+
+// ── Edit mode: entry/exit, scrim, readout chip, "Done Customizing" bar ──
+// Entry point is a gear icon directly on the screen (not a separate
+// settings page) — tapping it edits whichever screen it's on, and the
+// navbar's own drag/resize affordances come along with it since the nav
+// is global chrome, not screen-specific.
+let editingScreenKey = null;
+
+const SCREEN_RENDER_FNS = {
+  nutrition_home: () => renderDashboard(),
+  today_lift: () => renderLiftsTab(),
+  profile: () => renderProfile(),
+};
+
+function openScreenCustomize(screenKey) {
+  if (!hasAccess(state.subscription)) { showUpgradeScreen(UPGRADE_CONTEXT_CUSTOMIZE_SCREEN); return; }
+  editingScreenKey = screenKey;
+  document.body.classList.add('customizing');
+  renderEditChrome();
+  SCREEN_RENDER_FNS[screenKey]();
+}
+
+function exitEditMode() {
+  const was = editingScreenKey;
+  editingScreenKey = null;
+  document.body.classList.remove('customizing');
+  renderEditChrome();
+  if (was) SCREEN_RENDER_FNS[was]();
+}
+
+function renderEditChrome() {
+  let overlay = document.getElementById('editChromeOverlay');
+  if (!editingScreenKey) {
+    if (overlay) overlay.remove();
+    $('#bottomNav')?.classList.remove('editing-navbar');
+    return;
+  }
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'editChromeOverlay';
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = `
+    <div class="edit-scrim"></div>
+    <div class="edit-top-bar" id="editTopBar" style="top:${editTopBarOffset()}px;">
+      <div class="edit-readout-chip" id="editReadoutChip">${navbarSizeByKey(state.navbarPrefs.size).label} · ${navbarPosLabel(state.navbarPrefs.position)}</div>
+      <button class="btn btn-sm" id="resetLayoutBtn">Reset Layout</button>
+      <button class="btn btn-sm btn-primary" id="doneCustomizingBtn">Done Customizing</button>
+    </div>
+  `;
+  $('#doneCustomizingBtn').addEventListener('click', exitEditMode);
+  $('#resetLayoutBtn').addEventListener('click', async () => {
+    const screenKey = editingScreenKey;
+    if (!screenKey) return;
+    await Promise.all([resetNavbarPrefs(), resetScreenModules(screenKey)]);
+    SCREEN_RENDER_FNS[screenKey]();
+  });
+  $('#bottomNav')?.classList.add('editing-navbar');
+  wireNavbarDrag();
+}
+
+// Keeps the top bar clear of the navbar when the nav itself has been
+// dragged to the 'top' position — otherwise they'd occupy the exact same
+// screen edge (see the CSS comment above .edit-top-bar).
+function editTopBarOffset() {
+  const base = 12;
+  if (state.navbarPrefs.position !== 'top') return base;
+  return 16 + navbarSizeByKey(state.navbarPrefs.size).height + 10;
+}
+
+function updateEditReadout(text) {
+  const chip = document.getElementById('editReadoutChip');
+  if (chip) chip.textContent = text;
+  const bar = document.getElementById('editTopBar');
+  if (bar) bar.style.top = editTopBarOffset() + 'px';
+}
+
+// Mouse-based dragging on desktop otherwise starts highlighting page text
+// mid-drag — a real bug caught while prototyping, fixed the same way
+// here: disable user-select globally while any drag is active, and
+// explicitly clear any existing selection on pointerdown over a drag
+// surface (grip, resize handle, or the navbar itself).
+function clearTextSelection() {
+  if (window.getSelection) window.getSelection().removeAllRanges();
+}
+document.addEventListener('pointerdown', (e) => {
+  if (e.target.closest && (e.target.closest('[data-module-grip]') || e.target.closest('[data-module-resize]') || e.target.closest('#bottomNav'))) {
+    clearTextSelection();
+  }
+}, true);
+window.addEventListener('resize', () => { if (!navbarDragState && !navbarResizeState) applyNavbarLayout(true); });
+
+// Context object passed to homeWidgetHtml() for every nutrition_home
+// module — computed once per renderDashboard() call rather than per
+// module, since several modules share the same underlying numbers.
 function computeHomeWidgetCtx() {
   const totals = sumMacros(state.todayLogs);
   const { current, best } = computeStreaks(state.historyLogs, state.goals.protein_g);
@@ -3908,7 +4544,7 @@ function renderDashboard() {
   const showStreakUpgradePrompt = streakUpgradePromptVisible && !hasAccess(state.subscription);
 
   const activeTips = computeActiveTips();
-  const widgetOrder = getHomeWidgetOrder();
+  const editingHere = editingScreenKey === 'nutrition_home';
 
   const panel = $('#panel-dashboard');
   panel.innerHTML = `
@@ -3928,9 +4564,15 @@ function renderDashboard() {
       </div>
     </div>` : ''}
     ${tipsHtml(activeTips)}
-    ${widgetOrder.map((key) => homeWidgetHtml(key, widgetCtx)).join('')}
+    ${editingHere ? backgroundControlsHtml() : ''}
+    ${moduleGridHtml('nutrition_home', (key) => homeWidgetHtml(key, widgetCtx))}
   `;
-  applyHomeBackground(panel); // after innerHTML: targets the just-rendered .hero
+  applyHeroBackground($('#nutritionHero', panel)); // after innerHTML: targets the just-rendered .hero
+  wireModuleGrid(panel, 'nutrition_home');
+  if (editingHere) wireBackgroundControls(panel, () => renderDashboard());
+
+  const gearBtn = $('#customizeGearBtn-nutrition_home', panel);
+  if (gearBtn) gearBtn.addEventListener('click', () => { editingHere ? exitEditMode() : openScreenCustomize('nutrition_home'); });
 
   const spikeDismiss = $('#spikeDismiss');
   if (spikeDismiss) spikeDismiss.addEventListener('click', () => { dismissedSpikeWeek = volumeSpike.weekStart; renderDashboard(); });
@@ -5652,13 +6294,6 @@ const LEARNING_PATHS = [
 let showLearningPaths = false;
 let showHealthSyncSetup = false;
 
-// Items 1+2 of the personalization batch: Pro-only Home screen
-// customization (background upload + widget reorder), same full-panel
-// sub-screen pattern as renderHealthSyncSetup.
-let showHomeCustomize = false;
-let homeBgUploading = false;
-let homeBgError = '';
-
 // Items 9+10 of the conversion-surface-area batch: a custom in-app cancel
 // flow (reason prompt, then a stay/pause/cancel offer) replacing a direct
 // jump into Stripe's hosted portal — see cancel-subscription.js.
@@ -5846,171 +6481,6 @@ function renderHealthSyncSetup(panel) {
   });
 }
 
-// ── Home screen customization (Pro only) ────────────────────────────────
-// Items 1+2 of the personalization batch: a custom uploaded background
-// photo (private home-backgrounds storage bucket, same folder-per-user
-// pattern as progress-photos) and drag-and-drop widget reordering
-// (SortableJS, lazy-loaded like Chart.js/ZXing elsewhere in this file).
-// Same full-panel sub-screen convention as renderHealthSyncSetup().
-const DEFAULT_HOME_WIDGET_ORDER = ['macros', 'todaysPlan', 'streakWater', 'thisWeek', 'loggedToday', 'proteinByMeal'];
-const HOME_WIDGET_LABELS = {
-  macros: "Today's Macros",
-  todaysPlan: "Today's Plan",
-  streakWater: 'Streak & Water',
-  thisWeek: 'This Week',
-  loggedToday: 'Logged Today',
-  proteinByMeal: 'Protein by Meal',
-};
-function getHomeWidgetOrder() {
-  const saved = state.profile?.home_widget_order;
-  if (!Array.isArray(saved) || !saved.length) return DEFAULT_HOME_WIDGET_ORDER.slice();
-  const valid = saved.filter((k) => DEFAULT_HOME_WIDGET_ORDER.includes(k));
-  const missing = DEFAULT_HOME_WIDGET_ORDER.filter((k) => !valid.includes(k));
-  return [...valid, ...missing];
-}
-
-let sortableJsLoadPromise = null;
-function ensureSortableJs() {
-  if (window.Sortable) return Promise.resolve();
-  if (sortableJsLoadPromise) return sortableJsLoadPromise;
-  sortableJsLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js';
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-  return sortableJsLoadPromise;
-}
-
-let homeWidgetSortable = null;
-async function wireHomeWidgetOrder(panel) {
-  await ensureSortableJs().catch(() => null);
-  const list = $('#homeWidgetOrderList', panel);
-  if (!list || !window.Sortable) return;
-  if (homeWidgetSortable) { homeWidgetSortable.destroy(); homeWidgetSortable = null; }
-  homeWidgetSortable = new Sortable(list, {
-    animation: 150,
-    handle: '[data-drag-handle]',
-    onEnd: async () => {
-      const newOrder = Array.from(list.children).map((el) => el.dataset.widgetKey);
-      state.profile = { ...state.profile, home_widget_order: newOrder };
-      const { error } = await supabase.from('profiles').update({ home_widget_order: newOrder }).eq('id', state.user.id);
-      if (error) toast('Could not save widget order: ' + error.message);
-      // setActiveTab() only toggles CSS visibility, it doesn't re-render —
-      // rebuild the (currently hidden) dashboard now so the new order is
-      // already in place the instant the user switches back to Home.
-      renderDashboard();
-    },
-  });
-}
-
-function renderHomeCustomize(panel) {
-  if (!hasAccess(state.subscription)) {
-    panel.innerHTML = `
-      <div class="card">
-        <button class="btn btn-sm btn-ghost" id="closeHomeCustomizeBtn">← Back</button>
-        <h3>Customize Home Screen</h3>
-        <p class="muted">Upload your own background photo and reorder your Home screen widgets — all fixed-size, just a different layout. Unlock it on the paid tier.</p>
-        ${upgradePriceLineHtml()}
-        <button class="btn btn-primary" id="unlockHomeCustomizeBtn">Upgrade — Unlock Personalization</button>
-      </div>`;
-    $('#closeHomeCustomizeBtn').addEventListener('click', () => { showHomeCustomize = false; renderProfile(); });
-    $('#unlockHomeCustomizeBtn').addEventListener('click', () => showUpgradeScreen(UPGRADE_CONTEXT_HOME_CUSTOMIZE));
-    return;
-  }
-
-  const order = getHomeWidgetOrder();
-  const widgetCtx = computeHomeWidgetCtx();
-  panel.innerHTML = `
-    <div class="card">
-      <button class="btn btn-sm btn-ghost" id="closeHomeCustomizeBtn">← Back</button>
-      <h3>Customize Home Screen</h3>
-    </div>
-
-    <div class="card">
-      <h3>Home Background</h3>
-      <p class="muted small">Upload a photo from your device to use as the Home screen background, shown with a dark overlay so text stays readable.</p>
-      ${state.homeBackgroundUrl ? `<img src="${state.homeBackgroundUrl}" alt="Home background" style="width:100%;border-radius:10px;margin:0.5rem 0;max-height:160px;object-fit:cover;">` : ''}
-      <div class="row" style="gap:0.5rem;align-items:center;">
-        <label class="btn btn-sm" for="homeBgFileInput" style="${homeBgUploading ? 'pointer-events:none;opacity:0.6;' : ''}">${homeBgUploading ? 'Uploading…' : (state.homeBackgroundUrl ? 'Change Photo' : 'Upload Photo')}</label>
-        <input type="file" id="homeBgFileInput" accept="image/*" style="display:none;" ${homeBgUploading ? 'disabled' : ''}>
-        ${state.homeBackgroundUrl ? `<button class="btn btn-sm btn-ghost" id="homeBgResetBtn" ${homeBgUploading ? 'disabled' : ''}>Reset to Default</button>` : ''}
-      </div>
-      ${homeBgError ? `<p class="small" style="color:var(--danger);margin-top:0.5rem;">${esc(homeBgError)}</p>` : ''}
-    </div>
-
-    <div class="card">
-      <h3>Reorder Widgets</h3>
-      <p class="muted small">Drag the ☰ handle to reorder — this is a live preview of your actual Home screen, with today's real numbers.</p>
-      <div id="homeWidgetOrderList">
-        ${order.map((key) => `
-          <div class="widget-preview-row" data-widget-key="${key}">
-            <div class="widget-preview-handle" data-drag-handle>
-              <span class="widget-preview-grip">☰</span>
-              <span class="muted small">${esc(HOME_WIDGET_LABELS[key] || key)}</span>
-            </div>
-            <div class="widget-preview-content">
-              ${homeWidgetHtml(key, widgetCtx)}
-            </div>
-          </div>`).join('')}
-      </div>
-      <button class="btn btn-sm btn-ghost" id="resetWidgetOrderBtn" style="margin-top:0.75rem;">Reset to Default Order</button>
-    </div>
-  `;
-  applyHomeBackground(panel); // mirrors the real Home screen's background inside the preview
-
-  $('#closeHomeCustomizeBtn').addEventListener('click', () => { showHomeCustomize = false; homeBgError = ''; renderProfile(); });
-
-  $('#homeBgFileInput').addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    homeBgError = '';
-    homeBgUploading = true;
-    renderHomeCustomize(panel);
-    try {
-      const blob = await resizePhotoToBlob(file, 1600);
-      const oldPath = state.profile?.home_background_path;
-      const path = `${state.user.id}/${crypto.randomUUID()}.jpg`;
-      const { error: uploadErr } = await supabase.storage.from('home-backgrounds').upload(path, blob, { contentType: 'image/jpeg' });
-      if (uploadErr) throw uploadErr;
-      const { error: updateErr } = await supabase.from('profiles').update({ home_background_path: path }).eq('id', state.user.id);
-      if (updateErr) throw updateErr;
-      if (oldPath) await supabase.storage.from('home-backgrounds').remove([oldPath]);
-      await loadProfile();
-      await loadHomeBackgroundUrl();
-      renderDashboard(); // see the widget-reorder onEnd comment above
-    } catch (err) {
-      homeBgError = err.message || 'Failed to upload background.';
-    } finally {
-      homeBgUploading = false;
-      renderHomeCustomize(panel);
-    }
-  });
-
-  const resetBgBtn = $('#homeBgResetBtn');
-  if (resetBgBtn) resetBgBtn.addEventListener('click', async () => {
-    const oldPath = state.profile?.home_background_path;
-    const { error } = await supabase.from('profiles').update({ home_background_path: null }).eq('id', state.user.id);
-    if (error) return toast('Could not reset: ' + error.message);
-    if (oldPath) await supabase.storage.from('home-backgrounds').remove([oldPath]);
-    await loadProfile();
-    await loadHomeBackgroundUrl();
-    renderDashboard();
-    renderHomeCustomize(panel);
-  });
-
-  $('#resetWidgetOrderBtn').addEventListener('click', async () => {
-    const { error } = await supabase.from('profiles').update({ home_widget_order: null }).eq('id', state.user.id);
-    if (error) return toast('Could not reset order: ' + error.message);
-    await loadProfile();
-    renderDashboard();
-    renderHomeCustomize(panel);
-  });
-
-  wireHomeWidgetOrder(panel);
-}
-
 // Items 9+10: custom in-app cancel flow, reached from the "Cancel
 // Subscription" link on the tier status card (not the "Manage Subscription"
 // button, which still opens Stripe's portal for payment method/billing
@@ -6090,6 +6560,25 @@ function renderCancelFlow(panel) {
 // (manage_subscription_btn opens the Stripe billing portal, upgrade_tier_btn
 // opens the paywall screen) since that card is now gone — this is its one
 // home, not a duplicate of a second subscription-management UI.
+// profile screen's module content (phase39) — only the top-of-page
+// summary content (tier status, name/avatar) is a module; the Account/
+// Settings forms below stay exactly as they are, not forced into
+// resizable cards (see the batch note on why Profile's module scope is
+// deliberately narrow).
+function profileModuleHtml(key, p) {
+  switch (key) {
+    case 'tier':
+      return tierStatusCardHtml();
+    case 'identity':
+      return `<div class="profile-hero">
+        <div class="profile-avatar-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.5 20c1.2-3.6 4.2-5.5 7.5-5.5s6.3 1.9 7.5 5.5"></path></svg></div>
+        <div class="profile-hero-name">${esc(p.display_name || state.user.email)}</div>
+      </div>`;
+    default:
+      return '';
+  }
+}
+
 function tierStatusCardHtml() {
   const pro = hasAccess(state.subscription);
   return `<div class="card tier-status-card">
@@ -6107,7 +6596,6 @@ function renderProfile() {
   if (showLearningPaths) { renderLearningPaths(panel); return; }
   if (showUserGuide) { renderUserGuide(panel); return; }
   if (showHealthSyncSetup) { renderHealthSyncSetup(panel); return; }
-  if (showHomeCustomize) { renderHomeCustomize(panel); return; }
   if (showCancelFlow) { renderCancelFlow(panel); return; }
   const p = state.profile || {};
   const bs = state.bodyStats || {};
@@ -6244,13 +6732,6 @@ function renderProfile() {
       </div>
     </div>
 
-    <div class="settings-section-label">Personalization</div>
-    <div class="card">
-      <h3>Customize Home Screen</h3>
-      <p class="muted small" style="margin-top:-0.3rem;">Upload your own background photo and reorder your Home screen widgets.</p>
-      <button class="btn" id="openHomeCustomizeBtn">${hasAccess(state.subscription) ? 'Customize' : 'Customize (Pro)'}</button>
-    </div>
-
     <div class="settings-section-label">Krafft Athlete Mode</div>
     <div class="card">
       <h3>Krafft Athlete Mode</h3>
@@ -6349,18 +6830,23 @@ function renderProfile() {
     </div>
   `;
 
+  const editingProfile = editingScreenKey === 'profile';
   panel.innerHTML = `
-    ${tierStatusCardHtml()}
-    <div class="profile-hero">
-      <div class="profile-avatar-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.5 20c1.2-3.6 4.2-5.5 7.5-5.5s6.3 1.9 7.5 5.5"></path></svg></div>
-      <div class="profile-hero-name">${esc(p.display_name || state.user.email)}</div>
+    <div class="row" style="justify-content:flex-end;margin-bottom:0.5rem;">
+      <button class="customize-gear-btn" id="customizeGearBtn-profile" aria-label="Customize this screen">${gearIconSvg()}</button>
     </div>
+    ${moduleGridHtml('profile', (key) => profileModuleHtml(key, p))}
     <div class="sub-nav">
       <button class="btn btn-sm ${profileSubTab === 'account' ? 'btn-primary' : ''}" data-sub="account">Account</button>
       <button class="btn btn-sm ${profileSubTab === 'settings' ? 'btn-primary' : ''}" data-sub="settings">Settings</button>
     </div>
     ${profileSubTab === 'account' ? profileAccountSubTabHtml : profileSettingsSubTabHtml}
   `;
+  wireModuleGrid(panel, 'profile');
+  const profileGearBtn = $('#customizeGearBtn-profile', panel);
+  if (profileGearBtn) profileGearBtn.addEventListener('click', () => {
+    editingProfile ? exitEditMode() : openScreenCustomize('profile');
+  });
 
   $$('[data-sub]', panel).forEach((btn) => btn.addEventListener('click', () => {
     profileSubTab = btn.dataset.sub;
@@ -6379,7 +6865,6 @@ function renderProfile() {
 
   $('#openGuideBtn')?.addEventListener('click', () => { showUserGuide = true; renderProfile(); });
   $('#openHealthSyncSetupBtn')?.addEventListener('click', () => { showHealthSyncSetup = true; renderProfile(); });
-  $('#openHomeCustomizeBtn')?.addEventListener('click', () => { showHomeCustomize = true; renderProfile(); });
 
   $('#goal_save')?.addEventListener('click', async () => {
     const goals = {
@@ -8274,15 +8759,18 @@ function endWorkoutButtonHtml() {
 // below is a separate, simpler wiring function rather than reusing
 // wireLiftDetailEvents(), since that one also handles per-exercise goal
 // editing this panel has no use for.
-function todaysLiftPanelHtml() {
+// Split into computeTodaysLiftCtx() + todaysLiftModuleHtml() (phase39)
+// so "Session Summary" and "Exercises" can be independent, reorderable/
+// resizable modules on the today_lift screen — same split as
+// computeHomeWidgetCtx()/homeWidgetHtml() on nutrition_home. The empty
+// state bypasses the module grid entirely (nothing to customize yet);
+// sessionAnalysisHtml() stays a pinned sibling, not a module, for the
+// same reason achievement/streak banners aren't modules on Home: it's a
+// time-sensitive reveal, not layout the user is arranging.
+function computeTodaysLiftCtx() {
   const todayLiftsList = todaysLifts();
   const ended = isSessionEndedToday();
-  if (!todayLiftsList.length) {
-    return `<div class="card">
-      <h3>Today's Lift</h3>
-      <p class="muted" style="text-align:center;">Nothing logged yet today — log your first lift below to get started.</p>
-    </div>`;
-  }
+  if (!todayLiftsList.length) return { empty: true };
 
   const byExercise = {};
   todayLiftsList.forEach((l) => (byExercise[l.exercise] = byExercise[l.exercise] || []).push(l));
@@ -8303,46 +8791,95 @@ function todaysLiftPanelHtml() {
     elapsedLabel = mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
   }
 
-  return `<div class="card">
-    <div class="row" style="justify-content:space-between;align-items:center;">
-      <h3 style="margin:0;">Today's Lift</h3>
-      ${ended ? `<span class="badge on">Complete</span>` : ''}
-    </div>
-    <div class="today-summary-row" style="margin-top:0.5rem;">
-      <div><div class="stat-num">${exerciseCount}</div><div class="muted small">exercise${exerciseCount === 1 ? '' : 's'}</div></div>
-      <div><div class="stat-num">${workingSets}</div><div class="muted small">working set${workingSets === 1 ? '' : 's'}</div></div>
-      <div><div class="stat-num">${Math.round(totalVolume).toLocaleString()}</div><div class="muted small">volume</div></div>
-      ${elapsedLabel ? `<div><div class="stat-num">${elapsedLabel}</div><div class="muted small">elapsed</div></div>` : ''}
-    </div>
-    ${Object.entries(byExercise).map(([exercise, sets]) => {
-      const volume = sets.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
-      const bestE1RMToday = Math.max(...sets.map((l) => e1RM(l.weight, l.reps)));
-      // "New PR today" — the current all-time best for this exercise was
-      // set today (by weight) and either didn't exist before today or is
-      // higher than whatever it was before today.
-      const cur = currentPRs[exercise];
-      const isPR = !!cur && sets.some((l) => l.weight === cur.weight) && (!priorPRs[exercise] || cur.weight > priorPRs[exercise].weight);
-      // Optional per-exercise goal progress — same bestE1RM/target math as
-      // goalCardHtml() on the exercise detail page, just scoped to today's
-      // panel so the user sees it without drilling in.
-      const goal = state.exerciseGoals.find((g) => g.exercise === exercise);
-      const goalLine = (() => {
-        if (!goal) return '';
-        const allTimeBestE1RM = Math.max(...state.lifts.filter((l) => l.exercise === exercise).map((l) => e1RM(l.weight, l.reps)));
-        const pct = Math.min(100, Math.round((allTimeBestE1RM / goal.target_weight) * 100));
-        return `<div class="muted small">${toDisplayWeight(allTimeBestE1RM).value}/${toDisplayWeight(goal.target_weight).value} ${weightUnitLabel()} e1RM · ${pct}% to goal</div>`;
-      })();
-      return `<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border);">
-        <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;">
-          <strong>${esc(exercise)}${isPR ? ' <span class="pill-soft">🏆 PR</span>' : ''}</strong>
-          <span class="muted small">${toDisplayWeight(volume, 0).value.toLocaleString()} ${weightUnitLabel()} volume · e1RM ~${toDisplayWeight(bestE1RMToday).value} ${weightUnitLabel()}</span>
+  return { empty: false, ended, byExercise, priorPRs, currentPRs, workingSets, totalVolume, exerciseCount, elapsedLabel };
+}
+
+function todaysLiftModuleHtml(key, ctx) {
+  if (ctx.empty) return '';
+  switch (key) {
+    case 'summary':
+      return `<div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <h3 style="margin:0;">Today's Lift</h3>
+          ${ctx.ended ? `<span class="badge on">Complete</span>` : ''}
         </div>
-        ${goalLine}
-        ${sets.map((l, i) => liftHistoryRowHtml(l, i === sets.length - 1)).join('')}
+        <div class="today-summary-row" style="margin-top:0.5rem;">
+          <div><div class="stat-num">${ctx.exerciseCount}</div><div class="muted small">exercise${ctx.exerciseCount === 1 ? '' : 's'}</div></div>
+          <div><div class="stat-num">${ctx.workingSets}</div><div class="muted small">working set${ctx.workingSets === 1 ? '' : 's'}</div></div>
+          <div><div class="stat-num">${Math.round(ctx.totalVolume).toLocaleString()}</div><div class="muted small">volume</div></div>
+          ${ctx.elapsedLabel ? `<div><div class="stat-num">${ctx.elapsedLabel}</div><div class="muted small">elapsed</div></div>` : ''}
+        </div>
       </div>`;
-    }).join('')}
-    ${ended ? `<button class="btn btn-block" id="reopenSessionBtn" style="margin-top:0.75rem;">Reopen Session</button>` : endWorkoutButtonHtml()}
+    case 'exercises':
+      return `<div class="card">
+        <h3>Exercises</h3>
+        ${Object.entries(ctx.byExercise).map(([exercise, sets]) => {
+          const volume = sets.reduce((sum, l) => sum + l.weight * totalReps(l), 0);
+          const bestE1RMToday = Math.max(...sets.map((l) => e1RM(l.weight, l.reps)));
+          // "New PR today" — the current all-time best for this exercise was
+          // set today (by weight) and either didn't exist before today or is
+          // higher than whatever it was before today.
+          const cur = ctx.currentPRs[exercise];
+          const isPR = !!cur && sets.some((l) => l.weight === cur.weight) && (!ctx.priorPRs[exercise] || cur.weight > ctx.priorPRs[exercise].weight);
+          // Optional per-exercise goal progress — same bestE1RM/target math as
+          // goalCardHtml() on the exercise detail page, just scoped to today's
+          // panel so the user sees it without drilling in.
+          const goal = state.exerciseGoals.find((g) => g.exercise === exercise);
+          const goalLine = (() => {
+            if (!goal) return '';
+            const allTimeBestE1RM = Math.max(...state.lifts.filter((l) => l.exercise === exercise).map((l) => e1RM(l.weight, l.reps)));
+            const pct = Math.min(100, Math.round((allTimeBestE1RM / goal.target_weight) * 100));
+            return `<div class="muted small">${toDisplayWeight(allTimeBestE1RM).value}/${toDisplayWeight(goal.target_weight).value} ${weightUnitLabel()} e1RM · ${pct}% to goal</div>`;
+          })();
+          return `<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border);">
+            <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;">
+              <strong>${esc(exercise)}${isPR ? ' <span class="pill-soft">🏆 PR</span>' : ''}</strong>
+              <span class="muted small">${toDisplayWeight(volume, 0).value.toLocaleString()} ${weightUnitLabel()} volume · e1RM ~${toDisplayWeight(bestE1RMToday).value} ${weightUnitLabel()}</span>
+            </div>
+            ${goalLine}
+            ${sets.map((l, i) => liftHistoryRowHtml(l, i === sets.length - 1)).join('')}
+          </div>`;
+        }).join('')}
+        ${ctx.ended ? `<button class="btn btn-block" id="reopenSessionBtn" style="margin-top:0.75rem;">Reopen Session</button>` : endWorkoutButtonHtml()}
+      </div>`;
+    default:
+      return '';
+  }
+}
+
+function todaysLiftEmptyStateHtml() {
+  return `<div class="card">
+    <h3>Today's Lift</h3>
+    <p class="muted" style="text-align:center;">Nothing logged yet today — log your first lift below to get started.</p>
   </div>`;
+}
+
+// Reconstructs today_lift's pagehead + module grid, mirroring
+// renderDashboard()'s nutrition_home treatment — a plain pagehead (no
+// hero/photo on this screen) with a gear icon, pinned sessionAnalysisHtml()
+// sibling when the session is ended, then the reorderable/resizable
+// Summary/Exercises modules (or the simple empty-state card if nothing's
+// logged yet today, bypassing the module grid entirely).
+function todaysLiftPanelHtml() {
+  const ctx = computeTodaysLiftCtx();
+  const editingHere = editingScreenKey === 'today_lift';
+  const gear = `<button class="customize-gear-btn" id="customizeGearBtn-today_lift" aria-label="Customize this screen">${gearIconSvg()}</button>`;
+  if (ctx.empty) {
+    return `<div class="row" style="justify-content:flex-end;margin-bottom:0.5rem;">${gear}</div>${todaysLiftEmptyStateHtml()}`;
+  }
+  return `
+    <div class="row" style="justify-content:flex-end;margin-bottom:0.5rem;">${gear}</div>
+    ${ctx.ended ? sessionAnalysisHtml() : ''}
+    ${moduleGridHtml('today_lift', (key) => todaysLiftModuleHtml(key, ctx))}
+  `;
+}
+
+function wireTodaysLiftPanel(panel) {
+  const gearBtn = $('#customizeGearBtn-today_lift', panel);
+  if (gearBtn) gearBtn.addEventListener('click', () => {
+    editingScreenKey === 'today_lift' ? exitEditMode() : openScreenCustomize('today_lift');
+  });
+  wireModuleGrid(panel, 'today_lift');
 }
 
 // Generic edit/save/delete wiring for liftHistoryRowHtml() rows, searching
@@ -8458,7 +8995,6 @@ function renderLiftLog(panel) {
   // split as before, now a real sub-tab instead of a collapsed section.
   const liftLogSubTabHtml = `
     ${todaysLiftPanelHtml()}
-    ${isSessionEndedToday() ? sessionAnalysisHtml() : ''}
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <h3 style="margin:0;">Log a lift</h3>
@@ -8723,6 +9259,7 @@ function renderLiftLog(panel) {
   if (cueDismiss) cueDismiss.addEventListener('click', () => { cueCardBanner = null; renderLiftsTab(); });
   wireCitationEvents(panel, renderLiftsTab);
   wireTodaysLiftEditEvents(panel);
+  wireTodaysLiftPanel(panel);
   wireSessionAnalysisEvents(panel);
   $('#openGlossaryBtn')?.addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); });
 
