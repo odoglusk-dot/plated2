@@ -58,6 +58,10 @@
     --text-faint: #8F8C84;
     --accent: #8A6A3A;
     --accent-soft: #F3E7D0;
+    /* Distinct from --accent (brass, used for text/links/icons) — --gold is
+       the nav rebuild's new FAB/active-tile accent, matching
+       krafft-option1-reference.html's own --gold token exactly. */
+    --gold: #C7A15E;
     --danger: #C4483A;
     --success: #3F7A4A;
     --macro-protein: #C4483A;
@@ -274,6 +278,22 @@
     max-width: 880px; margin: 0 auto; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
+  /* Relocated legacy screens (Weight, History, Insights, Group, etc.)
+     render into the same #panel-X elements as before — see
+     openScreenSheet() — but instead of being one of the 3 primary tabs,
+     they become a fullscreen sheet above everything (including the nav
+     bar/+ button) while open. */
+  .tab-panel.as-sheet.active { position: fixed; inset: 0; z-index: 38; background: var(--bg);
+    overflow-y: auto; margin: 0; max-width: none;
+    padding: calc(56px + env(safe-area-inset-top, 0px)) calc(1.25rem + env(safe-area-inset-right, 0px))
+      calc(1.25rem + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px)); }
+  .screen-sheet-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 39; display: flex; align-items: center; gap: 0.6rem;
+    padding: calc(0.7rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) 0.7rem calc(1rem + env(safe-area-inset-left, 0px));
+    background: var(--nav-bg); border-bottom: 1px solid var(--border); }
+  .screen-sheet-back { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2);
+    border: 1px solid var(--border); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  .screen-sheet-back svg { width: 18px; height: 18px; }
+  .screen-sheet-title { font-family: var(--font-display); font-weight: 600; font-size: 1.1rem; color: var(--text); }
   .pagehead { margin-bottom: 1rem; }
   .pagetitle { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; color: var(--text); }
   .profile-hero { text-align: center; padding: 0.5rem 0 1.25rem; }
@@ -283,41 +303,56 @@
   .profile-avatar-circle svg { width: 30px; height: 30px; }
   .profile-hero-name { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; color: var(--text); }
 
-  /* ── Bottom nav (primary) ─────────────────────────────────────── */
-  /* .bottom-nav's position/size/transition rules now live with the rest
-     of the Customize Screen CSS further down (phase39) — it went from a
-     fixed full-width bar to a draggable/resizable floating pill whose
-     left/top/width/height are set by JS, not static here. */
-  .bottom-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
-    background: transparent; border: none; border-radius: 100px; color: var(--text-faint); cursor: pointer; padding: 0.5rem 0.2rem; }
-  .bottom-nav-icon { display: block; line-height: 0; }
-  .bottom-nav-icon svg { display: block; width: 21px; height: 21px; }
+  /* ── Bottom nav (primary) — Nav rebuild batch, Option 1 reference ──
+     Dark glass pill, always (not theme-dependent): matches
+     krafft-option1-reference.html's .tabs exactly. Solid white labels at
+     75%/100% opacity with a text shadow so they stay readable over any
+     photo background; active tab gets a lighter pill, not an inverted
+     fill. .bottom-nav's position/size/transition (left/top/width/height,
+     set by JS) still lives with the Customize Screen CSS further down
+     (phase39) — only the fill/label treatment changes here. */
+  .bottom-nav { background: rgba(23,24,27,.86) !important; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: none !important; }
+  .bottom-nav-btn { flex: 1; display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; border-radius: 100px; color: rgba(255,255,255,.75); cursor: pointer;
+    padding: 0.6rem 0.3rem; }
   .pro-lock-badge { position: absolute; right: -5px; bottom: -3px; width: 11px; height: 11px;
     color: var(--accent); background: var(--surface); border-radius: 50%; padding: 1px; }
-  .bottom-nav-label { font-family: var(--font-body); text-transform: uppercase; letter-spacing: 0.04em;
-    font-size: 0.65rem; font-weight: 500; }
-  .bottom-nav-btn.active { color: var(--bg); background: var(--text); }
+  .bottom-nav-label { font-family: var(--font-body); font-size: 0.8rem; font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+  .bottom-nav-btn.active { background: rgba(255,255,255,.18); color: #fff; }
   .bottom-nav-btn.active .bottom-nav-label { font-weight: 600; }
 
-  /* ── Quick-log FAB — always reachable, same two destinations (Log Food /
-     Log a Lift) regardless of which tab is active. Sits just above the
-     bottom nav, never inside a tab-panel, so it survives every navigation. */
-  .quick-log-fab { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 32;
-    width: 52px; height: 52px; border-radius: 50%; background: var(--text); color: var(--bg); border: none;
+  /* ── Universal + — same role the old quick-log FAB had (always
+     reachable, survives every navigation) but now opens the 4-tile + sheet
+     (Food/Set/Water/Weight) instead of a 2-item menu, and sits at the same
+     baseline as the tab bar instead of stacked above it. Gold circle,
+     56×56, per the reference. Shown only on Today/Progress — see
+     updateFabVisibility(). */
+  .plus-fab { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 32;
+    width: 56px; height: 56px; border-radius: 50%; background: var(--gold, #C7A15E); color: var(--text); border: none;
     display: flex; align-items: center; justify-content: center; cursor: pointer;
-    box-shadow: 0 6px 16px rgba(23,24,27,0.22); transition: transform .15s; }
-  .quick-log-fab:active { transform: scale(0.94); }
-  .quick-log-fab svg { width: 24px; height: 24px; }
-  .quick-log-backdrop { position: fixed; inset: 0; z-index: 29; background: transparent; }
-  .quick-log-sheet { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(144px + env(safe-area-inset-bottom, 0px)); z-index: 32;
-    display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end; }
-  .quick-log-sheet-item { display: flex; align-items: center; gap: 0.5rem; background: var(--surface);
-    border: 1px solid var(--border); border-radius: 100px; padding: 0.6rem 1rem 0.6rem 0.8rem;
-    font-weight: 600; font-size: 0.85rem; color: var(--text); cursor: pointer;
-    box-shadow: 0 4px 12px rgba(23,24,27,0.12); white-space: nowrap; }
-  .quick-log-sheet-icon { display: flex; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft);
-    color: var(--accent); align-items: center; justify-content: center; flex: none; }
-  .quick-log-sheet-icon svg { width: 14px; height: 14px; }
+    box-shadow: 0 8px 18px -6px rgba(0,0,0,.45); transition: transform .15s; }
+  .plus-fab:active { transform: scale(0.94); }
+  .plus-fab svg { width: 26px; height: 26px; }
+  .plus-backdrop { position: fixed; inset: 0; z-index: 36; background: rgba(0,0,0,.38); }
+  .plus-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 37; background: var(--surface-2);
+    border-radius: 28px 28px 0 0; padding: 0.7rem 1rem calc(1.75rem + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -14px 30px rgba(0,0,0,.22); max-height: 80vh; overflow-y: auto; }
+  .plus-sheet-handle { width: 40px; height: 5px; border-radius: 9px; background: var(--border); margin: 0 auto 0.9rem; }
+  .plus-log-field { border: 1px solid var(--border); background: var(--surface); border-radius: 14px;
+    padding: 0.8rem 0.9rem; display: flex; align-items: center; gap: 0.6rem; }
+  .plus-log-field input { flex: 1; border: none; background: transparent; outline: none; font: inherit; color: var(--text); }
+  .plus-log-field input::placeholder { color: var(--text-faint); }
+  .plus-log-field button { background: none; border: none; padding: 0.2rem; cursor: pointer; color: var(--text-dim); display: flex; }
+  .plus-log-field svg { width: 20px; height: 20px; }
+  .plus-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 0.9rem; }
+  .plus-tile { background: var(--bg); border: 1px solid var(--border); border-radius: 14px; text-align: center;
+    padding: 0.85rem 0.1rem; font-size: 0.75rem; font-weight: 500; color: var(--text); cursor: pointer; }
+  .plus-tile.last-used { outline: 2px solid var(--gold, #C7A15E); outline-offset: -1px; }
+  .plus-tile b { display: block; font-size: 1.4rem; margin-bottom: 0.2rem; font-weight: 400; }
+  .plus-confirm-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-top: 1px solid var(--divider); }
+  .plus-confirm-row:first-of-type { border-top: none; }
 
   /* ── Post-log calorie breakdown popup ─────────────────────────────
      First true full-screen bottom-sheet modal in the app (everything
@@ -1089,32 +1124,23 @@
     </div>
   </div>
 
-  <nav class="tab-nav hidden" id="tabNav">
-    <div class="tab-btn-row">
-      <button class="tab-btn" data-tab="history">History</button>
-      <button class="tab-btn" data-tab="more">More</button>
-      <button class="tab-btn" data-tab="lifts">Lifts</button>
-      <button class="tab-btn" data-tab="progress">Progress</button>
-    </div>
-  </nav>
-
   <main class="tab-panels">
     <section class="tab-panel active" data-tab="dashboard" id="panel-dashboard"></section>
-    <section class="tab-panel" data-tab="log" id="panel-log"></section>
-    <section class="tab-panel" data-tab="history" id="panel-history"></section>
-    <section class="tab-panel" data-tab="weight" id="panel-weight"></section>
-    <section class="tab-panel" data-tab="supplements" id="panel-supplements"></section>
-    <section class="tab-panel" data-tab="meals" id="panel-meals"></section>
-    <section class="tab-panel" data-tab="ask" id="panel-ask"></section>
-    <section class="tab-panel" data-tab="more" id="panel-more"></section>
+    <section class="tab-panel as-sheet" data-tab="log" id="panel-log"></section>
+    <section class="tab-panel as-sheet" data-tab="history" id="panel-history"></section>
+    <section class="tab-panel as-sheet" data-tab="weight" id="panel-weight"></section>
+    <section class="tab-panel as-sheet" data-tab="supplements" id="panel-supplements"></section>
+    <section class="tab-panel as-sheet" data-tab="meals" id="panel-meals"></section>
+    <section class="tab-panel as-sheet" data-tab="ask" id="panel-ask"></section>
+    <section class="tab-panel as-sheet" data-tab="more" id="panel-more"></section>
     <section class="tab-panel" data-tab="profile" id="panel-profile"></section>
-    <section class="tab-panel" data-tab="lifts" id="panel-lifts"></section>
-    <section class="tab-panel" data-tab="days" id="panel-days"></section>
-    <section class="tab-panel" data-tab="photos" id="panel-photos"></section>
-    <section class="tab-panel" data-tab="recaps" id="panel-recaps"></section>
-    <section class="tab-panel" data-tab="insights" id="panel-insights"></section>
+    <section class="tab-panel as-sheet" data-tab="lifts" id="panel-lifts"></section>
+    <section class="tab-panel as-sheet" data-tab="days" id="panel-days"></section>
+    <section class="tab-panel as-sheet" data-tab="photos" id="panel-photos"></section>
+    <section class="tab-panel as-sheet" data-tab="recaps" id="panel-recaps"></section>
+    <section class="tab-panel as-sheet" data-tab="insights" id="panel-insights"></section>
     <section class="tab-panel" data-tab="progress" id="panel-progress"></section>
-    <section class="tab-panel" data-tab="group" id="panel-group"></section>
+    <section class="tab-panel as-sheet" data-tab="group" id="panel-group"></section>
     <section class="tab-panel" data-tab="athlete" id="panel-athlete"></section>
   </main>
 
@@ -1125,50 +1151,45 @@
 
   <nav class="bottom-nav" id="bottomNav">
     <div class="navbar-edit-outline"></div>
-    <button class="bottom-nav-btn" data-bottom="home" aria-label="Home">
-      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9"/></svg></span>
-      <span class="bottom-nav-label">Home</span>
+    <button class="bottom-nav-btn" data-bottom="today" aria-label="Today">
+      <span class="bottom-nav-label">Today</span>
     </button>
-    <button class="bottom-nav-btn" data-bottom="log" aria-label="Log">
-      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>
-      <span class="bottom-nav-label">Log</span>
-    </button>
-    <button class="bottom-nav-btn" data-bottom="lift" aria-label="Lift">
-      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><rect x="1.5" y="9" width="3" height="6" rx="1"/><rect x="19.5" y="9" width="3" height="6" rx="1"/><rect x="6" y="7" width="2.4" height="10" rx="1"/><rect x="15.6" y="7" width="2.4" height="10" rx="1"/></svg></span>
-      <span class="bottom-nav-label">Lift</span>
-    </button>
-    <button class="bottom-nav-btn" data-bottom="group" aria-label="Group">
-      <span class="bottom-nav-icon" style="position:relative;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3.3 2.9-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><circle cx="17" cy="9" r="2.3"/><path d="M14.5 14.3c.9-.4 1.9-.6 2.5-.6 2.5 0 4.6 1.8 4.8 4.3"/></svg><svg id="groupNavLock" class="pro-lock-badge hidden" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg></span>
-      <span class="bottom-nav-label">Group</span>
+    <button class="bottom-nav-btn" data-bottom="progress" aria-label="Progress">
+      <span class="bottom-nav-label">Progress</span>
     </button>
     <button class="bottom-nav-btn hidden" data-bottom="athlete" aria-label="Athlete" id="athleteNavBtn">
-      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></span>
       <span class="bottom-nav-label">Athlete</span>
     </button>
-    <button class="bottom-nav-btn" data-bottom="profile" aria-label="Profile">
-      <span class="bottom-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg></span>
-      <span class="bottom-nav-label">Profile</span>
+    <button class="bottom-nav-btn" data-bottom="you" aria-label="You">
+      <span class="bottom-nav-label">You</span>
     </button>
     <div class="navbar-resize-handle" id="navbarResizeHandle"></div>
   </nav>
 
-  <!-- Always-reachable quick-log action — same two destinations
-       regardless of which tab you're currently on (see item 2 of the IA
-       streamlining pass). -->
-  <div class="quick-log-sheet hidden" id="quickLogSheet">
-    <button class="quick-log-sheet-item" id="quickLogFoodBtn">
-      <span class="quick-log-sheet-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>
-      Log Food
-    </button>
-    <button class="quick-log-sheet-item" id="quickLogLiftBtn">
-      <span class="quick-log-sheet-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><rect x="1.5" y="9" width="3" height="6" rx="1"/><rect x="19.5" y="9" width="3" height="6" rx="1"/><rect x="6" y="7" width="2.4" height="10" rx="1"/><rect x="15.6" y="7" width="2.4" height="10" rx="1"/></svg></span>
-      Log a Lift
-    </button>
-  </div>
-  <div class="quick-log-backdrop hidden" id="quickLogBackdrop"></div>
-  <button class="quick-log-fab" id="quickLogFab" aria-label="Quick log">
+  <!-- Universal + — same role as the old quick-log FAB (see item 2 of the
+       IA streamlining pass) but now opens the 4-tile + sheet (Food/Set/
+       Water/Weight) instead of a 2-item menu. Shown only on Today/Progress
+       — hidden on You and while any sheet is open (see updateFabVisibility()). -->
+  <div class="plus-sheet hidden" id="plusSheet"></div>
+  <div class="plus-backdrop hidden" id="plusBackdrop"></div>
+  <button class="plus-fab" id="plusFab" aria-label="Log anything">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
   </button>
+
+  <!-- Back bar for every relocated legacy screen (Weight, Supplements,
+       History, Budget-Optimized Protein, Ask Your Data, Days, Photos,
+       Recaps, Insights, Group, Exercise Glossary, Lift detail/log,
+       Learning Paths, User Guide, Apple Health setup, Cancel flow,
+       Plan/Block Builder). None of those screens' own render functions or
+       logic changed — see openScreenSheet() in the script below. The
+       panel itself becomes a fullscreen sheet via the .as-sheet CSS class;
+       this bar just floats on top of whichever one is open. -->
+  <div class="screen-sheet-bar hidden" id="screenSheetBar">
+    <button class="screen-sheet-back" id="screenSheetBackBtn" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="screen-sheet-title" id="screenSheetTitle"></div>
+  </div>
 
   <!-- Post-log calorie source breakdown — filled in by
        showCalorieBreakdownPopup() right after a food log succeeds, never
@@ -1372,6 +1393,7 @@ const state = {
   backgroundSignedUrl: '', // signed URL for backgroundPrefs.photo_url, or ''
   screenModules: {},
   activeTab: 'dashboard',
+  sheetTab: null, // non-null when a secondary screen is open as a fullscreen sheet over activeTab — see openScreenSheet()
   aiRemaining: null,
   subscription: null,
   referrals: [],
@@ -3026,105 +3048,217 @@ function renderAll() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// TAB NAVIGATION
+// TAB NAVIGATION — Nav rebuild batch: Today / Progress / You (+ Athlete,
+// only for accounts with Athlete Mode on). Replaces the old 6-tab bottom
+// nav + secondary tab-btn-row (History|More, Lifts|Progress) entirely.
+//
+// Every screen that isn't one of these primary tabs (Weight, History,
+// Supplements, Budget-Optimized Protein, Ask Your Data, Days, Photos,
+// Recaps, Insights, Group, the Lift tab's deeper states) still renders
+// into its own existing #panel-X element via its existing, unchanged
+// render function — renderAll() already calls every one of them
+// unconditionally every render, same as before this batch. What changed
+// is presentation: instead of being a peer "tab" switched via the old
+// secondary row, that panel becomes a fullscreen sheet (see
+// openScreenSheet()/closeScreenSheet() and the .as-sheet CSS above)
+// opened from inside a primary tab or the + sheet, with a back button
+// instead of nav-row buttons.
 // ══════════════════════════════════════════════════════════════════
-$$('.tab-btn').forEach((btn) => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
 
-// Bottom nav is the only primary nav (Home/Log/Lift/Profile) — there's no
-// more separate nutrition/training "mode" to switch between now that the
-// dashboard is combined, so Lift is just a shortcut into the Lifts tab, same
-// as Log is a shortcut into the Log tab. The tab-btn-row above it is
-// secondary nav for the destinations that don't have their own bottom-nav
-// slot; Home, Log, and Profile aren't duplicated in it.
+const PRIMARY_TAB_KEYS = new Set(['dashboard', 'progress', 'profile', 'athlete']);
+
+// Title shown in the floating back-bar for every relocated legacy screen.
+// Deliberately NOT including 'lifts' here with one fixed title — see
+// screenSheetTitleFor() below, which picks a context-appropriate title for
+// it since that one panel still serves several different purposes
+// (today's log form, training split/PRs, lift detail, exercise glossary,
+// plan/block builder) depending on its own internal sub-state.
+const SHEET_TAB_TITLES = {
+  log: 'Log Food', history: 'History', weight: 'Weight Log', supplements: 'Supplements',
+  meals: 'Budget-Optimized Protein', ask: 'Ask Your Data', days: 'Training Days & Volume',
+  photos: 'Progress Photos', recaps: 'Monthly Recaps', insights: 'Insights',
+  group: 'Friends & Groups',
+};
+function screenSheetTitleFor(tab) {
+  if (tab === 'lifts') {
+    if (showPlanBuilder) return 'Plan Builder';
+    if (showBlockBuilder) return 'Block Builder';
+    if (showExerciseGlossary) return 'Exercise Library';
+    if (liftsSelectedExercise) return liftsSelectedExercise;
+    return liftsSubTab === 'training' ? 'Training' : 'Log a Lift';
+  }
+  return SHEET_TAB_TITLES[tab] || '';
+}
+
 const BOTTOM_NAV_ACTIONS = {
-  home: () => setActiveTab('dashboard'),
-  log: () => setActiveTab('log'),
-  lift: () => setActiveTab('lifts'),
-  group: () => setActiveTab('group'),
+  today: () => setActiveTab('dashboard'),
+  progress: () => setActiveTab('progress'),
   athlete: () => setActiveTab('athlete'),
-  profile: () => setActiveTab('profile'),
+  you: () => setActiveTab('profile'),
 };
 $$('.bottom-nav-btn').forEach((btn) => btn.addEventListener('click', () => BOTTOM_NAV_ACTIONS[btn.dataset.bottom]()));
 
-// Quick-log FAB — same two destinations (Log Food / Log a Lift) reachable
-// from anywhere, not scoped to any one tab. Log a Lift resets every
-// Lifts-tab sub-state (Block/Plan Builder, exercise glossary, exercise
-// detail) so it always lands on the actual log form, not whatever the
-// Lifts tab happened to be showing last.
-function closeQuickLogSheet() {
-  $('#quickLogSheet').classList.add('hidden');
-  $('#quickLogBackdrop').classList.add('hidden');
-}
-$('#quickLogFab').addEventListener('click', () => {
-  $('#quickLogSheet').classList.toggle('hidden');
-  $('#quickLogBackdrop').classList.toggle('hidden');
-});
-$('#quickLogBackdrop').addEventListener('click', closeQuickLogSheet);
-$('#quickLogFoodBtn').addEventListener('click', () => {
-  closeQuickLogSheet();
-  setActiveTab('log');
-});
-$('#quickLogLiftBtn').addEventListener('click', () => {
-  closeQuickLogSheet();
-  showPlanBuilder = false;
-  showBlockBuilder = false;
-  showExerciseGlossary = false;
-  liftsSelectedExercise = null;
-  liftsSubTab = 'log';
-  setActiveTab('lifts');
-  renderLiftsTab();
-});
-
-// Screens reachable from the tab-btn-row loosely group under whichever
-// bottom-nav icon they're conceptually part of, purely for the bottom nav's
-// own active-state highlight — Days/Photos/Recaps/Insights are training
-// sub-screens, so viewing one still shows Lift as the active bottom-nav tab.
-const TRAINING_SUB_TABS = new Set(['lifts', 'progress', 'days', 'photos', 'recaps', 'insights', 'weight']);
-
+const PRIMARY_TAB_TO_BOTTOM_KEY = { dashboard: 'today', progress: 'progress', athlete: 'athlete', profile: 'you' };
 function updateBottomNav() {
-  let active = 'home';
-  if (state.activeTab === 'log') active = 'log';
-  else if (TRAINING_SUB_TABS.has(state.activeTab)) active = 'lift';
-  else if (state.activeTab === 'group') active = 'group';
-  else if (state.activeTab === 'athlete') active = 'athlete';
-  else if (state.activeTab === 'profile') active = 'profile';
+  const active = PRIMARY_TAB_KEYS.has(state.activeTab) ? PRIMARY_TAB_TO_BOTTOM_KEY[state.activeTab] : null;
   $$('.bottom-nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.bottom === active));
-  // Group Mode is Pro-gated — show the lock badge to free users at all
-  // times, not only once they tap in and hit the paywall card.
-  const groupLock = $('#groupNavLock');
-  if (groupLock) groupLock.classList.toggle('hidden', hasAccess(state.subscription));
 }
 
-// Home, Group, Athlete, and Profile are endpoint screens — nothing to jump
-// laterally to from any of them — so they rely on the bottom nav alone;
-// every other screen (History, Weight, Lifts, Days, etc.) genuinely
-// benefits from the secondary row's quick lateral movement, so it stays
-// for those.
-const TABS_WITHOUT_SECONDARY_NAV = new Set(['dashboard', 'profile', 'group', 'athlete']);
+// The + button only makes sense where there's daily logging to do — hidden
+// on You, and hidden behind any open sheet (a sheet already has its own
+// primary action; stacking the + on top of it would violate "one primary
+// action per screen").
+function updateFabVisibility() {
+  const show = !state.sheetTab && (state.activeTab === 'dashboard' || state.activeTab === 'progress');
+  $('#plusFab').classList.toggle('hidden', !show);
+}
 
-function setActiveTab(tab) {
-  // Navigating away from Log Food while the barcode camera is running
-  // would otherwise leave it active in the background (setActiveTab only
-  // toggles CSS visibility, it doesn't destroy the panel's DOM) — a real
-  // privacy/battery concern, not just a cosmetic one.
+// Opens any non-primary screen (Weight, History, Supplements, Budget-
+// Optimized Protein, Ask Your Data, Days, Photos, Recaps, Insights, Group,
+// Lift) as a fullscreen sheet over whichever primary tab is underneath.
+// state.activeTab (today/progress/you/athlete) is untouched — closing the
+// sheet returns to exactly where you were, not back to Today.
+function openScreenSheet(tab) {
   if (state.activeTab === 'log' && tab !== 'log' && barcodeScanning) stopBarcodeScan();
-  state.activeTab = tab;
-  $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-  $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
-  $('#tabNav').classList.toggle('hidden', TABS_WITHOUT_SECONDARY_NAV.has(tab));
-  // Scope the secondary row to whichever subject the current tab belongs to
-  // — Log counts as nutrition even though it's not in the row itself, so
-  // viewing it still shows History/Weight/Supplements/Meals/Ask AI, not the
-  // training tabs bleeding in alongside them.
-  const trainingContext = TRAINING_SUB_TABS.has(tab);
-  $$('.tab-btn').forEach((b) => b.classList.toggle('scope-hidden', TRAINING_SUB_TABS.has(b.dataset.tab) !== trainingContext));
-  updateBottomNav();
-  // The Days tab's heatmap is rendered (by renderAll()) while every tab is
-  // still hidden, where scrollWidth reads 0 and scrollLeft is a no-op — so
-  // re-apply it now that the panel is actually visible, same reasoning as
-  // renderHistory()'s max-height sync above.
+  state.sheetTab = tab;
+  $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === state.activeTab || p.dataset.tab === tab));
+  $('#screenSheetBar').classList.remove('hidden');
+  $('#screenSheetTitle').textContent = screenSheetTitleFor(tab);
+  closePlusSheet();
+  updateFabVisibility();
   if (tab === 'days') scrollHeatmapToNow($('#panel-days'));
 }
+function closeScreenSheet() {
+  const was = state.sheetTab;
+  if (was === 'log' && barcodeScanning) stopBarcodeScan();
+  state.sheetTab = null;
+  $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === state.activeTab));
+  $('#screenSheetBar').classList.add('hidden');
+  updateFabVisibility();
+}
+$('#screenSheetBackBtn').addEventListener('click', closeScreenSheet);
+
+// Re-labels the back bar without closing/reopening the sheet — used by the
+// Lift sheet's internal navigation (e.g. Training -> Exercise Glossary ->
+// back) where the underlying #panel-lifts stays the active sheet the whole
+// time but what it's showing changes.
+function updateScreenSheetTitle() {
+  if (state.sheetTab) $('#screenSheetTitle').textContent = screenSheetTitleFor(state.sheetTab);
+}
+
+function setActiveTab(tab) {
+  // Primary destination (Today/Progress/You/Athlete): close any open sheet
+  // and switch the real tab. Anything else is a relocated legacy screen —
+  // every call site across the app that still says setActiveTab('weight')
+  // etc. (achievement banners, the old MORE_TAB_DESTINATIONS-style links,
+  // deep links) keeps working unchanged, just opening as a sheet instead
+  // of a tab, so this one function is the only place that needed to know
+  // the difference.
+  if (!PRIMARY_TAB_KEYS.has(tab)) { openScreenSheet(tab); return; }
+  if (state.activeTab === 'log' && barcodeScanning) stopBarcodeScan();
+  state.sheetTab = null;
+  state.activeTab = tab;
+  $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
+  $('#screenSheetBar').classList.add('hidden');
+  updateBottomNav();
+  updateFabVisibility();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// + (LOG ANYTHING) SHEET — Phase 3 of the nav rebuild. One floating
+// action button (Today/Progress only, see updateFabVisibility) opens a
+// bottom sheet: a text field plus four tiles that jump straight into
+// each existing logging surface as a screen sheet. Tiles don't duplicate
+// any logging logic — they just set the destination panel's own sub-tab
+// state and reuse its existing render function, same convention as the
+// panel's own in-page sub-tab buttons (see renderLogTab/renderLiftsTab).
+// ══════════════════════════════════════════════════════════════════
+
+// Free-text field currently routes straight to the Food tab's existing
+// "Describe It" AI flow (already consent-gated there) rather than
+// parsing the type itself — flipping this on is future work for a
+// dedicated type-detecting parser + confirm card, out of scope for this
+// batch per the Phase 3 spec ("wire only if small, else TODO").
+const LOG_ANYTHING_AI_ENABLED = false;
+
+function lastUsedLogTile() {
+  try { return localStorage.getItem('krafft_last_log_tile'); } catch { return null; }
+}
+function setLastUsedLogTile(key) {
+  try { localStorage.setItem('krafft_last_log_tile', key); } catch {}
+}
+
+function plusSheetHtml() {
+  const last = lastUsedLogTile();
+  const tile = (key, label, icon) => `
+    <button class="plus-tile ${last === key ? 'last-used' : ''}" data-plus-tile="${key}">
+      <b>${icon}</b>${label}
+    </button>`;
+  return `
+    <div class="plus-sheet-handle"></div>
+    <div class="plus-log-field">
+      <input id="plusLogInput" type="text" placeholder="Log anything…" autocomplete="off">
+      <button type="button" data-plus-action="camera" aria-label="Snap a photo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </button>
+      <button type="button" data-plus-action="barcode" aria-label="Scan a barcode">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M8 5v14M12 5v14M13 5v14M17 5v14M21 5v14"/></svg>
+      </button>
+    </div>
+    <div class="plus-tiles">
+      ${tile('food', 'Food', '🍽️')}
+      ${tile('set', 'Set', '🏋️')}
+      ${tile('water', 'Water', '💧')}
+      ${tile('weight', 'Weight', '⚖️')}
+    </div>
+    <div class="plus-water-inline hidden" id="plusWaterInline" style="margin-top:0.8rem;">
+      <div class="chip-row">
+        <button class="chip" data-plus-water="8">+8oz</button>
+        <button class="chip" data-plus-water="16">+16oz</button>
+        <button class="chip" data-plus-water="24">+24oz</button>
+      </div>
+    </div>
+  `;
+}
+
+function openPlusSheet() {
+  $('#plusSheet').innerHTML = plusSheetHtml();
+  $('#plusSheet').classList.remove('hidden');
+  $('#plusBackdrop').classList.remove('hidden');
+  $('#plusLogInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPlusLogInput(); });
+  $('[data-plus-action="camera"]').addEventListener('click', () => { logSubTab = 'photo'; renderLogTab(); setLastUsedLogTile('food'); closePlusSheet(); setActiveTab('log'); });
+  $('[data-plus-action="barcode"]').addEventListener('click', () => { logSubTab = 'barcode'; renderLogTab(); setLastUsedLogTile('food'); closePlusSheet(); setActiveTab('log'); });
+  $$('[data-plus-tile]').forEach((btn) => btn.addEventListener('click', () => onPlusTileTap(btn.dataset.plusTile)));
+  $$('[data-plus-water]', $('#plusWaterInline')).forEach((btn) => btn.addEventListener('click', async () => {
+    await logWater(Number(btn.dataset.plusWater));
+    setLastUsedLogTile('water');
+    closePlusSheet();
+  }));
+}
+function closePlusSheet() {
+  $('#plusSheet').classList.add('hidden');
+  $('#plusBackdrop').classList.add('hidden');
+}
+function submitPlusLogInput() {
+  const text = ($('#plusLogInput').value || '').trim();
+  if (!text) return;
+  logSubTab = 'ai';
+  renderLogTab();
+  setLastUsedLogTile('food');
+  closePlusSheet();
+  setActiveTab('log');
+  requestAnimationFrame(() => { const d = $('#aiDescription'); if (d) d.value = text; });
+}
+function onPlusTileTap(key) {
+  if (key === 'water') { $('#plusWaterInline').classList.toggle('hidden'); return; }
+  setLastUsedLogTile(key);
+  closePlusSheet();
+  if (key === 'food') { logSubTab = 'ai'; renderLogTab(); setActiveTab('log'); }
+  else if (key === 'set') { liftsSubTab = 'log'; renderLiftsTab(); setActiveTab('lifts'); }
+  else if (key === 'weight') { showWeightLogPopup(); }
+}
+$('#plusFab').addEventListener('click', openPlusSheet);
+$('#plusBackdrop').addEventListener('click', closePlusSheet);
 
 // ══════════════════════════════════════════════════════════════════
 // SHARED: sum + streaks
@@ -4287,28 +4421,23 @@ function applyNavbarLayout(withTransition) {
   // landscape on a notched device where the usable width is narrower.
   const safeLeft = safeAreaInset('left'), safeRight = safeAreaInset('right');
   const usableWidth = window.innerWidth - safeLeft - safeRight;
-  const left = safeLeft + Math.round((usableWidth - size.width) / 2);
+  let width = size.width, left;
+  if (state.navbarPrefs.position === 'bottom') {
+    // At the bottom, the nav shares its row with the + FAB (always
+    // bottom-right, see .plus-fab) — left-align instead of centering, and
+    // shrink below the chosen size if needed, so the two never overlap
+    // even on a 320pt-wide phone with Athlete Mode's 4th tab on.
+    const fabReserve = 56 + 16 + 10; // FAB width + its right inset + a breathing gap
+    width = Math.max(150, Math.min(size.width, usableWidth - 14 - fabReserve));
+    left = safeLeft + 14;
+  } else {
+    left = safeLeft + Math.round((usableWidth - width) / 2);
+  }
   nav.classList.toggle('dragging', !withTransition);
-  nav.style.width = size.width + 'px';
+  nav.style.width = width + 'px';
   nav.style.height = size.height + 'px';
   nav.style.left = left + 'px';
   nav.style.top = top + 'px';
-  syncFabPosition();
-}
-
-// The quick-log FAB sits just above the bottom nav when the nav is in
-// its default bottom position — now that the nav can move, the FAB's
-// offset has to track it instead of a hard-coded CSS value.
-function syncFabPosition() {
-  const fab = $('#quickLogFab');
-  const nav = $('#bottomNav');
-  if (!fab || !nav) return;
-  if (state.navbarPrefs.position === 'bottom') {
-    const navHeight = parseInt(nav.style.height, 10) || 56;
-    fab.style.bottom = `calc(${navHeight + 28}px + env(safe-area-inset-bottom, 0px))`;
-  } else {
-    fab.style.bottom = `calc(24px + env(safe-area-inset-bottom, 0px))`;
-  }
 }
 
 async function persistNavbarPrefs() {
