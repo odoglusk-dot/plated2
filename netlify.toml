@@ -1,6 +1,19 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+  # Deploy credits are burned by every build Netlify actually runs —
+  # production deploys, deploy previews, AND branch deploys — regardless
+  # of the Dashboard's "Deploy contexts" setting for the latter two. This
+  # `ignore` command is Netlify's own supported way to skip a build
+  # entirely (a skipped build costs no credits): it exits 1 ("don't skip —
+  # build it") only when $BRANCH is main, and exits 0 ("skip it") for
+  # every other branch, which covers both deploy previews (built on the
+  # PR's own branch) and branch deploys. This is a repo-side, version-
+  # controlled backstop — it doesn't replace turning off Deploy Previews/
+  # Branch deploys in Site settings -> Build & deploy -> Continuous
+  # deployment, it just guarantees the same outcome even if that dashboard
+  # setting ever gets flipped back on by mistake.
+  ignore = "if [ \"$BRANCH\" = \"main\" ]; then exit 1; else exit 0; fi"
 
 [functions]
   node_bundler = "esbuild"
