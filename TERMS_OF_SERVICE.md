@@ -66,7 +66,7 @@ removed you.
 Krafft's core logging — manual food and lift entry, Quick Add, your
 dashboard, training splits — is free with no time limit and no credit card
 required. The AI features (photo/text macro estimation and Ask AI) require
-an active subscription. New subscribers get a 3-day free trial before the
+an active subscription. New subscribers get a 7-day free trial before the
 first charge.
 
 ### 7.2 Plan and billing

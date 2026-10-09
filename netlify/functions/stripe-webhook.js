@@ -1,11 +1,14 @@
 // POST — called by Stripe, not the app. Configure this URL as a webhook
 // endpoint in the Stripe Dashboard, subscribed to at least:
 //   customer.subscription.created, customer.subscription.updated,
-//   customer.subscription.deleted, checkout.session.completed
-// (the last one is new as of the App Store readiness batch — item 7's
-// external_purchase_log needs the Checkout Session object specifically,
-// since that's what carries a session id and the exact amount charged;
-// the subscription object alone doesn't.)
+//   customer.subscription.deleted, customer.subscription.trial_will_end,
+//   checkout.session.completed
+// (checkout.session.completed is from the App Store readiness batch —
+// item 7's external_purchase_log needs the Checkout Session object
+// specifically, since that's what carries a session id and the exact
+// amount charged; the subscription object alone doesn't.
+// trial_will_end is new as of the 7-day trial batch, item 4 — fires
+// ~3 days before a trial ends, see sendTrialEndingReminderIfDue() below.)
 //
 // Verifies the Stripe-Signature header itself (HMAC-SHA256 over the raw
 // body, using Node's built-in crypto) rather than pulling in the `stripe`
@@ -14,7 +17,9 @@
 // place in the app allowed to write to that table (see reset-schema.sql):
 // RLS gives every user select-own but no insert/update policy at all.
 const crypto = require('crypto');
-const { jsonResponse, captureError, withErrorReporting, callStripe } = require('./_shared');
+const { jsonResponse, captureError, withErrorReporting, callStripe, hashEmail } = require('./_shared');
+
+const SUPPORT_EMAIL = 'odoglusk@gmail.com';
 
 // Shared, idempotently-created 100%-off-once coupon used for every referral
 // reward — one Stripe object reused by everyone rather than minting a new
@@ -153,6 +158,94 @@ async function logExternalPurchaseIfIos(session) {
   }
 }
 
+// One trial per person (item 2) — records this email as having used a
+// trial the first time a subscription for it reaches 'trialing', so a
+// later deleted-and-recreated account (new user_id, same email) is
+// caught by create-checkout-session.js's trial_used lookup. Keyed by
+// email_hash with an ignore-duplicates upsert, so it's safe to call on
+// every event where status is 'trialing', not just .created — no harm
+// if it fires more than once for the same email.
+async function recordTrialUsedIfTrialing(subscription) {
+  if (subscription.status !== 'trialing') return;
+  const email = subscription.metadata?.email;
+  if (!email) return;
+  try {
+    await fetch(`${process.env.SUPABASE_URL}/rest/v1/trial_used`, {
+      method: 'POST',
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'content-type': 'application/json',
+        Prefer: 'resolution=ignore-duplicates',
+      },
+      body: JSON.stringify({ email_hash: hashEmail(email) }),
+    });
+  } catch (err) {
+    await captureError(err, { function: 'stripe-webhook:record-trial-used' });
+  }
+}
+
+// Trial-ending reminder (item 4) — fires on Stripe's
+// customer.subscription.trial_will_end event, roughly 3 days before
+// trial_end. Sent once per subscription (trial_reminder_sent_at on the
+// subscriptions row gates it, since Stripe can and does redeliver
+// webhooks). Plain and honest per the spec: the date, the price, how to
+// cancel, and a real support address — no urgency/dark-pattern framing.
+async function sendTrialEndingReminderIfDue(subscription) {
+  const userId = subscription.metadata?.supabase_user_id;
+  const email = subscription.metadata?.email;
+  if (!userId || !email) return;
+  if (!process.env.RESEND_API_KEY) return;
+
+  const base = process.env.SUPABASE_URL;
+  const serviceHeaders = {
+    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    'content-type': 'application/json',
+  };
+
+  try {
+    const subRes = await fetch(
+      `${base}/rest/v1/subscriptions?stripe_subscription_id=eq.${subscription.id}&select=trial_reminder_sent_at`,
+      { headers: serviceHeaders }
+    );
+    if (!subRes.ok) return;
+    const row = (await subRes.json())[0];
+    if (!row || row.trial_reminder_sent_at) return; // already sent, or we don't have this subscription recorded yet
+
+    const trialEndDate = subscription.trial_end
+      ? new Date(subscription.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : 'soon';
+
+    const emailRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM_EMAIL || 'Krafft <reminders@example.com>',
+        to: email,
+        subject: 'Your Krafft trial ends ' + trialEndDate,
+        text: `Your free trial ends on ${trialEndDate}. After that, Krafft Pro is $4.99/month, billed to the card on file.\n\nWant to cancel before then? Open Krafft, go to You -> Account & Pro -> Manage Subscription, and cancel there — it takes effect immediately, no charge.\n\nQuestions? Reply to this email or write to ${SUPPORT_EMAIL}.`,
+      }),
+    });
+    if (!emailRes.ok) {
+      const detail = await emailRes.text().catch(() => '');
+      await captureError(new Error(`Resend send failed (${emailRes.status}): ${detail}`), { function: 'stripe-webhook:trial-reminder', userId });
+      return; // don't mark as sent if it didn't actually send
+    }
+
+    await fetch(`${base}/rest/v1/subscriptions?stripe_subscription_id=eq.${subscription.id}`, {
+      method: 'PATCH',
+      headers: serviceHeaders,
+      body: JSON.stringify({ trial_reminder_sent_at: new Date().toISOString() }),
+    });
+  } catch (err) {
+    await captureError(err, { function: 'stripe-webhook:trial-reminder', userId });
+  }
+}
+
 exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
@@ -183,6 +276,13 @@ exports.handler = withErrorReporting(async (event) => {
     // subscriptions table itself is still written exclusively from the
     // customer.subscription.* events below, unchanged.
     await logExternalPurchaseIfIos(stripeEvent.data?.object || {});
+    return jsonResponse(200, { received: true });
+  }
+
+  if (stripeEvent.type === 'customer.subscription.trial_will_end') {
+    // Doesn't touch the subscriptions table's status/current_period_end —
+    // just the one-time reminder email, gated by trial_reminder_sent_at.
+    await sendTrialEndingReminderIfDue(stripeEvent.data?.object || {});
     return jsonResponse(200, { received: true });
   }
 
@@ -251,6 +351,7 @@ exports.handler = withErrorReporting(async (event) => {
   }
 
   await rewardReferrerIfConverted(stripeEvent, subscription, userId);
+  await recordTrialUsedIfTrialing(subscription);
 
   return jsonResponse(200, { received: true });
 }, 'stripe-webhook');

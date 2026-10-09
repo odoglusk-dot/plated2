@@ -7,6 +7,20 @@ const crypto = require('crypto');
 
 const DAILY_AI_LIMIT = 13;
 
+// The one place trial length is configured (7-day trial batch, item 1) —
+// create-checkout-session.js reads this instead of a hardcoded literal.
+const TRIAL_PERIOD_DAYS = 7;
+
+// sha256 of a normalized (lowercased, trimmed) email — used as the
+// `trial_used` table's key so a deleted-and-recreated account (new
+// user_id every time) still can't get a second trial, since this hash
+// only depends on the email string, not any row that cascades on
+// account deletion. Not meant to be reversible/secret-grade, just a
+// deterministic, non-plaintext key.
+function hashEmail(email) {
+  return crypto.createHash('sha256').update(String(email || '').trim().toLowerCase()).digest('hex');
+}
+
 // Derives the app's own base URL (scheme + host + subpath, no trailing
 // slash) for building post-Stripe redirect URLs. `event.headers.origin`
 // alone is only scheme+host — fine when the app is served from a site's
@@ -600,6 +614,8 @@ async function cacheFood(description, { food_name, calories, protein_g, carbs_g,
 
 module.exports = {
   DAILY_AI_LIMIT,
+  TRIAL_PERIOD_DAYS,
+  hashEmail,
   captureError,
   withErrorReporting,
   callStripe,

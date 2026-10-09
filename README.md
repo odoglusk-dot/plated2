@@ -126,7 +126,7 @@ Adjust `DAILY_AI_LIMIT` in `_shared.js` if you want a different cap.
 
 ## Paywall
 
-Plated is a whole-app paywall: **$4.99/month with a 3-day free trial**
+Plated is a whole-app paywall: **$4.99/month with a 7-day free trial**
 (card required up front — Stripe handles the trial timing and auto-charges
 on day 3). No part of the app — dashboard, logging, history, everything —
 renders for a signed-in user without an active trial or subscription.
@@ -137,7 +137,7 @@ renders for a signed-in user without an active trial or subscription.
   using `SUPABASE_SERVICE_ROLE_KEY`, ever writes to it.
 - **`netlify/functions/create-checkout-session.js`** — verifies the caller's
   Supabase session, creates a Stripe Checkout Session (subscription mode,
-  3-day trial, `payment_method_collection: 'always'`), and returns the
+  7-day trial, `payment_method_collection: 'always'`), and returns the
   Checkout URL for the browser to redirect to.
 - **`netlify/functions/stripe-webhook.js`** — verifies the
   `Stripe-Signature` header itself (HMAC-SHA256 via Node's `crypto`, no
@@ -150,7 +150,7 @@ renders for a signed-in user without an active trial or subscription.
 - **Frontend gate** (`index.html`, `enterApp()`) — every path into the app
   (sign-in, sign-up, password reset, page reload with an existing session)
   checks `subscriptions` before showing `#app`; anything other than
-  `trialing`/`active` shows `#paywallScreen` instead, with a "Start 3-Day
+  `trialing`/`active` shows `#paywallScreen` instead, with a "Start 7-Day
   Free Trial" button. After Stripe redirects back
   (`?checkout=success`), the frontend polls briefly for the webhook to land
   before granting access, so a paying user isn't bounced back to the

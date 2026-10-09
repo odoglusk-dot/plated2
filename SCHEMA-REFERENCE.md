@@ -341,7 +341,7 @@ attribution per account, forever). `status` flips from `pending` to
 subscription transition from `trialing` to `active` (a real paid
 conversion) — see "Referral Program" in `DEPLOYMENT.md`. Only the referrer
 is ever rewarded; the referred user gets nothing extra beyond the normal
-3-day trial.
+7-day trial.
 
 ---
 

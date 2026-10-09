@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Krafft — Macro &amp; Strength Tracker</title>
-<meta name="description" content="Macro tracking and strength training in one app. Snap a photo for instant AI macros, log your lifts, and see both on one combined dashboard — 3-day free trial.">
+<meta name="description" content="Macro tracking and strength training in one app. Snap a photo for instant AI macros, log your lifts, and see both on one combined dashboard — 7-day free trial.">
 
 <!-- Open Graph / social preview -->
 <meta property="og:type" content="website">
@@ -876,12 +876,12 @@
   <div class="landing-hero">
     <div class="display">KRAFFT</div>
     <p class="pitch">Macro tracking and strength training in one app — describe or snap a photo of what you ate and AI fills in the macros, then log your lifts right alongside it, on one combined dashboard.</p>
-    <p class="subpitch">Manual logging is free, forever. AI photo/text macro estimation and Ask AI unlock with a 3-day free trial.</p>
+    <p class="subpitch">Manual logging is free, forever. AI photo/text macro estimation and Ask AI unlock with a 7-day free trial.</p>
     <div class="landing-cta-row">
       <button class="btn btn-primary" id="landingStartTrialBtn">Get Started Free</button>
       <button class="btn" id="landingLogInBtn2">Log In</button>
     </div>
-    <p class="landing-price-note">No card required for the free tier. AI features are $4.99/month after a 3-day trial.</p>
+    <p class="landing-price-note">No card required for the free tier. AI features are $4.99/month after a 7-day trial.</p>
   </div>
 
   <div class="landing-section">
@@ -1000,7 +1000,7 @@
           <li>✓ AI text macro estimation</li>
           <li>✓ Ask AI</li>
         </ul>
-        <p class="muted small">3-day free trial, cancel anytime.</p>
+        <p class="muted small">7-day free trial, cancel anytime.</p>
       </div>
     </div>
   </div>
@@ -1030,7 +1030,7 @@
 
   <footer class="legal">
     Krafft is not a medical device and does not provide medical advice.
-    <a href="TERMS_OF_SERVICE.md">Terms</a> · <a href="PRIVACY_POLICY.md">Privacy</a>
+    <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a>
     <p class="brand-story">Krafft — German/Scandinavian for "strength." Built by an athlete who got tired of tracking macros and lifts in two different apps.</p>
   </footer>
 </div>
@@ -1159,7 +1159,8 @@
         <li>AI-written post-session analysis and Group Mode</li>
       </ul>
       <p id="paywallSocialProof" class="muted small hidden" style="text-align:center;margin-top:0.5rem;"></p>
-      <button type="button" class="btn btn-primary btn-block" id="paywallSubscribeBtn">Start 3-Day Free Trial</button>
+      <button type="button" class="btn btn-primary btn-block" id="paywallSubscribeBtn">Start 7-Day Free Trial</button>
+      <p class="muted small" style="text-align:center;margin-top:0.5rem;">$4.99/month after the trial. Cancel anytime. <a href="terms.html" target="_blank" rel="noopener">Terms</a> &amp; <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
       <button type="button" class="btn btn-ghost btn-block" id="paywallCloseBtn" style="margin-top:0.5rem;">Maybe Later — Back to Krafft</button>
       <div id="paywallError" style="color:var(--danger);font-size:0.85rem;margin-top:0.5rem;min-height:1em;text-align:center;"></div>
       <p class="muted" style="font-size:0.8rem;text-align:center;margin-top:0.75rem;">Questions about a charge? <a id="paywallBillingHelpLink" href="#">Contact us</a> before disputing with your bank — we're happy to help directly.</p>
@@ -2444,8 +2445,10 @@ const UPGRADE_CONTEXT_CUSTOMIZE_SCREEN = 'Unlock screen customization — a back
 // Price shown next to every inline "Upgrade" CTA in the app, not just the
 // full paywall screen — a bare "Upgrade" button with price hidden behind
 // another tap undersells what's actually a pretty direct trial offer.
+// 7-day trial batch, item 6: every upgrade CTA states trial length, price,
+// and cancel terms plainly, with Terms/Privacy linked right alongside it.
 function upgradePriceLineHtml() {
-  return `<p class="muted small" style="margin:0.4rem 0 0.75rem;">$4.99/mo after a 3-day free trial · cancel anytime</p>`;
+  return `<p class="muted small" style="margin:0.4rem 0 0.75rem;">7-day free trial, then $4.99/month. Cancel anytime. <a href="terms.html" target="_blank" rel="noopener">Terms</a> &amp; <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>`;
 }
 
 function renderPaywallProcessing() {
@@ -2461,13 +2464,13 @@ const SOCIAL_PROOF = { enabled: false, count: '' };
 
 function renderPaywallScreen(sub, contextLine) {
   let heading = 'Unlock AI Features';
-  let body = "Krafft's free tier covers manual food and lift logging, Quick Add, and your dashboard — no time limit. AI features (photo/text macro estimation, Ask AI) are $4.99/month after a 3-day free trial.";
+  let body = "Krafft's free tier covers manual food and lift logging, Quick Add, and your dashboard — no time limit. AI features (photo/text macro estimation, Ask AI) are $4.99/month after a 7-day free trial.";
   if (sub?.status === 'past_due') {
     heading = 'Payment Failed';
     body = "We couldn't process your last payment. Update your card by subscribing again to keep your AI features active — your logged data and free-tier features are unaffected either way.";
   } else if (sub?.status === 'canceled') {
     heading = 'Your Subscription Has Ended';
-    body = "Resubscribe to get AI features back — $4.99/month after a 3-day free trial. You can keep using the free tier's manual logging in the meantime.";
+    body = "Resubscribe to get AI features back — $4.99/month after a 7-day free trial. You can keep using the free tier's manual logging in the meantime.";
   }
   $('#paywallHeading').textContent = heading;
   $('#paywallBody').textContent = body;
@@ -2484,7 +2487,7 @@ function renderPaywallScreen(sub, contextLine) {
     subscribeBtn.disabled = false;
     // Neutral wording on iOS — no "subscribe"/"buy" framing in the app
     // itself, since the actual purchase happens on the website.
-    subscribeBtn.textContent = IS_IOS_APP ? 'Continue to krafft.app to upgrade' : 'Start 3-Day Free Trial';
+    subscribeBtn.textContent = IS_IOS_APP ? 'Continue to krafft.app to upgrade' : 'Start 7-Day Free Trial';
   } else {
     // IOS_EXTERNAL_PURCHASE_ENABLED is off: no path to purchase from here
     // at all — show status only, per the App Store readiness batch.
@@ -2556,7 +2559,7 @@ function renderOnboarding() {
       <p class="muted" style="margin-top:0;">Macro tracking and strength training in one app. Here's what's free and what's paid:</p>
       <ul class="onboarding-tier-list">
         <li>🔓 <strong style="color:var(--text);">Free, forever:</strong> manual food &amp; lift logging, Quick Add, your dashboard, training splits, friends leaderboard.</li>
-        <li>⭐ <strong style="color:var(--text);">Paid ($4.99/mo, 3-day trial):</strong> AI photo/text macro estimation, Ask AI.</li>
+        <li>⭐ <strong style="color:var(--text);">Paid ($4.99/mo, 7-day trial):</strong> AI photo/text macro estimation, Ask AI.</li>
       </ul>
       <button type="button" class="btn btn-primary btn-block" id="onboardingNext0">Next</button>
     `;
@@ -6757,7 +6760,7 @@ const USER_GUIDE_SECTIONS = [
       { id: 'quick-add', title: 'Quick Add',
         body: 'Save foods you eat regularly — like your go-to breakfast — as one-tap Quick Add entries from the Log Food tab, so you don\'t have to search or type them in again. Quick Add is part of the free tier.' },
       { id: 'photo-logging', title: 'Photo Food Logging (Snap a Photo)',
-        body: 'Snap a Photo of your meal from the Log Food tab and Krafft\'s AI estimates its calories and macros for you — no manual entry needed. This is a paid-tier AI feature (3-day free trial, then $4.99/month); manual logging and Quick Add remain free forever either way.' },
+        body: 'Snap a Photo of your meal from the Log Food tab and Krafft\'s AI estimates its calories and macros for you — no manual entry needed. This is a paid-tier AI feature (7-day free trial, then $4.99/month); manual logging and Quick Add remain free forever either way.' },
       { id: 'barcode-scanning', title: 'Scan Barcode',
         body: 'Scan a packaged food\'s barcode from the Log Food tab to pull its calories, protein, carbs, fat, and sugar from Open Food Facts — free, since it\'s a direct database lookup. Confirm or adjust the numbers for your actual serving before logging. If a barcode isn\'t recognized, you can enter it manually and the scanned code is kept with that entry.' },
       { id: 'macro-goals', title: 'Macro & Goal Tracking',
@@ -6806,7 +6809,7 @@ const USER_GUIDE_SECTIONS = [
     id: 'account', title: 'Account & Tiers',
     entries: [
       { id: 'tiers', title: 'Free vs. Paid Tiers',
-        body: 'Manual food and lift logging, Quick Add, barcode scanning, your Dashboard, training splits, and the friends leaderboard are free, forever, with no time limit. AI-powered features — photo and text macro estimation (Snap a Photo, Describe It) and Ask AI — are $4.99/month after a 3-day free trial.' },
+        body: 'Manual food and lift logging, Quick Add, barcode scanning, your Dashboard, training splits, and the friends leaderboard are free, forever, with no time limit. AI-powered features — photo and text macro estimation (Snap a Photo, Describe It) and Ask AI — are $4.99/month after a 7-day free trial.' },
       { id: 'managing-account', title: 'Managing Your Account',
         body: 'Update your display name, turn off evening logging-reminder emails, or sign out, all from the Profile tab. Deleting your account from Profile permanently removes it and all logged data — you\'ll need to type DELETE to confirm, since this can\'t be undone.' },
       { id: 'apple-health-sync', title: 'Apple Health Sync (Beta)',

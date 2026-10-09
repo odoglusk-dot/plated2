@@ -411,32 +411,53 @@ create policy "ai_usage: update own" on ai_usage
   for update using (auth.uid() = user_id);
 
 -- ── subscriptions ───────────────────────────────────────────────────────
--- Backs the whole-app paywall (Stripe: $4.99/mo, 3-day trial). One row per
+-- Backs the whole-app paywall (Stripe: $4.99/mo, 7-day trial). One row per
 -- user. Only the Stripe webhook (using the service-role key, which bypasses
 -- RLS) ever writes to this table — there's deliberately no insert/update
 -- policy for the client, only select-own.
 --
 -- Canceling via the Customer Portal does NOT flip `status` away from
--- 'active' right away — Stripe keeps status='active' with
--- cancel_at_period_end=true until the paid period actually ends, then
--- fires customer.subscription.deleted (status becomes 'canceled'). That
--- means the existing status-only paywall check (index.html's hasAccess())
--- already grants access through the paid period correctly, with no special
+-- 'active' (or 'trialing', if canceled mid-trial) right away — Stripe
+-- keeps the current status with cancel_at_period_end=true until the
+-- period actually ends, then fires customer.subscription.deleted (status
+-- becomes 'canceled'). That means the existing status-only paywall check
+-- (index.html's hasAccess(), trialing OR active) already grants access
+-- through both the trial and the paid period correctly, with no special
 -- casing needed. `cancel_at_period_end` is stored anyway so the app can
 -- *show* "canceling, access until <date>" instead of just "active" —
 -- mirroring Stripe's own data model rather than inventing a third status.
+-- `trial_reminder_sent_at` is set once stripe-webhook.js sends the
+-- trial_will_end reminder email, so a webhook redelivery can't send it
+-- twice (7-day trial batch, item 4). 'unpaid' added to the status list in
+-- the same batch (item 3) — Stripe sets this once an active subscription's
+-- payment retries are exhausted, and hasAccess() already excludes it from
+-- Pro access; without it in this CHECK constraint, the webhook's upsert
+-- was silently rejected and the row stayed on its last-good status
+-- (effectively leaving a non-paying user with Pro access indefinitely).
 create table subscriptions (
   user_id uuid primary key references auth.users(id) on delete cascade,
   status text not null default 'free'
-    check (status in ('free', 'trialing', 'active', 'canceled', 'past_due')),
+    check (status in ('free', 'trialing', 'active', 'canceled', 'past_due', 'unpaid')),
   stripe_customer_id text,
   stripe_subscription_id text,
   current_period_end timestamptz,
   cancel_at_period_end boolean not null default false,
+  trial_reminder_sent_at timestamptz,
   updated_at timestamptz not null default now()
 );
 
 alter table subscriptions enable row level security;
+
+-- ── trial_used (7-day trial batch, item 2) ───────────────────────────────
+-- One trial per person, enforced by email rather than user_id so deleting
+-- and recreating an account with the same email doesn't grant a second
+-- trial — see supabase-schema-phase41-7day-trial.sql for the full
+-- comment (identical table, created inline here for fresh installs).
+create table trial_used (
+  email_hash text primary key,
+  first_used_at timestamptz not null default now()
+);
+alter table trial_used enable row level security;
 
 create policy "subscriptions: select own" on subscriptions
   for select using (auth.uid() = user_id);

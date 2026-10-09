@@ -2,14 +2,25 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { url } — a Stripe-hosted Checkout URL to redirect the browser to.
 //
-// Creates a $4.99/mo subscription Checkout Session with a 3-day free trial.
-// Stripe still collects a card up front (payment_method_collection: 'always')
-// so the trial converts automatically at day 3 without the user coming back.
+// Creates a $4.99/mo subscription Checkout Session with a TRIAL_PERIOD_DAYS
+// (7-day) free trial — see _shared.js for the one config constant. Stripe
+// still collects a card up front (payment_method_collection: 'always') so
+// the trial converts automatically at the end without the user coming back.
 // No local DB write happens here — stripe-webhook.js is the only writer to
 // the `subscriptions` table, driven by Stripe's subscription lifecycle
 // events, so this function can't drift out of sync with what Stripe thinks
 // the subscription state actually is.
-const { jsonResponse, verifyUser, captureError, withErrorReporting, callStripe, getAppBaseUrl } = require('./_shared');
+//
+// One trial per person (7-day trial batch, item 2): two independent checks,
+// either one is enough to skip the trial —
+//   (a) this Supabase account already has a Stripe customer on file with
+//       ANY subscription history (active, trialing, or canceled) — covers
+//       the same account resubscribing after canceling.
+//   (b) this email's hash is in `trial_used` — covers a deleted-and-
+//       recreated account (new user_id, but the email, and so the hash,
+//       is the same). trial_used is written by stripe-webhook.js the
+//       first time a subscription for an email reaches 'trialing'.
+const { jsonResponse, verifyUser, captureError, withErrorReporting, callStripe, getAppBaseUrl, TRIAL_PERIOD_DAYS, hashEmail } = require('./_shared');
 
 exports.handler = withErrorReporting(async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -64,6 +75,45 @@ exports.handler = withErrorReporting(async (event) => {
     // Non-fatal — worst case Stripe creates a fresh customer below.
   }
 
+  // One trial per person — check (a): this account's own Stripe customer
+  // (if it has one) has prior subscription history of any status, meaning
+  // they're resubscribing after a cancellation, not starting fresh.
+  let priorSubscription = false;
+  if (existingCustomerId) {
+    try {
+      const priorRes = await callStripe(`subscriptions?customer=${existingCustomerId}&status=all&limit=1`, { method: 'GET' });
+      priorSubscription = Array.isArray(priorRes.data) && priorRes.data.length > 0;
+    } catch (err) {
+      // Non-fatal — worst case a resubscribing user gets a trial they
+      // technically shouldn't; check (b) below still catches the far more
+      // common "deleted and recreated the account" case.
+      await captureError(err, { function: 'create-checkout-session:prior-subscription-check', userId: auth.user.id });
+    }
+  }
+
+  // One trial per person — check (b): this email has already used a trial,
+  // even under a different (deleted) account.
+  let trialAlreadyUsed = false;
+  try {
+    const trialUsedRes = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/trial_used?email_hash=eq.${hashEmail(auth.user.email)}&select=email_hash`,
+      {
+        headers: {
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      }
+    );
+    if (trialUsedRes.ok) {
+      const rows = await trialUsedRes.json();
+      trialAlreadyUsed = rows.length > 0;
+    }
+  } catch (err) {
+    await captureError(err, { function: 'create-checkout-session:trial-used-check', userId: auth.user.id });
+  }
+
+  const eligibleForTrial = !priorSubscription && !trialAlreadyUsed;
+
   try {
     const session = await callStripe('checkout/sessions', {
       params: {
@@ -75,10 +125,17 @@ exports.handler = withErrorReporting(async (event) => {
         payment_method_collection: 'always',
         // stripe-webhook.js reads metadata off the SUBSCRIPTION object (via
         // customer.subscription.* events), so this is the one that actually
-        // matters for writing to `subscriptions`.
-        'subscription_data[trial_period_days]': '3',
+        // matters for writing to `subscriptions`. trial_period_days is
+        // omitted entirely (not set to '0') when the one-trial-per-person
+        // checks above say this person has already had one — Stripe just
+        // starts the subscription active/unpaid immediately, same as any
+        // subscription with no trial.
+        ...(eligibleForTrial ? { 'subscription_data[trial_period_days]': String(TRIAL_PERIOD_DAYS) } : {}),
         'subscription_data[metadata][supabase_user_id]': auth.user.id,
         'subscription_data[metadata][platform]': platform,
+        // So stripe-webhook.js can send the trial-ending reminder and
+        // record trial_used without a second lookup back to Supabase Auth.
+        'subscription_data[metadata][email]': auth.user.email,
         // Also set on the Checkout Session itself — stripe-webhook.js's
         // checkout.session.completed handler (App Store readiness batch,
         // item 7 — external_purchase_log) reads metadata from the SESSION,

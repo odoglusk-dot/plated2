@@ -70,6 +70,15 @@
         <tbody id="unreportedPurchaseRows"></tbody>
       </table>
     </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;font-size:0.95rem;">Active trials</h3>
+      <p class="muted" style="margin-top:0;">Everyone currently in a 7-day trial, soonest-ending first. Shown by user_id — there's no admin email-lookup tool in this app, same as the other tables on this page. "Reminder sent" is the trial_will_end email (item 4 of the 7-day trial batch).</p>
+      <table>
+        <thead><tr><th>User</th><th>Trial ends</th><th>Canceling?</th><th>Reminder sent</th></tr></thead>
+        <tbody id="trialRows"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -98,6 +107,7 @@ async function loadStats(password) {
     sessionStorage.setItem('kraftAdminPw', password);
     renderStats(data);
     loadUnreportedPurchases(password);
+    loadTrials(password);
   } catch (err) {
     errorEl.textContent = err.message;
   } finally {
@@ -160,6 +170,26 @@ async function loadUnreportedPurchases(password) {
         <td>${r.platform}</td>
         <td>${r.stripe_subscription_id || '—'}</td>
       </tr>`).join('') || '<tr><td colspan="4" class="muted">Nothing unreported.</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="error">${err.message}</td></tr>`;
+  }
+}
+
+async function loadTrials(password) {
+  const tbody = document.getElementById('trialRows');
+  try {
+    const res = await fetch('/.netlify/functions/admin-trials', {
+      headers: { Authorization: 'Bearer ' + password },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not load.');
+    tbody.innerHTML = (data.rows || []).map((r) => `
+      <tr>
+        <td>${r.user_id}</td>
+        <td>${r.current_period_end ? new Date(r.current_period_end).toLocaleDateString() : '—'}</td>
+        <td>${r.cancel_at_period_end ? 'Yes' : 'No'}</td>
+        <td>${r.trial_reminder_sent_at ? new Date(r.trial_reminder_sent_at).toLocaleDateString() : '—'}</td>
+      </tr>`).join('') || '<tr><td colspan="4" class="muted">No active trials.</td></tr>';
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="4" class="error">${err.message}</td></tr>`;
   }

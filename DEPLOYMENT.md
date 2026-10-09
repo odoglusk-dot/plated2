@@ -90,7 +90,7 @@ button mails to. Defaults to a placeholder that won't reach anyone.
 
 ### Paywall Setup (Stripe)
 
-Plated is a whole-app paywall: $4.99/month, 3-day free trial, card required
+Plated is a whole-app paywall: $4.99/month, 7-day free trial, card required
 up front. No page renders for a signed-in user without an active
 trial/subscription.
 
@@ -337,7 +337,7 @@ Estimate macros from a food photo.
 
 ### POST `/api/create-checkout-session`
 
-Starts a Stripe Checkout session for the $4.99/mo plan with a 3-day trial.
+Starts a Stripe Checkout session for the $4.99/mo plan with a 7-day trial.
 
 **Request:** `{}` (empty body — uses the caller's own Supabase session)
 
