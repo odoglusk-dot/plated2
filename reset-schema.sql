@@ -102,6 +102,14 @@ create table profiles (
   -- supabase-schema-phase34-streak-upgrade-prompts.sql.
   streak_upgrade_prompt_shown_at timestamptz,
   pro_preview_used_at timestamptz,
+  -- First-run onboarding flow (7 screens) — see
+  -- supabase-schema-phase42-onboarding.sql. A fresh install has no
+  -- existing users to backfill, so these just start null/default for
+  -- everyone, same as any other new column.
+  onboarding_completed_at timestamptz,
+  onboarding_step int not null default 1,
+  trial_offer_seen_at timestamptz,
+  payoff_coachmark_dismissed_at timestamptz,
   created_at timestamptz not null default now()
 );
 
