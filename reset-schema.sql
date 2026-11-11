@@ -1764,6 +1764,12 @@ create table dashboard_ad_campaigns (
   end_date date,
   monthly_budget_usd numeric,
   notes text,
+  -- Forward-looking target (phase36) — goal_progress is manually updated,
+  -- not computed, since there's no automatic tie yet from a real signup
+  -- back to the campaign that drove it.
+  goal_metric text,
+  goal_target numeric,
+  goal_progress numeric,
   created_at timestamptz not null default now()
 );
 

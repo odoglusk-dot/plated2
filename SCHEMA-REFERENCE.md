@@ -896,6 +896,13 @@ start_date            date
 end_date              date
 monthly_budget_usd    numeric
 notes                 text
+-- Forward-looking target (phase36) — goal_progress is manually updated,
+-- not computed; there's no automatic tie yet from a real signup back to
+-- the campaign that drove it (would need UTM capture wired into Krafft's
+-- own signup flow, which doesn't exist yet).
+goal_metric           text    -- free text, e.g. "signups", "trial starts"
+goal_target           numeric
+goal_progress         numeric
 created_at            timestamptz
 
 -- dashboard_ad_spend_entries: append-only log of actual spend against a
