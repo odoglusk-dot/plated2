@@ -5,7 +5,45 @@
 
 const crypto = require('crypto');
 
-const DAILY_AI_LIMIT = 13;
+// Fallback used only if dashboard_config is missing the row or the read
+// fails — keeps the cap from silently disappearing (or everyone getting
+// locked out) during a Supabase hiccup. The real, adjustable value lives
+// in dashboard_config (key 'ai_daily_limit'), editable from the founder
+// dashboard's Quotas tab — see supabase-schema-phase35-dashboard-config-and-ads.sql.
+const DAILY_AI_LIMIT_FALLBACK = 13;
+
+// Module-scope cache: persists across warm invocations of the same
+// function instance (the usual Lambda/Netlify Functions reuse), so this
+// isn't a DB round-trip on every single AI call — just one every 5
+// minutes per warm instance, worst case.
+let cachedAiLimit = null;
+let cachedAiLimitAt = 0;
+const AI_LIMIT_CACHE_MS = 5 * 60 * 1000;
+
+async function getDailyAiLimit() {
+  const now = Date.now();
+  if (cachedAiLimit != null && now - cachedAiLimitAt < AI_LIMIT_CACHE_MS) return cachedAiLimit;
+  try {
+    const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/dashboard_config?key=eq.ai_daily_limit&select=value`, {
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    });
+    if (res.ok) {
+      const rows = await res.json();
+      const limit = rows[0]?.value?.limit;
+      if (typeof limit === 'number' && limit > 0) {
+        cachedAiLimit = limit;
+        cachedAiLimitAt = now;
+        return limit;
+      }
+    }
+  } catch {
+    // Network/parse failure — fall through to the fallback below.
+  }
+  return DAILY_AI_LIMIT_FALLBACK;
+}
 
 // Derives the app's own base URL (scheme + host + subpath, no trailing
 // slash) for building post-Stripe redirect URLs. `event.headers.origin`
@@ -179,6 +217,7 @@ async function checkAndIncrementRateLimit(userId, token) {
     Authorization: `Bearer ${token}`,
     'content-type': 'application/json',
   };
+  const dailyLimit = await getDailyAiLimit();
 
   const getRes = await fetch(
     `${base}/rest/v1/ai_usage?user_id=eq.${userId}&usage_date=eq.${today}&select=count`,
@@ -188,11 +227,11 @@ async function checkAndIncrementRateLimit(userId, token) {
   const rows = await getRes.json();
   const currentCount = rows.length ? rows[0].count : 0;
 
-  if (currentCount >= DAILY_AI_LIMIT) {
+  if (currentCount >= dailyLimit) {
     return {
       ok: false,
       status: 429,
-      message: `Daily AI limit reached (${DAILY_AI_LIMIT}/day). Try again tomorrow, or log foods manually in the meantime.`,
+      message: `Daily AI limit reached (${dailyLimit}/day). Try again tomorrow, or log foods manually in the meantime.`,
     };
   }
 
@@ -203,7 +242,7 @@ async function checkAndIncrementRateLimit(userId, token) {
   });
   if (!upsertRes.ok) return { ok: false, message: 'Could not record usage.' };
 
-  return { ok: true, remaining: DAILY_AI_LIMIT - (currentCount + 1) };
+  return { ok: true, remaining: dailyLimit - (currentCount + 1) };
 }
 
 // Fire-and-forget event logging for server-side-only events (subscription
@@ -410,7 +449,7 @@ async function cacheFood(description, { food_name, calories, protein_g, carbs_g,
 }
 
 module.exports = {
-  DAILY_AI_LIMIT,
+  getDailyAiLimit,
   captureError,
   withErrorReporting,
   callStripe,

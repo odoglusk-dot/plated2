@@ -2,7 +2,7 @@
 // Auth: Authorization: Bearer <supabase access token>
 // Returns { food_name, calories, protein_g, carbs_g, fat_g, confidence }
 // Checks food_cache first; if hit, returns immediately without using API budget.
-const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, checkFoodCache, cacheFood, captureError, withErrorReporting, DAILY_AI_LIMIT } = require('./_shared');
+const { jsonResponse, verifyUser, hasPaidAccess, checkAndIncrementRateLimit, callAnthropic, recordUsageCost, extractJSON, checkFoodCache, cacheFood, captureError, withErrorReporting, getDailyAiLimit } = require('./_shared');
 
 const SYSTEM_PROMPT = `You are the nutrition-estimation engine for Krafft, a macro-and-strength-tracking app.
 Given a short description of a food or meal, estimate its nutritional content.
@@ -52,7 +52,7 @@ exports.handler = withErrorReporting(async (event) => {
     );
     const countRows = await countRes.json().catch(() => []);
     const currentCount = countRows.length ? countRows[0].count : 0;
-    const remaining = Math.max(0, DAILY_AI_LIMIT - currentCount);
+    const remaining = Math.max(0, (await getDailyAiLimit()) - currentCount);
     return jsonResponse(200, {
       food_name: cached.food_name,
       calories: cached.calories,

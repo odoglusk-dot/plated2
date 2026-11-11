@@ -877,6 +877,52 @@ subscriber's row is unaffected.
 
 ---
 
+### `dashboard_config` / `dashboard_ad_campaigns` / `dashboard_ad_spend_entries` — config + advertising planning (founder dashboard)
+```sql
+-- dashboard_config: generic key/value store, read by Krafft's OWN backend
+-- (not just the dashboard) — e.g. 'ai_daily_limit' replaces the old
+-- hardcoded DAILY_AI_LIMIT constant in netlify/functions/_shared.js
+key           text primary key
+value         jsonb not null  -- e.g. {"limit": 13}
+updated_at    timestamptz
+
+-- dashboard_ad_campaigns: one row per planned/active advertising effort.
+-- Manual planning, not a live ad-platform integration.
+id                    uuid primary key
+name                  text not null
+channel               text not null (check in instagram/tiktok/referral/google/other)
+status                text not null default 'planned' (check in planned/active/paused/completed)
+start_date            date
+end_date              date
+monthly_budget_usd    numeric
+notes                 text
+created_at            timestamptz
+
+-- dashboard_ad_spend_entries: append-only log of actual spend against a
+-- campaign — spent-vs-budget is computed by summing these, never stored.
+id            uuid primary key
+campaign_id   uuid not null references dashboard_ad_campaigns(id)
+entry_date    date not null default current_date
+amount_usd    numeric not null
+impressions   integer not null default 0
+clicks        integer not null default 0
+created_at    timestamptz
+```
+**No frontend access at all** — same zero-RLS-policy pattern as
+`admin_users` (see `supabase-schema-phase35-dashboard-config-and-ads.sql`).
+Only Krafft's own Netlify functions (for `dashboard_config`) and the
+dashboard's functions, gated behind `requireAdmin()`, can read or write
+these.
+
+`dashboard_config`'s `ai_daily_limit` is read by
+`checkAndIncrementRateLimit()` in this repo's own
+`netlify/functions/_shared.js` (via the service role key, 5-minute
+in-memory cache per warm function instance) instead of a hardcoded
+constant — falls back to 13 if the config row is missing or the read
+fails, so a Supabase hiccup never silently removes the cap.
+
+---
+
 ## Naming Rules — CONSISTENT across ALL tables
 
 | Type | Naming | Example | Notes |

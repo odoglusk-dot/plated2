@@ -1741,6 +1741,48 @@ create table dashboard_feedback (
 
 alter table dashboard_feedback enable row level security;
 
+-- ── dashboard_config / dashboard_ad_campaigns / dashboard_ad_spend_entries ─
+-- Founder dashboard config + advertising planning. Same zero-policy
+-- pattern as admin_users — see
+-- supabase-schema-phase35-dashboard-config-and-ads.sql.
+create table dashboard_config (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table dashboard_config enable row level security;
+
+insert into dashboard_config (key, value) values ('ai_daily_limit', '{"limit": 13}'::jsonb);
+
+create table dashboard_ad_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  channel text not null check (channel in ('instagram', 'tiktok', 'referral', 'google', 'other')),
+  status text not null default 'planned' check (status in ('planned', 'active', 'paused', 'completed')),
+  start_date date,
+  end_date date,
+  monthly_budget_usd numeric,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+alter table dashboard_ad_campaigns enable row level security;
+
+create table dashboard_ad_spend_entries (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid not null references dashboard_ad_campaigns(id) on delete cascade,
+  entry_date date not null default current_date,
+  amount_usd numeric not null,
+  impressions integer not null default 0,
+  clicks integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index dashboard_ad_spend_entries_campaign_idx on dashboard_ad_spend_entries (campaign_id);
+
+alter table dashboard_ad_spend_entries enable row level security;
+
 -- ══════════════════════════════════════════════════════════════════════════
 -- RESET COMPLETE
 -- All tables created fresh with consistent naming:
