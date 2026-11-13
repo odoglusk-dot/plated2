@@ -9184,7 +9184,7 @@ let liftFormSaving = false;
 let prBanner = null; // { exercise, weight, improvement } — dismissed manually, not auto-timed
 let cueCardBanner = null; // { trigger: 'first'|'gap', def: exercises row } — dismissed manually
 let showExerciseGlossary = false;
-let glossaryFilter = { search: '', muscleGroup: '' };
+let glossaryFilter = { search: '', muscleGroup: '', equipment: '', type: '' };
 let glossaryExpandedName = null;
 let liftsSubTab = 'log'; // 'log' | 'training'
 
@@ -9255,6 +9255,67 @@ function computeLiftPRs(lifts) {
     if (!prs[l.exercise] || l.weight > prs[l.exercise].weight) prs[l.exercise] = l;
   }
   return prs;
+}
+
+// Tracking-type-aware PR and volume math. The `lifts` table today only has
+// columns for weight_reps (weight + reps_per_set) — bodyweight_reps/time/
+// distance_time have no logging UI or storage yet (that's Phase 2/3's
+// tracker rebuild). These functions take the generic shape Phase 2/3 will
+// write once that storage exists: { weight, reps_per_set, duration_seconds,
+// distance }, so the math is correct from day one instead of needing a
+// rewrite later. weight_reps keeps working exactly as it does today.
+function prForTrackingType(trackingType, entries) {
+  if (!entries.length) return null;
+  switch (trackingType) {
+    case 'bodyweight_reps': {
+      // PR = most reps at the lowest added weight (0 = pure bodyweight is
+      // still comparable to a weighted set via each set's own max rep).
+      let best = null;
+      for (const l of entries) for (const reps of l.reps_per_set || []) {
+        if (!best || reps > best.reps || (reps === best.reps && (l.weight || 0) > (best.weight || 0))) {
+          best = { reps, weight: l.weight || 0, date: l.date };
+        }
+      }
+      return best;
+    }
+    case 'time': {
+      let best = null;
+      for (const l of entries) {
+        const secs = l.duration_seconds;
+        if (secs && (!best || secs > best.duration_seconds)) best = { duration_seconds: secs, date: l.date };
+      }
+      return best;
+    }
+    case 'distance_time': {
+      // PR = best pace (distance per second); falls back to longest
+      // distance if duration isn't logged for a given entry.
+      let best = null;
+      for (const l of entries) {
+        if (!l.distance) continue;
+        const pace = l.duration_seconds ? l.distance / l.duration_seconds : null;
+        const better = !best || (pace != null && (best.pace == null || pace > best.pace)) || (pace == null && best.pace == null && l.distance > best.distance);
+        if (better) best = { distance: l.distance, duration_seconds: l.duration_seconds || null, pace, date: l.date };
+      }
+      return best;
+    }
+    default: { // weight_reps — unchanged existing logic
+      const prs = computeLiftPRs(entries);
+      return prs[entries[0]?.exercise] || null;
+    }
+  }
+}
+
+function volumeForTrackingType(trackingType, entry) {
+  switch (trackingType) {
+    case 'bodyweight_reps':
+      return (entry.reps_per_set || []).reduce((sum, r) => sum + r, 0);
+    case 'time':
+      return entry.duration_seconds || 0;
+    case 'distance_time':
+      return entry.distance || 0;
+    default: // weight_reps
+      return (entry.reps_per_set || []).reduce((sum, r) => sum + r, 0) * (entry.weight || 0);
+  }
 }
 
 function miniLineSvg(values, w = 300, h = 60) {
@@ -9582,12 +9643,23 @@ function cueCardHtml(banner) {
 // Standalone browsable glossary — the same exercises table that powers
 // cue cards and muscle-map/split-builder defaults, filterable and
 // searchable rather than tied to a specific logged lift.
+const GLOSSARY_MOVEMENT_TYPE_LABELS = { compound: 'Compound', isolation: 'Isolation', conditioning: 'Cardio', plyometric: 'Plyometric' };
 function renderExerciseGlossary(panel) {
   const q = glossaryFilter.search.trim().toLowerCase();
   const mg = glossaryFilter.muscleGroup;
+  const eq = glossaryFilter.equipment;
+  const mt = glossaryFilter.type;
+  const equipmentOptions = [...new Set(state.exercises.map((e) => e.equipment).filter(Boolean))].sort();
+  const typeOptions = [...new Set(state.exercises.map((e) => e.movement_type).filter((t) => GLOSSARY_MOVEMENT_TYPE_LABELS[t]))];
   const filtered = state.exercises.filter((e) => {
     if (mg && e.muscle_group !== mg) return false;
-    if (q && !e.name.toLowerCase().includes(q)) return false;
+    if (eq && e.equipment !== eq) return false;
+    if (mt && e.movement_type !== mt) return false;
+    if (q) {
+      const nameMatch = e.name.toLowerCase().includes(q);
+      const aliasMatch = (e.aliases || []).some((a) => a.toLowerCase().includes(q));
+      if (!nameMatch && !aliasMatch) return false;
+    }
     return true;
   });
   panel.innerHTML = `
@@ -9602,6 +9674,14 @@ function renderExerciseGlossary(panel) {
       <div class="chip-row">
         <button class="chip ${mg === '' ? 'chip-active' : ''}" data-glossary-mg="">All</button>
         ${MUSCLE_GROUPS.map((g) => `<button class="chip ${mg === g ? 'chip-active' : ''}" data-glossary-mg="${g}">${g}</button>`).join('')}
+      </div>
+      <div class="chip-row" style="margin-top:0.4rem;">
+        <button class="chip ${eq === '' ? 'chip-active' : ''}" data-glossary-eq="">All equipment</button>
+        ${equipmentOptions.map((e) => `<button class="chip ${eq === e ? 'chip-active' : ''}" data-glossary-eq="${esc(e)}">${esc(e)}</button>`).join('')}
+      </div>
+      <div class="chip-row" style="margin-top:0.4rem;">
+        <button class="chip ${mt === '' ? 'chip-active' : ''}" data-glossary-type="">All types</button>
+        ${typeOptions.map((t) => `<button class="chip ${mt === t ? 'chip-active' : ''}" data-glossary-type="${t}">${GLOSSARY_MOVEMENT_TYPE_LABELS[t]}</button>`).join('')}
       </div>
     </div>
     <div class="card">
@@ -9631,6 +9711,14 @@ function renderExerciseGlossary(panel) {
   $('#glossarySearch').addEventListener('input', (e) => { glossaryFilter.search = e.target.value; renderExerciseGlossary(panel); });
   $$('[data-glossary-mg]', panel).forEach((btn) => btn.addEventListener('click', () => {
     glossaryFilter.muscleGroup = btn.dataset.glossaryMg;
+    renderExerciseGlossary(panel);
+  }));
+  $$('[data-glossary-eq]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    glossaryFilter.equipment = btn.dataset.glossaryEq;
+    renderExerciseGlossary(panel);
+  }));
+  $$('[data-glossary-type]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    glossaryFilter.type = btn.dataset.glossaryType;
     renderExerciseGlossary(panel);
   }));
   $$('[data-glossary-toggle]', panel).forEach((row) => row.addEventListener('click', () => {
@@ -10660,7 +10748,7 @@ function renderLiftLog(panel) {
   }));
   $$('[data-lift-exercise-cue]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const name = btn.dataset.liftExerciseCue;
-    glossaryFilter = { search: '', muscleGroup: '' };
+    glossaryFilter = { search: '', muscleGroup: '', equipment: '', type: '' };
     glossaryExpandedName = name;
     recordGlossaryView(name);
     showExerciseGlossary = true;
@@ -11247,6 +11335,51 @@ function blockSplitName(days) {
   if (days === 4) return '4-Day Upper/Lower';
   if (days === 5) return '5-Day Push/Pull/Legs + Upper/Lower';
   return '6-Day Push/Pull/Legs x2';
+}
+
+// General-purpose "swap this exercise" alternatives, independent of the
+// Block Builder's block_types tagging below (which only the original 102
+// exercises carry). Matches on detailed_muscle first (the catalog's
+// original, un-folded muscle name — e.g. "Front Delts" won't suggest a
+// "Rear Delts" swap just because they share a folded map key), then widens
+// to muscle_map_key if nothing else matches. Feeds the exercise-screen
+// Swaps tab (Phase 4) and the mid-workout swap picker.
+function computeSwapAlternatives(exercise, opts = {}) {
+  const limit = opts.limit || 8;
+  const sameTracking = opts.matchTracking !== false;
+  const pool = state.exercises.filter((e) => e.name !== exercise.name);
+
+  const byDetailedMuscle = pool.filter((e) =>
+    e.detailed_muscle && exercise.detailed_muscle && e.detailed_muscle === exercise.detailed_muscle &&
+    (!sameTracking || !e.tracking || !exercise.tracking || e.tracking === exercise.tracking)
+  );
+  if (byDetailedMuscle.length >= limit) return rankSwapCandidates(exercise, byDetailedMuscle).slice(0, limit);
+
+  const seen = new Set(byDetailedMuscle.map((e) => e.name));
+  const bySecondary = pool.filter((e) =>
+    !seen.has(e.name) &&
+    ((e.detailed_secondary || []).includes(exercise.detailed_muscle) ||
+     (exercise.detailed_secondary || []).includes(e.detailed_muscle))
+  );
+  const combined = [...byDetailedMuscle, ...bySecondary];
+  if (combined.length >= limit || !exercise.muscle_map_key) return rankSwapCandidates(exercise, combined).slice(0, limit);
+
+  const seen2 = new Set(combined.map((e) => e.name));
+  const byMapKey = pool.filter((e) => !seen2.has(e.name) && e.muscle_map_key === exercise.muscle_map_key);
+  return rankSwapCandidates(exercise, [...combined, ...byMapKey]).slice(0, limit);
+}
+
+// Same equipment first (easiest like-for-like swap), then same movement
+// type (compound<->compound, isolation<->isolation).
+function rankSwapCandidates(exercise, candidates) {
+  return [...candidates].sort((a, b) => {
+    const aEq = a.equipment === exercise.equipment ? 0 : 1;
+    const bEq = b.equipment === exercise.equipment ? 0 : 1;
+    if (aEq !== bEq) return aEq - bEq;
+    const aMt = a.movement_type === exercise.movement_type ? 0 : 1;
+    const bMt = b.movement_type === exercise.movement_type ? 0 : 1;
+    return aMt - bMt;
+  });
 }
 
 function blockExercisePool(muscleKey, blockType, usedNames, filters) {
