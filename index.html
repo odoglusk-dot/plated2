@@ -3128,6 +3128,7 @@ async function enterApp(session) {
 async function bootstrapApp() {
   await ensureProfileAndGoals(state.user);
   await Promise.all([loadProfile(), loadGoals(), loadBodyStats(), loadFavorites(), loadHistory(), loadWeightLog(), loadSupplementLogs(), loadWaterLog(), loadLifts(), loadExerciseGoals(), loadPhotos(), loadTrainingSplit(), loadTrainingInsights(), loadPlan(), loadReferrals(), loadFriendships(), loadLeaderboard(), loadGroup(), loadExercises(), loadAchievements(), loadWorkoutSession(), loadHealthSyncStatus(), loadNavbarPrefs(), loadScreenModules()]);
+  wlsResume(); // Phase 2: restore any in-progress live workout session left from before an app kill/relaunch today
   await loadBackgroundPrefs(); // separate: chains a signed-URL fetch off backgroundPrefs once loaded
   applyNavbarLayout(true);
   renderAll();
@@ -3341,7 +3342,66 @@ async function loadWaterLog() {
 async function loadLifts() {
   const { data } = await supabase.from('lifts').select('*').eq('user_id', state.user.id).order('date', { ascending: true });
   state.lifts = data || [];
+  mergePendingLiftsIntoState();
 }
+
+// ── Local-first offline queue for lift saves (Phase 2: workout reliability) ──
+// addLiftFromForm() writes here FIRST (instant, synchronous, survives an app
+// kill before the network call ever resolves), then attempts the real
+// Supabase insert in the background. A lift that fails to sync — including
+// because the device is offline — stays queued and keeps showing in the UI
+// (via mergePendingLiftsIntoState, called after every loadLifts()) until it
+// syncs. Known limitation: if an insert actually succeeds server-side but
+// the success response never reaches the client (e.g. connection drops at
+// that exact moment), a retry can produce a duplicate row — rare enough,
+// and recoverable enough (delete the dupe), that it isn't worth a schema
+// change (a client-supplied idempotency key + unique constraint) to close.
+const PENDING_LIFT_SYNC_KEY = 'krafft_pending_lift_syncs_v1';
+
+function loadPendingLiftSyncs() {
+  try { return JSON.parse(localStorage.getItem(PENDING_LIFT_SYNC_KEY) || '[]'); } catch (e) { return []; }
+}
+function savePendingLiftSyncs(list) {
+  try { localStorage.setItem(PENDING_LIFT_SYNC_KEY, JSON.stringify(list)); } catch (e) {}
+}
+function pendingLiftSyncCount() {
+  return loadPendingLiftSyncs().length;
+}
+
+// Called after every fresh loadLifts() so a queued-but-not-yet-synced lift
+// keeps appearing in state.lifts (and therefore in Today's Lift, history,
+// PR math, etc.) across a reload/relaunch, not just within the same tab.
+function mergePendingLiftsIntoState() {
+  const pending = loadPendingLiftSyncs();
+  if (!pending.length) return;
+  for (const entry of pending) {
+    if (!state.lifts.some((l) => l.clientId === entry.clientId)) {
+      state.lifts.push({ ...entry.payload, id: entry.clientId, clientId: entry.clientId, created_at: entry.createdAt, pendingSync: true });
+    }
+  }
+}
+
+async function flushPendingLiftSyncs() {
+  const pending = loadPendingLiftSyncs();
+  if (!pending.length) return;
+  const stillPending = [];
+  for (const entry of pending) {
+    const { error } = await supabase.from('lifts').insert(entry.payload);
+    // Network-level failure (still offline, or this particular retry just
+    // missed) -> keep queued. A real Postgrest error -> drop it; retrying
+    // the same rejected payload forever would never succeed.
+    if (error && !error.code) stillPending.push(entry);
+  }
+  savePendingLiftSyncs(stillPending);
+  if (stillPending.length !== pending.length) {
+    await loadLifts();
+    renderAll();
+  }
+}
+window.addEventListener('online', flushPendingLiftSyncs);
+// Safety net: iOS WKWebView's online/offline events aren't fully reliable,
+// so also retry periodically whenever something is actually queued.
+setInterval(() => { if (pendingLiftSyncCount()) flushPendingLiftSyncs(); }, 30000);
 
 async function loadExerciseGoals() {
   const { data } = await supabase.from('exercise_goals').select('*').eq('user_id', state.user.id);
@@ -9952,6 +10012,154 @@ async function reopenWorkoutSession() {
   renderLiftsTab();
 }
 
+// ── Live workout session (Phase 2: workout reliability, before any visual
+// work) ──────────────────────────────────────────────────────────────────
+// Foundation module for Phase 3's real exercise-screen/workout-flow UI.
+// Nothing in the app calls wlsStartExercise/wlsLogSet yet — this is the
+// plumbing those screens will call into once built against the mockup.
+// Three properties that make it actually reliable, each directly answering
+// one line of the batch spec:
+//   - Every mutation writes to localStorage synchronously, in the same
+//     tick as the state change (wlsSave()) — "local first", not "local
+//     eventually". A set logged right before the app is killed is still on
+//     disk when it relaunches.
+//   - The rest timer stores an end TIMESTAMP (Date.now() + seconds), never
+//     a decrementing in-memory counter — "survives backgrounding" falls
+//     out for free, since remaining time is just endsAt - Date.now(),
+//     recomputed fresh every time it's read, not ticked down while the
+//     JS runtime might be suspended.
+//   - wlsResume() is what app boot calls to restore all of this; it is
+//     deliberately scoped to TODAY's session only (see comment below).
+const WLS_STORAGE_KEY = 'krafft_live_workout_session_v1';
+
+function wlsLoad() {
+  try { return JSON.parse(localStorage.getItem(WLS_STORAGE_KEY) || 'null'); } catch (e) { return null; }
+}
+function wlsSave(session) {
+  try {
+    if (session) localStorage.setItem(WLS_STORAGE_KEY, JSON.stringify(session));
+    else localStorage.removeItem(WLS_STORAGE_KEY);
+  } catch (e) {}
+}
+
+// In-memory mirror of what's in localStorage, kept for synchronous reads
+// (rest timer ticks, etc.) without round-tripping through JSON every time.
+let liveWorkoutSession = null;
+
+function wlsStartExercise(name, weight) {
+  liveWorkoutSession = liveWorkoutSession || { date: localDateStr(), startedAt: new Date().toISOString(), restTimer: null };
+  liveWorkoutSession.currentExercise = { name, weight, liftRowId: null, setsLogged: [] };
+  wlsSave(liveWorkoutSession);
+  wlsRequestWakeLock();
+}
+
+// Instant local-first per-set save: the set is in localStorage (and
+// reflected in liveWorkoutSession) before the Supabase call even starts.
+// First set of an exercise inserts a new lifts row; every set after that
+// updates the SAME row by its known id — no schema change needed, this
+// reads as a normal (if initially short) lifts row to every existing
+// history/PR/analysis code path even if the app dies mid-exercise.
+async function wlsLogSet(reps) {
+  if (!liveWorkoutSession?.currentExercise) return;
+  const ex = liveWorkoutSession.currentExercise;
+  ex.setsLogged.push({ reps, completedAt: new Date().toISOString(), synced: false });
+  wlsSave(liveWorkoutSession);
+  renderAll();
+  await wlsSyncCurrentExercise();
+}
+
+async function wlsSyncCurrentExercise() {
+  const ex = liveWorkoutSession?.currentExercise;
+  if (!ex || !ex.setsLogged.length) return;
+  const repsPerSet = ex.setsLogged.map((s) => s.reps);
+  const basePayload = {
+    user_id: state.user.id, exercise: ex.name, weight: ex.weight,
+    sets: repsPerSet.length, reps_per_set: repsPerSet,
+    reps: Math.round(avgReps(repsPerSet) * 10) / 10,
+    date: liveWorkoutSession.date,
+  };
+  if (!ex.liftRowId) {
+    const { data, error } = await supabase.from('lifts').insert(basePayload).select('id').single();
+    if (!error && data) { ex.liftRowId = data.id; ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(liveWorkoutSession); await loadLifts(); }
+    // On failure (offline or otherwise), liftRowId stays null — the next
+    // wlsLogSet, the 'online' listener below, or wlsResume() will retry
+    // the same insert; nothing is lost in the meantime since it's already
+    // on disk via wlsSave() above.
+  } else {
+    const { error } = await supabase.from('lifts').update({ sets: basePayload.sets, reps_per_set: basePayload.reps_per_set, reps: basePayload.reps }).eq('id', ex.liftRowId);
+    if (!error) { ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(liveWorkoutSession); await loadLifts(); }
+  }
+}
+
+function wlsFinishExercise() {
+  if (!liveWorkoutSession) return;
+  liveWorkoutSession.currentExercise = null;
+  wlsSave(liveWorkoutSession);
+}
+
+function wlsEndSession() {
+  liveWorkoutSession = null;
+  wlsSave(null);
+  wlsReleaseWakeLock();
+}
+
+// Rest timer: a stored end-timestamp, not a countdown. startRestTimer(90)
+// then calling wlsRestTimeRemaining() a minute later, from a cold app
+// relaunch, still returns ~30000 correctly — nothing was "ticking" while
+// the app was gone.
+function wlsStartRestTimer(seconds) {
+  liveWorkoutSession = liveWorkoutSession || { date: localDateStr(), startedAt: new Date().toISOString(), currentExercise: null };
+  liveWorkoutSession.restTimer = { endsAt: Date.now() + seconds * 1000 };
+  wlsSave(liveWorkoutSession);
+}
+function wlsRestTimeRemainingMs() {
+  const endsAt = liveWorkoutSession?.restTimer?.endsAt;
+  if (!endsAt) return 0;
+  return Math.max(0, endsAt - Date.now());
+}
+function wlsClearRestTimer() {
+  if (!liveWorkoutSession) return;
+  liveWorkoutSession.restTimer = null;
+  wlsSave(liveWorkoutSession);
+}
+
+// Screen wake-lock via the standard Web API (no new native Capacitor
+// plugin needed — WKWebView on iOS 16.4+ supports navigator.wakeLock
+// directly). Browsers release the lock automatically when the tab
+// backgrounds, so it's re-acquired on return to foreground while a
+// session is still active — that's expected platform behavior, not
+// something to work around.
+let wlsWakeLockHandle = null;
+async function wlsRequestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) wlsWakeLockHandle = await navigator.wakeLock.request('screen');
+  } catch (e) { /* not supported, or denied — degrade silently, nothing to log the user out of their workout for */ }
+}
+function wlsReleaseWakeLock() {
+  try { wlsWakeLockHandle?.release(); } catch (e) {}
+  wlsWakeLockHandle = null;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && liveWorkoutSession?.currentExercise) wlsRequestWakeLock();
+});
+
+// App-boot resume. Deliberately scoped to TODAY only: a session left open
+// from a prior day (app killed mid-workout and never reopened) is stale by
+// definition — same "a session is one calendar day" rule the rest of this
+// file already uses (see the comment above endWorkoutSession) — so it's
+// left in localStorage un-resumed rather than silently appended to a new
+// day's workout. Phase 3's UI can still offer to review/discard it.
+function wlsResume() {
+  const stored = wlsLoad();
+  if (!stored) return null;
+  if (stored.date !== localDateStr()) return stored; // stale - caller decides what to do, not auto-resumed
+  liveWorkoutSession = stored;
+  if (liveWorkoutSession.currentExercise) wlsRequestWakeLock();
+  if (liveWorkoutSession.currentExercise && !liveWorkoutSession.currentExercise.liftRowId) wlsSyncCurrentExercise();
+  return liveWorkoutSession;
+}
+window.addEventListener('online', () => { if (liveWorkoutSession?.currentExercise && !liveWorkoutSession.currentExercise.liftRowId) wlsSyncCurrentExercise(); });
+
 // Item 2 of the AI cost-efficiency batch: the client still owns data access
 // (RLS-scoped state.lifts/state.historyLogs, already loaded for other UI)
 // but no longer formats it into prose — it just packages the raw-ish rows
@@ -10481,6 +10689,7 @@ function renderLiftLog(panel) {
       ` : ''}
       ${liftFormError ? `<div class="muted small" style="color:var(--danger);margin-bottom:0.5rem;">${esc(liftFormError)}</div>` : ''}
       <button class="btn btn-primary" id="lift_save" ${liftFormSaving ? 'disabled' : ''}>${liftFormSaving ? 'Saving…' : 'Add lift'}</button>
+      ${pendingLiftSyncCount() ? `<p class="muted small" style="margin-top:0.4rem;">⏳ ${pendingLiftSyncCount()} set${pendingLiftSyncCount() === 1 ? '' : 's'} saved offline — will sync automatically once you're back online.</p>` : ''}
     </div>
     ${exercises.length ? `
     <div class="card">
@@ -10779,6 +10988,7 @@ async function addLiftFromForm() {
   const repsPerSet = liftForm.repsPerSet.map((r) => Number(r) || 0);
   if (!exercise || !liftForm.weight || repsPerSet.length === 0) return;
   if (liftForm.isSuperset && !liftForm.supersetGroup.trim()) return;
+  liftFormError = '';
   const exerciseDef = exerciseDefFor(exercise);
   // Item 3 of the personalization batch: category is inferred automatically
   // from the exercise library — no manual Push/Pull/Other select anymore.
@@ -10805,20 +11015,27 @@ async function addLiftFromForm() {
     }
   }
 
-  liftFormSaving = true;
-  liftFormError = '';
-  renderLiftsTab();
   const warmupPerSet = liftForm.warmupPerSet.slice(0, repsPerSet.length);
-  const { error } = await supabase.from('lifts').insert({
+  const payload = {
     user_id: state.user.id,
     exercise, muscle_group: muscleGroup, body_region: bodyRegion,
     weight: weightNum, sets: repsPerSet.length, reps_per_set: repsPerSet, reps,
     warmup_per_set: warmupPerSet.some(Boolean) ? warmupPerSet : [],
     date: liftForm.date, superset_group: liftForm.isSuperset ? (liftForm.supersetGroup.trim() || null) : null,
     muscle_map_keys: liftForm.muscleMapKeys,
-  });
-  liftFormSaving = false;
-  if (error) { liftFormError = error.message || 'Failed to save lift.'; renderLiftsTab(); return; }
+  };
+
+  // Local-first (Phase 2): queue + reflect in the UI immediately, before
+  // the network call — this is what makes the save survive the app being
+  // killed or the device going offline right after the tap. See
+  // flushPendingLiftSyncs()/mergePendingLiftsIntoState() above.
+  const clientId = 'pending-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const createdAt = new Date().toISOString();
+  const pending = loadPendingLiftSyncs();
+  pending.push({ clientId, createdAt, payload });
+  savePendingLiftSyncs(pending);
+  state.lifts.push({ ...payload, id: clientId, clientId, created_at: createdAt, pendingSync: true });
+
   liftForm.weight = '';
   liftForm.warmupPerSet = liftForm.warmupPerSet.map(() => false);
   if (priorBest && weightNum > priorBest.weight) {
@@ -10827,8 +11044,27 @@ async function addLiftFromForm() {
   if (cueCardTrigger) {
     cueCardBanner = { trigger: cueCardTrigger, def: exerciseDef };
   }
-  await loadLifts();
   renderAll();
+
+  const { error } = await supabase.from('lifts').insert(payload);
+  if (!error) {
+    savePendingLiftSyncs(loadPendingLiftSyncs().filter((p) => p.clientId !== clientId));
+    await loadLifts();
+    renderAll();
+    return;
+  }
+  // A real Postgrest error (has a Postgres error code, e.g. a rejected
+  // constraint) won't fix itself on retry — drop it from the queue and
+  // surface it, rather than silently retrying forever. A network-level
+  // failure (offline, request never reached the server) has no .code and
+  // stays queued — that's the expected, subtle "will sync later" case,
+  // not an error worth alarming the user over.
+  if (error.code) {
+    savePendingLiftSyncs(loadPendingLiftSyncs().filter((p) => p.clientId !== clientId));
+    state.lifts = state.lifts.filter((l) => l.clientId !== clientId);
+    liftFormError = error.message || 'Failed to save lift.';
+    renderLiftsTab();
+  }
 }
 
 function renderLiftDetail(panel) {
