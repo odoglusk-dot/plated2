@@ -9771,9 +9771,25 @@ function recentExerciseNames(limit = 6) {
 
 let quickWorkoutSearch = '';
 
+// Name+alias exercise search, shared by every "add an exercise" context
+// (Phase 4's own requirement: "Add-exercise picker reused in plans/mid-
+// workout"). actionAttr is whatever data-* attribute the caller wires a
+// click handler onto (e.g. "data-qw-add" here; Phase 5's plan-day editor
+// should reuse this same function with its own attribute/label).
+function exercisePickerResultsHtml(query, actionAttr, actionLabel = '+') {
+  const q = query.trim().toLowerCase();
+  if (!q) return '';
+  const results = state.exercises.filter((e) => e.name.toLowerCase().includes(q) || (e.aliases || []).some((a) => a.toLowerCase().includes(q))).slice(0, 20);
+  if (!results.length) return `<p class="muted small">No exercises match.</p>`;
+  return results.map((e) => `
+    <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+      <span>${esc(e.name)}</span>
+      <button class="btn btn-sm" ${actionAttr}="${esc(e.name)}">${actionLabel}</button>
+    </div>`).join('');
+}
+
 function renderQuickWorkoutStart(panel) {
-  const q = quickWorkoutSearch.trim().toLowerCase();
-  const results = q ? state.exercises.filter((e) => e.name.toLowerCase().includes(q) || (e.aliases || []).some((a) => a.toLowerCase().includes(q))).slice(0, 20) : [];
+  const q = quickWorkoutSearch.trim();
   panel.innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
       <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.8rem;">Quick workout &middot; ${esc(liveWorkoutElapsedLabel())}</div>
@@ -9781,14 +9797,7 @@ function renderQuickWorkoutStart(panel) {
     </div>
     <div class="card">
       <input class="input" id="qwSearch" placeholder="&#128269; Search exercises" value="${esc(quickWorkoutSearch)}">
-      ${q ? `
-        <div style="margin-top:0.6rem;">
-          ${results.length === 0 ? `<p class="muted small">No exercises match.</p>` : results.map((e) => `
-            <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
-              <span>${esc(e.name)}</span>
-              <button class="btn btn-sm" data-qw-add="${esc(e.name)}">+</button>
-            </div>`).join('')}
-        </div>` : ''}
+      ${q ? `<div style="margin-top:0.6rem;">${exercisePickerResultsHtml(q, 'data-qw-add')}</div>` : ''}
     </div>
     ${!q ? `
     <div class="card">
@@ -10282,6 +10291,32 @@ function cueCardHtml(banner) {
 // cue cards and muscle-map/split-builder defaults, filterable and
 // searchable rather than tied to a specific logged lift.
 const GLOSSARY_MOVEMENT_TYPE_LABELS = { compound: 'Compound', isolation: 'Isolation', conditioning: 'Cardio', plyometric: 'Plyometric' };
+
+function glossaryNoFiltersActive(mg, eq, mt, q) {
+  return !mg && !eq && !mt && !q;
+}
+
+// Library home's Recent + Needs attention sections (Phase 4) — only shown
+// over the full A-Z list, not while actively searching/filtering.
+function glossaryRecentAndStalledSectionsHtml() {
+  const recentNames = recentExerciseNames(5).filter((n) => exerciseDefFor(n));
+  const loggedNames = [...new Set(state.lifts.map((l) => l.exercise))];
+  const stalledNames = loggedNames.filter((n) => exerciseDefFor(n) && isExerciseStalled(n)).slice(0, 5);
+  if (!recentNames.length && !stalledNames.length) return '';
+  const row = (name, note) => `<div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;" data-glossary-jump="${esc(name)}">
+    <span>${esc(name)}</span>${note ? `<span class="muted small">${note}</span>` : ''}
+  </div>`;
+  return `
+    ${recentNames.length ? `<div class="card">
+      <div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Recent</div>
+      ${recentNames.map((n) => row(n)).join('')}
+    </div>` : ''}
+    ${stalledNames.length ? `<div class="card">
+      <div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Needs attention</div>
+      ${stalledNames.map((n) => row(n, 'No progress in 4 sessions')).join('')}
+    </div>` : ''}
+  `;
+}
 function renderExerciseGlossary(panel) {
   const q = glossaryFilter.search.trim().toLowerCase();
   const mg = glossaryFilter.muscleGroup;
@@ -10322,7 +10357,9 @@ function renderExerciseGlossary(panel) {
         ${typeOptions.map((t) => `<button class="chip ${mt === t ? 'chip-active' : ''}" data-glossary-type="${t}">${GLOSSARY_MOVEMENT_TYPE_LABELS[t]}</button>`).join('')}
       </div>
     </div>
+    ${glossaryNoFiltersActive(mg, eq, mt, q) ? glossaryRecentAndStalledSectionsHtml() : ''}
     <div class="card">
+      ${glossaryNoFiltersActive(mg, eq, mt, q) ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">A&ndash;Z</div>` : ''}
       ${filtered.length === 0 ? `<p class="muted">No exercises match.</p>` : filtered.map((e) => `
         <div class="glossary-row">
           <div class="log-row" style="cursor:pointer;border-bottom:none;padding-bottom:${glossaryExpandedName === e.name ? '0.25rem' : '0.6rem'};" data-glossary-toggle="${esc(e.name)}">
@@ -10365,6 +10402,14 @@ function renderExerciseGlossary(panel) {
     glossaryExpandedName = expanding ? name : null;
     if (expanding) recordGlossaryView(name);
     renderExerciseGlossary(panel);
+  }));
+  $$('[data-glossary-jump]', panel).forEach((row) => row.addEventListener('click', () => {
+    const name = row.dataset.glossaryJump;
+    recordGlossaryView(name);
+    showExerciseGlossary = false;
+    liftsSelectedExercise = name;
+    liftDetailTab = 'history';
+    renderLiftsTab();
   }));
   wireCitationEvents(panel, () => renderExerciseGlossary(panel));
 }
@@ -11691,6 +11736,12 @@ async function addLiftFromForm() {
   }
 }
 
+// History / Form / Swaps tabs (Phase 4). History is the rich page that
+// already existed (PR, e1RM, strength score, goal card, charts, full log)
+// — unchanged below, just moved under its own tab, plus an explicit
+// empty-state for <2 sessions instead of charts silently not rendering.
+let liftDetailTab = 'history';
+
 function renderLiftDetail(panel) {
   const exercise = liftsSelectedExercise;
   const history = state.lifts.filter((l) => l.exercise === exercise).sort((a, b) => a.date.localeCompare(b.date));
@@ -11704,6 +11755,7 @@ function renderLiftDetail(panel) {
   const currentBW = latestBodyweightEntry(state.weightLog);
   const strengthScore = bestE1RM > 0 && currentBW ? Math.round((bestE1RM / currentBW.weight_lb) * 100) : null;
   const goal = state.exerciseGoals.find((g) => g.exercise === exercise) || null;
+  const def = exerciseDefFor(exercise);
 
   panel.innerHTML = `
     <button class="btn btn-sm btn-ghost" id="liftBackBtn">← All lifts</button>
@@ -11712,6 +11764,15 @@ function renderLiftDetail(panel) {
       ${muscleGroup ? `<span class="badge" style="color:${MUSCLE_GROUP_COLORS[muscleGroup]};">${muscleGroup}</span>` : ''}
       ${plateaued ? `<span class="badge" style="color:var(--danger);">Plateaued</span>` : ''}
     </div>
+    <div class="chip-row" style="margin:0.5rem 0 0.75rem;">
+      <button class="chip ${liftDetailTab === 'history' ? 'chip-active' : ''}" data-lift-detail-tab="history">History</button>
+      <button class="chip ${liftDetailTab === 'form' ? 'chip-active' : ''}" data-lift-detail-tab="form">Form</button>
+      <button class="chip ${liftDetailTab === 'swaps' ? 'chip-active' : ''}" data-lift-detail-tab="swaps">Swaps</button>
+    </div>
+    ${liftDetailTab === 'form' ? liftDetailFormTabHtml(def)
+      : liftDetailTab === 'swaps' ? liftDetailSwapsTabHtml(exercise, def)
+      : history.length < 2 ? `<div class="card"><p class="muted" style="text-align:center;">${history.length === 0 ? "No sessions logged yet for this exercise." : "Log one more session to see trends and charts here."}</p></div>`
+      : `
     ${plateaued ? `<div class="card" style="border-color:var(--danger);"><p style="margin:0;">No new estimated-1RM peak in your last 3 sessions on ${esc(exercise)}. Consider changing rep range, adding a back-off/deload week, or increasing frequency for this lift.</p></div>` : ''}
     ${pr ? `<div class="card">
       <h3>Current PR</h3>
@@ -11748,15 +11809,61 @@ function renderLiftDetail(panel) {
     <div class="card" style="padding:0;">
       ${history.slice().reverse().map((l, i, arr) => liftHistoryRowHtml(l, i === arr.length - 1)).join('')}
     </div>
+    `}
   `;
 
   $('#liftBackBtn').addEventListener('click', () => {
     liftsSelectedExercise = null;
     liftHistoryEditingId = null;
     goalCardEditing = false;
+    liftDetailTab = 'history';
     renderLiftsTab();
   });
-  wireLiftDetailEvents(panel, exercise, history, goal);
+  $$('[data-lift-detail-tab]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    liftDetailTab = btn.dataset.liftDetailTab;
+    renderLiftsTab();
+  }));
+  if (liftDetailTab === 'history') wireLiftDetailEvents(panel, exercise, history, goal);
+  if (liftDetailTab === 'swaps') wireLiftDetailSwapEvents(panel);
+}
+
+function liftDetailFormTabHtml(def) {
+  if (!def) return `<div class="card"><p class="muted">No cue information for this exercise — it isn't in the library (a custom or typed-in name).</p></div>`;
+  return `<div class="card">
+    <h3 style="margin-top:0;">Cues</h3>
+    <ul class="cue-list">
+      <li>${esc(def.cue_setup)}</li>
+      <li>${esc(def.cue_execution)}</li>
+      <li>${esc(def.cue_bracing)}</li>
+    </ul>
+    <h3>Common mistakes</h3>
+    <p class="muted small" style="margin:0;">${esc(def.cue_mistake)}</p>
+  </div>`;
+}
+
+function liftDetailSwapsTabHtml(exerciseName, def) {
+  if (!def) return `<div class="card"><p class="muted">No swap suggestions — this isn't in the exercise library (a custom or typed-in name).</p></div>`;
+  const alternatives = computeSwapAlternatives(def);
+  if (!alternatives.length) return `<div class="card"><p class="muted">No alternatives found for this exercise yet.</p></div>`;
+  return `<div class="card">
+    <p class="muted small" style="margin-top:0;">Same primary muscle, filtered by equipment.</p>
+    ${alternatives.map((alt) => `
+      <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+        <div>
+          <div>${esc(alt.name)}</div>
+          <div class="muted small">${esc(alt.equipment)}${alt.movement_type && def.movement_type && alt.movement_type !== def.movement_type ? ` &middot; ${alt.movement_type === 'compound' ? 'Compound' : 'Isolation'}` : ''}</div>
+        </div>
+        <button class="btn btn-sm" data-swap-to="${esc(alt.name)}">Swap</button>
+      </div>`).join('')}
+  </div>`;
+}
+
+function wireLiftDetailSwapEvents(panel) {
+  $$('[data-swap-to]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    liftsSelectedExercise = btn.dataset.swapTo;
+    liftDetailTab = 'history';
+    renderLiftsTab();
+  }));
 }
 
 function wireLiftDetailEvents(panel, exercise, history, goal) {
