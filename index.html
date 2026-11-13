@@ -759,6 +759,26 @@
   .body-map-label { text-transform: uppercase; letter-spacing: 0.05em; }
   .body-map-svg { width: 100%; max-width: 150px; }
   .body-map-region { cursor: pointer; }
+  /* Compact exercise-highlight diagram (Phase 3) — the slot is a fixed
+     box; the SVG inside it keeps its natural (taller-than-wide) aspect
+     ratio via height-only sizing + flex centering, so it's scaled down,
+     never cropped or stretched. */
+  .body-map-compact { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; flex: none; }
+  .body-map-compact-label { text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.62rem; }
+  .body-map-compact .body-map-svg { width: auto; max-width: none; }
+  .body-map-compact--header { width: 76px; height: 104px; justify-content: center; }
+  .body-map-compact--header .body-map-svg { height: 92px; }
+  .body-map-compact--superset { width: 52px; height: 72px; justify-content: center; }
+  .body-map-compact--superset .body-map-svg { height: 62px; }
+  .body-map-compact-neutral { align-items: center; justify-content: center; color: var(--muted); }
+  /* Pinned rest-timer bar (Phase 3 exercise screen) — sits above the
+     device's home-indicator safe area; the Lifts panel is a full-screen
+     sheet (.as-sheet) while this is open, so it's already above the
+     3-tab bar, never overlapping it. */
+  .rest-timer-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 39; display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.6rem calc(1rem + env(safe-area-inset-right, 0px)) calc(0.6rem + env(safe-area-inset-bottom, 0px)) calc(1rem + env(safe-area-inset-left, 0px));
+    background: var(--nav-bg); border-top: 1px solid var(--border); }
+  .rest-timer-bar .btn-primary { margin-left: auto; min-width: 44px; min-height: 44px; }
   .heatmap-legend { display: flex; align-items: center; gap: 0.25rem; margin-top: 0.6rem; font-size: 0.68rem; color: var(--text-dim); justify-content: center; }
   .heatmap-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
   .muscle-map-detail { border-top: 1px solid var(--border); margin-top: 0.75rem; padding-top: 0.75rem; }
@@ -3574,6 +3594,9 @@ const SHEET_TAB_TITLES = {
 };
 function screenSheetTitleFor(tab) {
   if (tab === 'lifts') {
+    if (liveWorkoutScreen === 'start') return 'Quick Workout';
+    if (liveWorkoutScreen === 'overview') return 'Today’s Workout';
+    if (typeof liveWorkoutScreen === 'number') return liveWorkoutSession?.exercises?.[liveWorkoutScreen]?.name || 'Exercise';
     if (showPlanBuilder) return 'Plan Builder';
     if (showBlockBuilder) return 'Block Builder';
     if (showExerciseGlossary) return 'Exercise Library';
@@ -5701,7 +5724,13 @@ function renderDashboard() {
     showBlockBuilder = false;
     showExerciseGlossary = false;
     liftsSelectedExercise = null;
-    liftsSubTab = 'training';
+    // A live workout in progress (or already started today) goes straight
+    // back to its overview; otherwise into the quick-workout picker. A
+    // program is never required for either path. (liveWorkoutSession is
+    // already resumed from localStorage at app boot — see wlsResume() in
+    // bootstrapApp — so this just checks the in-memory state, not storage again.)
+    liveWorkoutScreen = (liveWorkoutSession && liveWorkoutSession.date === localDateStr() && liveWorkoutSession.exercises?.length) ? 'overview' : 'start';
+    startLiveWorkoutTicker();
     renderLiftsTab();
     setActiveTab('lifts');
   });
@@ -8851,24 +8880,39 @@ function muscleMapHeatColor(sets) {
   return MUSCLE_MAP_LEGEND[4].color;
 }
 
-function muscleMapPartSvg(part, totals, selectedKey) {
-  const fill = muscleMapHeatColor(totals[part.key] || 0);
+// Exercise-highlight colors (Phase 3, training redesign): primary muscle =
+// brass, secondary = lighter brass, everything else stays in the map's
+// normal neutral/heat state. A thin outline on the primary region is what
+// keeps the highlight legible at the compact exercise-header/superset
+// sizes, where the heat-color contrast steps are too subtle to read.
+const MUSCLE_MAP_HIGHLIGHT_PRIMARY = '#8A6A3A';
+const MUSCLE_MAP_HIGHLIGHT_SECONDARY = '#D3B988';
+
+function muscleMapPartSvg(part, totals, selectedKey, highlight) {
+  let fill, isPrimaryHighlight = false;
+  if (highlight) {
+    if (part.key === highlight.primaryKey) { fill = MUSCLE_MAP_HIGHLIGHT_PRIMARY; isPrimaryHighlight = true; }
+    else if (highlight.secondaryKeys.includes(part.key)) fill = MUSCLE_MAP_HIGHLIGHT_SECONDARY;
+    else fill = '#E7E4DC'; // same neutral as the base silhouette - "everything else in the map's normal neutral state"
+  } else {
+    fill = muscleMapHeatColor(totals[part.key] || 0);
+  }
   const isSelected = selectedKey === part.key;
   // Two overlapping copies of the same path: one carries the heat color
   // and the tap target, the other — pointer-events disabled — carries the
   // diagonal light/dark shading gradient on top, giving each muscle a
   // sculpted look instead of a flat color fill.
   return `
-    <path d="${part.d}" fill="${fill}" stroke="${isSelected ? 'var(--accent)' : '#D8D4C8'}" stroke-width="${isSelected ? '1.6' : '0.9'}" stroke-linejoin="round" class="body-map-region" data-muscle-key="${part.key}"></path>
+    <path d="${part.d}" fill="${fill}" stroke="${isSelected ? 'var(--accent)' : isPrimaryHighlight ? '#5C4526' : '#D8D4C8'}" stroke-width="${isSelected ? '1.6' : isPrimaryHighlight ? '1.4' : '0.9'}" stroke-linejoin="round" class="body-map-region" data-muscle-key="${part.key}"></path>
     <path d="${part.d}" fill="url(#muscleMapShade)" pointer-events="none"></path>`;
 }
 
-function muscleMapBodySvg(parts, totals, selectedKey, viewName) {
+function muscleMapBodySvg(parts, totals, selectedKey, viewName, highlight) {
   const baseAttrs = 'fill="#E7E4DC" stroke="#D8D4C8" stroke-width="1"';
   const base = `<path d="${MUSCLE_MAP_BASE_PATH}" ${baseAttrs}></path>`;
   const muscles = parts.map((part) => {
-    const right = muscleMapPartSvg(part, totals, selectedKey);
-    const left = `<g transform="translate(200,0) scale(-1,1)">${muscleMapPartSvg(part, totals, selectedKey)}</g>`;
+    const right = muscleMapPartSvg(part, totals, selectedKey, highlight);
+    const left = `<g transform="translate(200,0) scale(-1,1)">${muscleMapPartSvg(part, totals, selectedKey, highlight)}</g>`;
     return right + left;
   }).join('');
   return `<svg viewBox="0 0 200 420" class="body-map-svg">
@@ -8885,6 +8929,50 @@ function muscleMapBodySvg(parts, totals, selectedKey, viewName) {
     <g transform="translate(200,0) scale(-1,1)">${base}</g>
     ${muscles.replace(/url\(#muscleMapShade\)/g, `url(#muscleMapShade-${viewName})`)}
   </svg>`;
+}
+
+// Keys drawn ONLY on the front/back parts arrays — used to pick a view
+// from an exercise's primary muscle. delts/traps/forearms/calves are drawn
+// on both views (shared), so they fall through to the detailed_muscle hint
+// below, or a simple default.
+const MUSCLE_MAP_FRONT_ONLY_KEYS = new Set(['chest', 'abs', 'obliques', 'quads']);
+const MUSCLE_MAP_BACK_ONLY_KEYS = new Set(['triceps', 'lats', 'lowerback', 'glutes', 'hamstrings']);
+
+// Compact exercise-highlight diagram (Phase 3): same existing muscle map,
+// scaled down (never cropped, per the explicit instruction — secondary
+// muscles and highlight consistency both depend on showing the whole
+// figure), with primary/secondary brass highlighting instead of the
+// 7-day-volume heat color. Front vs back is chosen from the exercise's
+// primary muscle; for a key drawn on both views (delts/traps/forearms/
+// calves), detailed_muscle (e.g. "Rear Delts") breaks the tie where it
+// can, else front.
+function exerciseMuscleMapSvg(exerciseDef, sizeClass) {
+  if (!exerciseDef?.muscle_map_key) return exerciseMuscleMapNeutralIcon(sizeClass);
+  const primaryKey = exerciseDef.muscle_map_key;
+  const secondaryKeys = exerciseDef.muscle_map_secondary_keys || [];
+  let useBack;
+  if (MUSCLE_MAP_FRONT_ONLY_KEYS.has(primaryKey)) useBack = false;
+  else if (MUSCLE_MAP_BACK_ONLY_KEYS.has(primaryKey)) useBack = true;
+  else useBack = exerciseDef.detailed_muscle === 'Rear Delts';
+  const parts = useBack ? MUSCLE_MAP_BACK_PARTS : MUSCLE_MAP_FRONT_PARTS;
+  // viewName becomes part of a gradient id referenced via url(#...) below —
+  // it must be a valid id fragment (no spaces/punctuation), so the exercise
+  // name gets slugified rather than used raw.
+  const slug = exerciseDef.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const svg = muscleMapBodySvg(parts, {}, null, `ex-${sizeClass}-${slug}`, { primaryKey, secondaryKeys });
+  return `<div class="body-map-compact ${sizeClass}">
+    <div class="muted small body-map-compact-label">${useBack ? 'Back' : 'Front'}</div>
+    ${svg}
+  </div>`;
+}
+
+// "Full Body"/"Cardio" exercises (and anything with no muscle_map_key at
+// all — a custom/unmatched name) show a small neutral icon instead of a
+// diagram, per the explicit override decision.
+function exerciseMuscleMapNeutralIcon(sizeClass) {
+  return `<div class="body-map-compact body-map-compact-neutral ${sizeClass}">
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="12" cy="7" r="3.2"></circle><path d="M5 21c0-4 3-7 7-7s7 3 7 7"></path></svg>
+  </div>`;
 }
 
 function muscleMapReadoutText(key, sets, windowDays) {
@@ -9365,6 +9453,56 @@ function prForTrackingType(trackingType, entries) {
   }
 }
 
+// Double-progression "Goal:" line (Phase 3, exercise screen A2). Given a
+// rep range (from whatever program context is active, if any — a quick/
+// program-optional workout simply has none, which is fine, that's the
+// hard "a program is never required" rule), the rule is standard double
+// progression: once every set hits the TOP of the range, add weight and
+// drop back to the BOTTOM of the range; otherwise keep the same weight and
+// aim to beat the weakest set by one rep, capped at the top of the range.
+// With no range at all (quick workout with no plan behind it), the goal
+// is simply "match last time" — there's no "enough" to detect without a
+// target range.
+const DOUBLE_PROGRESSION_INCREMENT_LB = 5; // simple v1 flat increment; Phase 5's progression/deload work may refine this per-exercise
+
+function parseRepRange(str) {
+  if (!str) return null;
+  const rangeMatch = String(str).match(/(\d+)\s*[-–]\s*(\d+)/);
+  if (rangeMatch) return { low: Number(rangeMatch[1]), high: Number(rangeMatch[2]) };
+  const singleMatch = String(str).match(/(\d+)/);
+  return singleMatch ? { low: Number(singleMatch[1]), high: Number(singleMatch[1]) } : null;
+}
+
+function computeDoubleProgressionGoal(exerciseName, repRangeString) {
+  const history = state.lifts
+    .filter((l) => l.exercise === exerciseName)
+    .sort((a, b) => (a.date + (a.created_at || '')).localeCompare(b.date + (b.created_at || '')));
+  const last = history[history.length - 1];
+  if (!last) return null;
+  const repsPerSet = last.reps_per_set && last.reps_per_set.length ? last.reps_per_set : [last.reps];
+  const range = parseRepRange(repRangeString);
+  if (!range) return { weight: last.weight, reps: Math.round(repsPerSet[repsPerSet.length - 1]) };
+  const allHitTop = repsPerSet.every((r) => r >= range.high);
+  if (allHitTop) return { weight: last.weight + DOUBLE_PROGRESSION_INCREMENT_LB, reps: range.low };
+  const minReps = Math.min(...repsPerSet);
+  return { weight: last.weight, reps: Math.min(range.high, minReps + 1) };
+}
+
+// Best-effort rep-range lookup for "today" — checks the active generated
+// block for a same-name exercise entry. Deliberately simple: Phase 5 owns
+// the real program/plan/"your version" integration; this just gives the
+// goal calculator something to use when a block happens to exist, and
+// degrades gracefully (plain "match last time") when it doesn't.
+function exerciseGoalRepRangeFor(exerciseName) {
+  const block = state.profile?.active_training_block;
+  if (!block?.days) return null;
+  for (const day of block.days) {
+    const match = (day.exercises || []).find((e) => e.name === exerciseName);
+    if (match) return match.reps;
+  }
+  return null;
+}
+
 function volumeForTrackingType(trackingType, entry) {
   switch (trackingType) {
     case 'bodyweight_reps':
@@ -9552,14 +9690,454 @@ function liftHistoryRowHtml(lift, isLast) {
   </div>`;
 }
 
+// null = not in the live-workout flow; 'start' = quick-workout picker;
+// 'overview' = Done/Up-next/Later; a number = exercise detail screen (A2)
+// for that index into liveWorkoutSession.exercises.
+let liveWorkoutScreen = null;
+let liveWorkoutElapsedTickerId = null;
+
 function renderLiftsTab() {
   const panel = $('#panel-lifts');
   if (!panel) return;
+  updateScreenSheetTitle();
+  if (liveWorkoutScreen === 'start') return renderQuickWorkoutStart(panel);
+  if (liveWorkoutScreen === 'overview') return renderWorkoutOverview(panel);
+  if (typeof liveWorkoutScreen === 'number') return renderExerciseDetailScreen(panel, liveWorkoutScreen);
   if (showPlanBuilder) renderPlanBuilder(panel);
   else if (showBlockBuilder) renderBlockBuilder(panel);
   else if (showExerciseGlossary) renderExerciseGlossary(panel);
   else if (liftsSelectedExercise) renderLiftDetail(panel);
   else renderLiftLog(panel);
+}
+
+function liveWorkoutElapsedLabel() {
+  if (!liveWorkoutSession?.startedAt) return '0:00';
+  const mins = Math.floor((Date.now() - new Date(liveWorkoutSession.startedAt).getTime()) / 60000);
+  const secs = Math.floor(((Date.now() - new Date(liveWorkoutSession.startedAt).getTime()) % 60000) / 1000);
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+// Re-renders the current live-workout screen every second while one is
+// open, purely for the elapsed-time header and the rest-timer countdown —
+// both read from stored timestamps (see wls* above), so a missed tick
+// from the tab being backgrounded just catches up on the next render, it
+// never drifts.
+function startLiveWorkoutTicker() {
+  stopLiveWorkoutTicker();
+  liveWorkoutElapsedTickerId = setInterval(() => {
+    // Stop once there's nothing live to tick for, or the Lifts sheet
+    // itself isn't the one open any more (e.g. the user backed out via
+    // the outer sheet-close chevron) — no point re-rendering a hidden panel every second.
+    if (liveWorkoutScreen === null || state.sheetTab !== 'lifts') { stopLiveWorkoutTicker(); return; }
+    renderLiftsTab();
+  }, 1000);
+}
+function stopLiveWorkoutTicker() {
+  if (liveWorkoutElapsedTickerId) { clearInterval(liveWorkoutElapsedTickerId); liveWorkoutElapsedTickerId = null; }
+}
+
+function isExerciseStalled(name) {
+  const sessions = state.lifts.filter((l) => l.exercise === name).sort((a, b) => a.date.localeCompare(b.date));
+  if (sessions.length < 4) return false;
+  const lastFour = sessions.slice(-4);
+  const e1rms = lastFour.map((l) => e1RM(l.weight, l.reps));
+  return e1rms.every((v, i) => i === 0 || v <= e1rms[i - 1]);
+}
+
+// Distinct past workout days (not today), most recent first, each with
+// its exercise list — "repeat a recent workout" on the quick-start screen.
+function recentWorkoutDays(limit = 3) {
+  const today = localDateStr();
+  const byDate = {};
+  for (const l of state.lifts) {
+    if (l.date === today) continue;
+    (byDate[l.date] ||= new Set()).add(l.exercise);
+  }
+  return Object.entries(byDate)
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .slice(0, limit)
+    .map(([date, names]) => ({ date, exercises: [...names], daysAgo: Math.round((new Date(today) - new Date(date)) / 86400000) }));
+}
+
+function recentExerciseNames(limit = 6) {
+  const seen = new Set();
+  const names = [];
+  for (let i = state.lifts.length - 1; i >= 0 && names.length < limit; i--) {
+    const n = state.lifts[i].exercise;
+    if (!seen.has(n)) { seen.add(n); names.push(n); }
+  }
+  return names;
+}
+
+let quickWorkoutSearch = '';
+
+function renderQuickWorkoutStart(panel) {
+  const q = quickWorkoutSearch.trim().toLowerCase();
+  const results = q ? state.exercises.filter((e) => e.name.toLowerCase().includes(q) || (e.aliases || []).some((a) => a.toLowerCase().includes(q))).slice(0, 20) : [];
+  panel.innerHTML = `
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+      <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.8rem;">Quick workout &middot; ${esc(liveWorkoutElapsedLabel())}</div>
+      <button class="btn btn-sm btn-ghost" id="qwCancelBtn">Cancel</button>
+    </div>
+    <div class="card">
+      <input class="input" id="qwSearch" placeholder="&#128269; Search exercises" value="${esc(quickWorkoutSearch)}">
+      ${q ? `
+        <div style="margin-top:0.6rem;">
+          ${results.length === 0 ? `<p class="muted small">No exercises match.</p>` : results.map((e) => `
+            <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+              <span>${esc(e.name)}</span>
+              <button class="btn btn-sm" data-qw-add="${esc(e.name)}">+</button>
+            </div>`).join('')}
+        </div>` : ''}
+    </div>
+    ${!q ? `
+    <div class="card">
+      <h3 style="margin-top:0;">Repeat a recent workout</h3>
+      ${recentWorkoutDays().map((d) => `
+        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+          <div><div>${esc(d.exercises[0])}${d.exercises.length > 1 ? ` + ${d.exercises.length - 1} more` : ''}</div><div class="muted small">${d.exercises.length} exercise${d.exercises.length === 1 ? '' : 's'} &middot; ${d.daysAgo} day${d.daysAgo === 1 ? '' : 's'} ago</div></div>
+          <button class="btn btn-sm" data-qw-repeat="${esc(d.date)}">Use</button>
+        </div>`).join('') || `<p class="muted small">No past workouts yet.</p>`}
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Recent exercises</h3>
+      <div class="chip-row">
+        ${recentExerciseNames().map((n) => `<button class="chip" data-qw-add="${esc(n)}">${esc(n)}</button>`).join('') || `<p class="muted small">Nothing logged yet.</p>`}
+      </div>
+    </div>` : ''}
+  `;
+  $('#qwCancelBtn').addEventListener('click', () => { liveWorkoutScreen = null; stopLiveWorkoutTicker(); renderLiftsTab(); });
+  $('#qwSearch').addEventListener('input', (e) => { quickWorkoutSearch = e.target.value; renderLiftsTab(); });
+  $$('[data-qw-add]', panel).forEach((btn) => btn.addEventListener('click', () => quickWorkoutAddExercise(btn.dataset.qwAdd)));
+  $$('[data-qw-repeat]', panel).forEach((btn) => btn.addEventListener('click', () => quickWorkoutRepeatDay(btn.dataset.qwRepeat)));
+}
+
+function quickWorkoutAddExercise(name) {
+  const def = exerciseDefFor(name);
+  const idx = wlsAddExercise(name, { trackingType: def?.tracking || 'weight_reps', repRangeString: null });
+  quickWorkoutSearch = '';
+  liveWorkoutScreen = idx;
+  resetExerciseDetailInput(liveWorkoutSession.exercises[idx]);
+  startLiveWorkoutTicker();
+  renderLiftsTab();
+}
+
+function quickWorkoutRepeatDay(date) {
+  const names = [...new Set(state.lifts.filter((l) => l.date === date).map((l) => l.exercise))];
+  let firstIdx = null;
+  for (const n of names) {
+    const def = exerciseDefFor(n);
+    const idx = wlsAddExercise(n, { trackingType: def?.tracking || 'weight_reps' });
+    if (firstIdx === null) firstIdx = idx;
+  }
+  liveWorkoutScreen = 'overview';
+  startLiveWorkoutTicker();
+  renderLiftsTab();
+}
+
+function exerciseSetSummaryLabel(ex) {
+  if (!ex.setsLogged.length) return '';
+  if (ex.trackingType === 'time') return `${ex.setsLogged[ex.setsLogged.length - 1].reps}s`;
+  if (ex.trackingType === 'bodyweight_reps') return ex.setsLogged.map((s) => s.reps).join(', ');
+  return `${toDisplayWeight(ex.weight).value} ${weightUnitLabel()} × ${ex.setsLogged.map((s) => s.reps).join(', ')}`;
+}
+
+function renderWorkoutOverview(panel) {
+  const session = wlsEnsureSession();
+  const exercises = session.exercises;
+  const done = exercises.filter((e) => e.done);
+  const notDone = exercises.filter((e) => !e.done);
+  const current = notDone[0] || null;
+  const later = notDone.slice(1);
+
+  panel.innerHTML = `
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+      <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.8rem;">${esc(liveWorkoutSessionLabel())} &middot; ${esc(liveWorkoutElapsedLabel())}</div>
+      <button class="btn btn-sm" id="qwFinishBtn">Finish</button>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Today's workout</h3>
+      ${done.length ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">Done</div>` : ''}
+      ${done.map((ex) => `
+        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;" data-wo-open="${esc(ex.name)}">
+          <span>&#10003; ${esc(ex.name)}</span>
+          <span class="mono muted small">${esc(exerciseSetSummaryLabel(ex))}</span>
+        </div>`).join('')}
+      ${current ? `
+        <div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.3rem;">Up next</div>
+        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+          <div>
+            <div><strong>${esc(current.name)}</strong></div>
+            <div class="muted small">${goalLineForOverview(current)}</div>
+          </div>
+          <button class="btn btn-sm btn-primary" data-wo-open="${esc(current.name)}">Open</button>
+        </div>` : ''}
+      ${later.length ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.3rem;">Later</div>` : ''}
+      ${later.map((ex) => `
+        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;" data-wo-open="${esc(ex.name)}">
+          <div>
+            <div>${esc(ex.name)}</div>
+            <div class="muted small">${ex.prescribedSets ? `${ex.setsLogged.length}/${ex.prescribedSets} sets` : `${ex.setsLogged.length} set${ex.setsLogged.length === 1 ? '' : 's'} logged`}${isExerciseStalled(ex.name) ? ` &middot; stalled 4+ sessions` : ''}</div>
+          </div>
+        </div>`).join('')}
+      <button class="btn btn-sm btn-ghost" id="qwAddMoreBtn" style="margin-top:0.6rem;">+ Add exercise</button>
+    </div>
+  `;
+  $('#qwFinishBtn').addEventListener('click', finishLiveWorkout);
+  $('#qwAddMoreBtn').addEventListener('click', () => { liveWorkoutScreen = 'start'; renderLiftsTab(); });
+  $$('[data-wo-open]', panel).forEach((row) => row.addEventListener('click', () => {
+    const idx = session.exercises.findIndex((e) => e.name === row.dataset.woOpen);
+    if (idx !== -1) { liveWorkoutScreen = idx; resetExerciseDetailInput(session.exercises[idx]); renderLiftsTab(); }
+  }));
+}
+
+function liveWorkoutSessionLabel() {
+  return liveWorkoutSession?.exercises?.length ? 'Today’s workout' : 'Quick workout';
+}
+
+function goalLineForOverview(ex) {
+  const goal = computeDoubleProgressionGoal(ex.name, ex.repRangeString);
+  if (!goal) return ex.repRangeString ? `${ex.setsLogged.length || 0} sets × ${ex.repRangeString}` : 'First time logging this one';
+  return `Goal ${toDisplayWeight(goal.weight).value} × ${goal.reps}`;
+}
+
+// Finish keeps using the EXISTING End Workout / session-analysis entry
+// point unchanged (endWorkoutSession, defined above) — Phase 3 only adds
+// the new screens in front of it, per "do NOT rebuild session analysis".
+async function finishLiveWorkout() {
+  liveWorkoutScreen = null;
+  stopLiveWorkoutTicker();
+  wlsReleaseWakeLock();
+  await endWorkoutSession();
+}
+
+// ── Exercise detail screen (A2) ──────────────────────────────────────────
+let exerciseDetailInput = { weight: '', reps: '', distance: '', durationSeconds: '', timerRunning: false, timerStartedAt: null };
+let exerciseDetailCueExpanded = false;
+let exerciseDetailJustFinished = false; // shows the PR/estimated-max summary in place of the sets table right after the last set
+
+function resetExerciseDetailInput(ex) {
+  const lastSet = ex.setsLogged[ex.setsLogged.length - 1];
+  exerciseDetailInput = {
+    weight: lastSet ? String(toDisplayWeight(lastSet.weight ?? ex.weight ?? 0).value) : (ex.weight != null ? String(toDisplayWeight(ex.weight).value) : ''),
+    reps: '', distance: '', durationSeconds: '', timerRunning: false, timerStartedAt: null,
+  };
+  exerciseDetailCueExpanded = false;
+  exerciseDetailJustFinished = false;
+}
+
+function lastTimeLabelFor(name, excludeToday) {
+  const today = localDateStr();
+  const prior = state.lifts.filter((l) => l.exercise === name && (!excludeToday || l.date !== today)).sort((a, b) => a.date.localeCompare(b.date));
+  const last = prior[prior.length - 1];
+  if (!last) return null;
+  const repsPerSet = last.reps_per_set && last.reps_per_set.length ? last.reps_per_set : [last.reps];
+  return { weight: last.weight, repsPerSet, label: `${toDisplayWeight(last.weight).value} ${weightUnitLabel()} × ${repsPerSet.join(', ')}` };
+}
+
+function renderExerciseDetailScreen(panel, idx) {
+  const session = liveWorkoutSession;
+  const ex = session?.exercises?.[idx];
+  if (!ex) { liveWorkoutScreen = 'overview'; renderWorkoutOverview(panel); return; }
+  const def = exerciseDefFor(ex.name);
+  const total = session.exercises.length;
+  const lastTime = lastTimeLabelFor(ex.name, true);
+  const goal = computeDoubleProgressionGoal(ex.name, ex.repRangeString);
+  const rest = wlsRestTimeRemainingMs();
+  const restSecs = Math.ceil(rest / 1000);
+
+  // Superset: render the paired exercise(s) in the same group stacked
+  // below this one, sharing one rest timer that only starts once every
+  // exercise in the round has logged its current set.
+  const supersetPartners = ex.supersetGroup
+    ? session.exercises.filter((e) => e.supersetGroup === ex.supersetGroup && e.name !== ex.name)
+    : [];
+
+  panel.innerHTML = `
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+      <button class="btn btn-sm btn-ghost" id="exOverviewBackBtn">&#8249; Overview</button>
+      <span class="muted small">${ex.supersetGroup ? `Superset ${esc(ex.supersetGroup)}` : `${idx + 1} of ${total}`}</span>
+    </div>
+    <div class="card">
+      <div class="row" style="align-items:flex-start;gap:0.75rem;">
+        ${exerciseMuscleMapSvg(def, 'body-map-compact--header')}
+        <div style="flex:1;">
+          <h3 style="margin:0 0 0.2rem;">${esc(ex.name)}${exerciseDetailJustFinished && lastTimeIsPr(ex.name) ? ` <span class="pill-soft">★ New PR</span>` : ''}</h3>
+          <div class="muted small">${esc(def?.equipment || '')}${ex.repRangeString ? ` &middot; ${ex.setsLogged.length + 1 <= (ex.prescribedSets || 3) ? ex.prescribedSets || 3 : ex.setsLogged.length} × ${esc(ex.repRangeString)}` : ''}</div>
+          ${lastTime ? `<div class="muted small" style="cursor:pointer;" id="exLastTimeCopy" data-ex-last-weight="${lastTime.weight}" data-ex-last-reps="${lastTime.repsPerSet[lastTime.repsPerSet.length - 1]}">Last: ${esc(lastTime.label)} <span style="text-decoration:underline;">(tap to copy)</span></div>` : `<div class="muted small">First time logging this one</div>`}
+          ${goal ? `<div class="muted small">Goal: ${toDisplayWeight(goal.weight).value} × ${goal.reps}</div>` : ''}
+        </div>
+      </div>
+
+      ${exerciseDetailJustFinished ? exerciseFinishedSummaryHtml(ex) : exerciseSetsTableHtml(ex, def)}
+
+      ${supersetPartners.map((partner) => `<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border);">
+        <strong class="small">${esc(partner.name)}</strong>
+        ${exerciseSetsTableHtml(partner, exerciseDefFor(partner.name), true)}
+      </div>`).join('')}
+
+      <div class="row" style="justify-content:space-between;align-items:center;margin-top:0.75rem;">
+        <button class="btn btn-sm btn-ghost" id="exCueToggleBtn">Cue ${exerciseDetailCueExpanded ? '▲' : '▼'}</button>
+      </div>
+      ${exerciseDetailCueExpanded && def ? `
+        <ul class="cue-list">
+          <li><strong>Setup:</strong> ${esc(def.cue_setup)}</li>
+          <li><strong>Execution:</strong> ${esc(def.cue_execution)}</li>
+          <li><strong>Common mistake:</strong> ${esc(def.cue_mistake)}</li>
+          <li><strong>Bracing:</strong> ${esc(def.cue_bracing)}</li>
+        </ul>` : ''}
+    </div>
+
+    <div class="rest-timer-bar">
+      ${rest > 0 ? `
+        <span class="mono">⏱ Rest ${Math.floor(restSecs / 60)}:${String(restSecs % 60).padStart(2, '0')}</span>
+        <button class="btn btn-sm btn-ghost" id="exRestPlus15Btn">+15s</button>
+        <button class="btn btn-sm btn-ghost" id="exRestSkipBtn">Skip</button>
+      ` : `<span class="muted small">Ready for your next set</span>`}
+      ${exerciseDetailJustFinished
+        ? `<button class="btn btn-primary" id="exNextExerciseBtn">Next exercise</button>`
+        : `<button class="btn btn-primary" id="exLogSetBtn">✓</button>`}
+    </div>
+  `;
+
+  $('#exOverviewBackBtn').addEventListener('click', () => { liveWorkoutScreen = 'overview'; renderLiftsTab(); });
+  const lastCopyEl = $('#exLastTimeCopy', panel);
+  if (lastCopyEl) lastCopyEl.addEventListener('click', () => {
+    exerciseDetailInput.weight = String(toDisplayWeight(Number(lastCopyEl.dataset.exLastWeight)).value);
+    exerciseDetailInput.reps = lastCopyEl.dataset.exLastReps;
+    renderLiftsTab();
+  });
+  $('#exCueToggleBtn').addEventListener('click', () => { exerciseDetailCueExpanded = !exerciseDetailCueExpanded; renderLiftsTab(); });
+  const weightInput = $('#exSetWeight', panel);
+  if (weightInput) weightInput.addEventListener('input', (e) => { exerciseDetailInput.weight = e.target.value; });
+  const repsInput = $('#exSetReps', panel);
+  if (repsInput) repsInput.addEventListener('input', (e) => { exerciseDetailInput.reps = e.target.value; });
+  const distInput = $('#exSetDistance', panel);
+  if (distInput) distInput.addEventListener('input', (e) => { exerciseDetailInput.distance = e.target.value; });
+  const durInput = $('#exSetDuration', panel);
+  if (durInput) durInput.addEventListener('input', (e) => { exerciseDetailInput.durationSeconds = e.target.value; });
+  const timerBtn = $('#exTimerStartBtn', panel);
+  if (timerBtn) timerBtn.addEventListener('click', () => toggleExerciseTimer(idx));
+  const restPlus = $('#exRestPlus15Btn', panel);
+  if (restPlus) restPlus.addEventListener('click', () => { wlsStartRestTimer(Math.ceil(wlsRestTimeRemainingMs() / 1000) + 15); renderLiftsTab(); });
+  const restSkip = $('#exRestSkipBtn', panel);
+  if (restSkip) restSkip.addEventListener('click', () => { wlsClearRestTimer(); renderLiftsTab(); });
+  const logBtn = $('#exLogSetBtn', panel);
+  if (logBtn) logBtn.addEventListener('click', () => logCurrentSet(idx));
+  const nextBtn = $('#exNextExerciseBtn', panel);
+  if (nextBtn) nextBtn.addEventListener('click', () => goToNextExercise(idx));
+}
+
+function lastTimeIsPr(name) {
+  const prs = computeLiftPRs(state.lifts);
+  const today = localDateStr();
+  const todayBest = state.lifts.filter((l) => l.exercise === name && l.date === today).sort((a, b) => b.weight - a.weight)[0];
+  const priorBest = computeLiftPRs(state.lifts.filter((l) => l.exercise === name && l.date < today))[name];
+  return !!todayBest && (!priorBest || todayBest.weight > priorBest.weight);
+}
+
+function exerciseSetsTableHtml(ex, def, compact) {
+  const trackingType = ex.trackingType || def?.tracking || 'weight_reps';
+  const rows = ex.setsLogged.map((s, i) => `
+    <div class="row mono" style="justify-content:space-between;padding:0.3rem 0;">
+      <span class="muted">${i + 1}</span>
+      ${trackingType === 'time' ? `<span>${s.reps}s</span>` : trackingType === 'bodyweight_reps' ? `<span>${s.reps} reps</span>` : trackingType === 'distance_time' ? `<span>${s.distance ?? ''} / ${s.reps}s</span>` : `<span>${toDisplayWeight(s.weight).value} × ${s.reps}</span>`}
+      <span>✓</span>
+    </div>`).join('');
+  const nextSetNum = ex.setsLogged.length + 1;
+  const inputRow = compact ? '' : `
+    <div class="row" style="align-items:center;gap:0.4rem;margin-top:0.3rem;">
+      <span class="muted mono">${nextSetNum}</span>
+      ${trackingType === 'time' ? `
+        <span class="mono" style="flex:1;">${exerciseDetailInput.timerRunning ? liveTimerLabel() : '0:00'}</span>
+        <button class="btn btn-sm" id="exTimerStartBtn">${exerciseDetailInput.timerRunning ? 'Stop' : 'Start'}</button>
+      ` : trackingType === 'distance_time' ? `
+        <input class="input mono" id="exSetDistance" placeholder="Distance" value="${esc(exerciseDetailInput.distance)}" style="width:90px;">
+        <input class="input mono" id="exSetDuration" placeholder="Seconds" type="number" value="${esc(exerciseDetailInput.durationSeconds)}" style="width:80px;">
+      ` : trackingType === 'bodyweight_reps' ? `
+        <input class="input mono" id="exSetReps" placeholder="Reps" type="number" value="${esc(exerciseDetailInput.reps)}" style="width:70px;">
+      ` : `
+        <input class="input mono" id="exSetWeight" placeholder="Weight" type="number" value="${esc(exerciseDetailInput.weight)}" style="width:80px;">
+        <input class="input mono" id="exSetReps" placeholder="Reps" type="number" value="${esc(exerciseDetailInput.reps)}" style="width:70px;">
+      `}
+    </div>`;
+  return `<div style="margin-top:0.6rem;">${rows}${inputRow}</div>`;
+}
+
+function liveTimerLabel() {
+  if (!exerciseDetailInput.timerStartedAt) return '0:00';
+  const secs = Math.floor((Date.now() - exerciseDetailInput.timerStartedAt) / 1000);
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+}
+function toggleExerciseTimer(idx) {
+  if (exerciseDetailInput.timerRunning) {
+    const secs = Math.floor((Date.now() - exerciseDetailInput.timerStartedAt) / 1000);
+    exerciseDetailInput.timerRunning = false;
+    exerciseDetailInput.reps = String(secs); // 'reps' holds the duration-in-seconds for time-tracked exercises
+    renderLiftsTab();
+  } else {
+    exerciseDetailInput.timerRunning = true;
+    exerciseDetailInput.timerStartedAt = Date.now();
+    startLiveWorkoutTicker();
+    renderLiftsTab();
+  }
+}
+
+function exerciseFinishedSummaryHtml(ex) {
+  const history = state.lifts.filter((l) => l.exercise === ex.name).sort((a, b) => a.date.localeCompare(b.date));
+  const priorBestE1RM = history.length > 1 ? e1RM(history[history.length - 2].weight, history[history.length - 2].reps) : null;
+  const currentE1RM = ex.weight ? e1RM(ex.weight, avgReps(ex.setsLogged.map((s) => s.reps))) : null;
+  const diff = priorBestE1RM && currentE1RM ? Math.round(currentE1RM - priorBestE1RM) : null;
+  const lastLabel = exerciseSetSummaryLabel(ex);
+  return `<div style="margin-top:0.6rem;">
+    <div class="muted small">Last: ${esc(lastLabel)}</div>
+    ${currentE1RM ? `<div class="muted small">Estimated max ${toDisplayWeight(currentE1RM).value} ${weightUnitLabel()}${diff != null ? `, ${diff >= 0 ? 'up' : 'down'} ${Math.abs(diff)} ${weightUnitLabel()} from last session` : ''}.</div>` : ''}
+  </div>`;
+}
+
+// Logs the current input as a set, local-first via wls*, then clears the
+// input for the next one and starts the rest timer (unless this exercise
+// is part of a superset whose round isn't finished yet — then the rest
+// timer only starts once every exercise in the group has logged this
+// round's set, per the mockup's "rest starts after A2" rule).
+async function logCurrentSet(idx) {
+  const session = liveWorkoutSession;
+  const ex = session.exercises[idx];
+  const trackingType = ex.trackingType || 'weight_reps';
+  let repsValue, weightValue = ex.weight;
+  if (trackingType === 'time') { repsValue = Number(exerciseDetailInput.reps); if (!repsValue) return; }
+  else if (trackingType === 'distance_time') { repsValue = Number(exerciseDetailInput.durationSeconds) || 0; if (!exerciseDetailInput.distance) return; }
+  else if (trackingType === 'bodyweight_reps') { repsValue = Number(exerciseDetailInput.reps); if (!repsValue) return; }
+  else { repsValue = Number(exerciseDetailInput.reps); weightValue = fromDisplayWeight(exerciseDetailInput.weight); if (!repsValue || !exerciseDetailInput.weight) return; }
+
+  await wlsLogSet(idx, repsValue, weightValue);
+  if (trackingType === 'distance_time') {
+    const set = ex.setsLogged[ex.setsLogged.length - 1];
+    if (set) set.distance = exerciseDetailInput.distance;
+    wlsSave(session);
+  }
+
+  const readyForRest = !ex.supersetGroup || session.exercises
+    .filter((e) => e.supersetGroup === ex.supersetGroup)
+    .every((e) => e.setsLogged.length >= ex.setsLogged.length);
+
+  const targetSets = ex.prescribedSets || 3; // generic fallback target for ad-hoc/quick-workout exercises with no plan behind them
+  if (ex.setsLogged.length >= targetSets) {
+    exerciseDetailJustFinished = true;
+    wlsClearRestTimer();
+  } else {
+    if (readyForRest) wlsStartRestTimer(90);
+    resetExerciseDetailInput(ex);
+  }
+  renderLiftsTab();
+}
+
+function goToNextExercise(idx) {
+  wlsMarkExerciseDone(idx);
+  const next = liveWorkoutSession.exercises.findIndex((e) => !e.done);
+  liveWorkoutScreen = next !== -1 ? next : 'overview';
+  if (next !== -1) resetExerciseDetailInput(liveWorkoutSession.exercises[next]);
+  renderLiftsTab();
 }
 
 // Powers exercise selection off today's split focus: exercises from the
@@ -10044,13 +10622,41 @@ function wlsSave(session) {
 
 // In-memory mirror of what's in localStorage, kept for synchronous reads
 // (rest timer ticks, etc.) without round-tripping through JSON every time.
+// Shape: { date, startedAt, exercises: [{ name, weight, repRangeString,
+// trackingType, liftRowId, done, supersetGroup, setsLogged: [{reps,
+// weight, completedAt, synced}] }], currentExerciseIndex, restTimer }.
+// A full list (not just one "current" exercise) is what the overview's
+// Done/Up-next/Later actually needs.
 let liveWorkoutSession = null;
 
-function wlsStartExercise(name, weight) {
-  liveWorkoutSession = liveWorkoutSession || { date: localDateStr(), startedAt: new Date().toISOString(), restTimer: null };
-  liveWorkoutSession.currentExercise = { name, weight, liftRowId: null, setsLogged: [] };
-  wlsSave(liveWorkoutSession);
+function wlsEnsureSession() {
+  liveWorkoutSession = liveWorkoutSession || { date: localDateStr(), startedAt: new Date().toISOString(), exercises: [], currentExerciseIndex: 0, restTimer: null };
+  return liveWorkoutSession;
+}
+
+// Adds an exercise to the workout (quick-add, picker, or a plan day) and
+// makes it current. Re-adding the same name (tapping it again from Later)
+// just jumps to its existing entry rather than duplicating it.
+function wlsAddExercise(name, opts = {}) {
+  const session = wlsEnsureSession();
+  let idx = session.exercises.findIndex((e) => e.name === name && !e.done);
+  if (idx === -1) {
+    session.exercises.push({
+      name, weight: opts.weight ?? null, repRangeString: opts.repRangeString ?? null,
+      prescribedSets: opts.prescribedSets ?? null,
+      trackingType: opts.trackingType || 'weight_reps', liftRowId: null, done: false,
+      supersetGroup: opts.supersetGroup ?? null, setsLogged: [],
+    });
+    idx = session.exercises.length - 1;
+  }
+  session.currentExerciseIndex = idx;
+  wlsSave(session);
   wlsRequestWakeLock();
+  return idx;
+}
+
+function wlsCurrentExercise() {
+  return liveWorkoutSession?.exercises?.[liveWorkoutSession.currentExerciseIndex] || null;
 }
 
 // Instant local-first per-set save: the set is in localStorage (and
@@ -10059,42 +10665,54 @@ function wlsStartExercise(name, weight) {
 // updates the SAME row by its known id — no schema change needed, this
 // reads as a normal (if initially short) lifts row to every existing
 // history/PR/analysis code path even if the app dies mid-exercise.
-async function wlsLogSet(reps) {
-  if (!liveWorkoutSession?.currentExercise) return;
-  const ex = liveWorkoutSession.currentExercise;
-  ex.setsLogged.push({ reps, completedAt: new Date().toISOString(), synced: false });
-  wlsSave(liveWorkoutSession);
+async function wlsLogSet(exerciseIndex, reps, weight) {
+  const session = liveWorkoutSession;
+  const ex = session?.exercises?.[exerciseIndex];
+  if (!ex) return;
+  if (weight != null) ex.weight = weight;
+  ex.setsLogged.push({ reps, weight: ex.weight, completedAt: new Date().toISOString(), synced: false });
+  wlsSave(session);
   renderAll();
-  await wlsSyncCurrentExercise();
+  await wlsSyncExercise(exerciseIndex);
 }
 
-async function wlsSyncCurrentExercise() {
-  const ex = liveWorkoutSession?.currentExercise;
+async function wlsSyncExercise(exerciseIndex) {
+  const session = liveWorkoutSession;
+  const ex = session?.exercises?.[exerciseIndex];
   if (!ex || !ex.setsLogged.length) return;
   const repsPerSet = ex.setsLogged.map((s) => s.reps);
   const basePayload = {
     user_id: state.user.id, exercise: ex.name, weight: ex.weight,
     sets: repsPerSet.length, reps_per_set: repsPerSet,
     reps: Math.round(avgReps(repsPerSet) * 10) / 10,
-    date: liveWorkoutSession.date,
+    date: session.date,
+    superset_group: ex.supersetGroup || null,
   };
   if (!ex.liftRowId) {
     const { data, error } = await supabase.from('lifts').insert(basePayload).select('id').single();
-    if (!error && data) { ex.liftRowId = data.id; ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(liveWorkoutSession); await loadLifts(); }
+    if (!error && data) { ex.liftRowId = data.id; ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(session); await loadLifts(); }
     // On failure (offline or otherwise), liftRowId stays null — the next
     // wlsLogSet, the 'online' listener below, or wlsResume() will retry
     // the same insert; nothing is lost in the meantime since it's already
     // on disk via wlsSave() above.
   } else {
-    const { error } = await supabase.from('lifts').update({ sets: basePayload.sets, reps_per_set: basePayload.reps_per_set, reps: basePayload.reps }).eq('id', ex.liftRowId);
-    if (!error) { ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(liveWorkoutSession); await loadLifts(); }
+    const { error } = await supabase.from('lifts').update({ weight: ex.weight, sets: basePayload.sets, reps_per_set: basePayload.reps_per_set, reps: basePayload.reps }).eq('id', ex.liftRowId);
+    if (!error) { ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(session); await loadLifts(); }
   }
 }
 
-function wlsFinishExercise() {
-  if (!liveWorkoutSession) return;
-  liveWorkoutSession.currentExercise = null;
-  wlsSave(liveWorkoutSession);
+// Marks an exercise done (moves it from Up-next into Done on the
+// overview) without removing it — its sets/history stay exactly as
+// logged. Advances currentExerciseIndex to the next not-done exercise,
+// if there is one.
+function wlsMarkExerciseDone(exerciseIndex) {
+  const session = liveWorkoutSession;
+  const ex = session?.exercises?.[exerciseIndex];
+  if (!ex) return;
+  ex.done = true;
+  const nextIdx = session.exercises.findIndex((e) => !e.done);
+  if (nextIdx !== -1) session.currentExerciseIndex = nextIdx;
+  wlsSave(session);
 }
 
 function wlsEndSession() {
@@ -10106,11 +10724,13 @@ function wlsEndSession() {
 // Rest timer: a stored end-timestamp, not a countdown. startRestTimer(90)
 // then calling wlsRestTimeRemaining() a minute later, from a cold app
 // relaunch, still returns ~30000 correctly — nothing was "ticking" while
-// the app was gone.
+// the app was gone. afterSupersetRound marks a timer that only starts once
+// every exercise in a superset round has logged its set (the superset
+// screen is responsible for only calling this once that's true).
 function wlsStartRestTimer(seconds) {
-  liveWorkoutSession = liveWorkoutSession || { date: localDateStr(), startedAt: new Date().toISOString(), currentExercise: null };
-  liveWorkoutSession.restTimer = { endsAt: Date.now() + seconds * 1000 };
-  wlsSave(liveWorkoutSession);
+  const session = wlsEnsureSession();
+  session.restTimer = { endsAt: Date.now() + seconds * 1000 };
+  wlsSave(session);
 }
 function wlsRestTimeRemainingMs() {
   const endsAt = liveWorkoutSession?.restTimer?.endsAt;
@@ -10140,7 +10760,7 @@ function wlsReleaseWakeLock() {
   wlsWakeLockHandle = null;
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && liveWorkoutSession?.currentExercise) wlsRequestWakeLock();
+  if (document.visibilityState === 'visible' && liveWorkoutSession?.exercises?.some((e) => !e.done)) wlsRequestWakeLock();
 });
 
 // App-boot resume. Deliberately scoped to TODAY only: a session left open
@@ -10154,11 +10774,15 @@ function wlsResume() {
   if (!stored) return null;
   if (stored.date !== localDateStr()) return stored; // stale - caller decides what to do, not auto-resumed
   liveWorkoutSession = stored;
-  if (liveWorkoutSession.currentExercise) wlsRequestWakeLock();
-  if (liveWorkoutSession.currentExercise && !liveWorkoutSession.currentExercise.liftRowId) wlsSyncCurrentExercise();
+  const unsyncedIdx = liveWorkoutSession.exercises.findIndex((e) => !e.liftRowId && e.setsLogged.length);
+  if (liveWorkoutSession.exercises.some((e) => !e.done)) wlsRequestWakeLock();
+  if (unsyncedIdx !== -1) wlsSyncExercise(unsyncedIdx);
   return liveWorkoutSession;
 }
-window.addEventListener('online', () => { if (liveWorkoutSession?.currentExercise && !liveWorkoutSession.currentExercise.liftRowId) wlsSyncCurrentExercise(); });
+window.addEventListener('online', () => {
+  if (!liveWorkoutSession) return;
+  liveWorkoutSession.exercises.forEach((e, idx) => { if (!e.liftRowId && e.setsLogged.length) wlsSyncExercise(idx); });
+});
 
 // Item 2 of the AI cost-efficiency batch: the client still owns data access
 // (RLS-scoped state.lifts/state.historyLogs, already loaded for other UI)
