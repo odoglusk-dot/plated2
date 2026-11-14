@@ -10058,6 +10058,11 @@ function renderExerciseDetailScreen(panel, idx) {
         ${exerciseSetsTableHtml(partner, exerciseDefFor(partner.name), true)}
       </div>`).join('')}
 
+      ${!exerciseDetailJustFinished ? `
+      <div class="row" style="justify-content:flex-end;margin-top:0.4rem;">
+        <button class="btn-link" id="exFinishExerciseBtn">${ex.setsLogged.length > 0 ? 'Finish exercise' : 'Skip exercise'} &rarr;</button>
+      </div>` : ''}
+
       <div class="row" style="justify-content:space-between;align-items:center;margin-top:0.75rem;">
         <button class="btn btn-sm btn-ghost" id="exCueToggleBtn">Cue ${exerciseDetailCueExpanded ? '▲' : '▼'}</button>
       </div>
@@ -10070,16 +10075,12 @@ function renderExerciseDetailScreen(panel, idx) {
         </ul>` : ''}
     </div>
 
+    ${rest > 0 ? `
     <div class="rest-timer-bar">
-      ${rest > 0 ? `
-        <span class="mono">⏱ Rest ${Math.floor(restSecs / 60)}:${String(restSecs % 60).padStart(2, '0')}</span>
-        <button class="btn btn-sm btn-ghost" id="exRestPlus15Btn">+15s</button>
-        <button class="btn btn-sm btn-ghost" id="exRestSkipBtn">Skip</button>
-      ` : `<span class="muted small">Ready for your next set</span>`}
-      ${exerciseDetailJustFinished
-        ? `<button class="btn btn-primary" id="exNextExerciseBtn">Next exercise</button>`
-        : `<button class="btn btn-primary" id="exLogSetBtn">✓</button>`}
-    </div>
+      <span class="mono">⏱ Rest ${Math.floor(restSecs / 60)}:${String(restSecs % 60).padStart(2, '0')}</span>
+      <button class="btn btn-sm btn-ghost" id="exRestPlus15Btn">+15s</button>
+      <button class="btn btn-sm btn-ghost" id="exRestSkipBtn">Skip</button>
+    </div>` : ''}
   `;
 
   $('#exOverviewBackBtn').addEventListener('click', () => { liveWorkoutScreen = 'overview'; renderLiftsTab(); });
@@ -10106,6 +10107,8 @@ function renderExerciseDetailScreen(panel, idx) {
   if (restSkip) restSkip.addEventListener('click', () => { wlsClearRestTimer(); renderLiftsTab(); });
   const logBtn = $('#exLogSetBtn', panel);
   if (logBtn) logBtn.addEventListener('click', () => logCurrentSet(idx));
+  const finishBtn = $('#exFinishExerciseBtn', panel);
+  if (finishBtn) finishBtn.addEventListener('click', () => finishCurrentExercise(idx));
   const nextBtn = $('#exNextExerciseBtn', panel);
   if (nextBtn) nextBtn.addEventListener('click', () => goToNextExercise(idx));
 }
@@ -10127,6 +10130,9 @@ function exerciseSetsTableHtml(ex, def, compact) {
       <span>✓</span>
     </div>`).join('');
   const nextSetNum = ex.setsLogged.length + 1;
+  // The log-set button lives inline here, next to the inputs it commits -
+  // not pinned to the bottom of the screen, where the on-screen keyboard
+  // (open while editing these same inputs) was covering it.
   const inputRow = compact ? '' : `
     <div class="row" style="align-items:center;gap:0.4rem;margin-top:0.3rem;">
       <span class="muted mono">${nextSetNum}</span>
@@ -10142,6 +10148,7 @@ function exerciseSetsTableHtml(ex, def, compact) {
         <input class="input mono" id="exSetWeight" placeholder="Weight" type="number" value="${esc(exerciseDetailInput.weight)}" style="width:80px;">
         <input class="input mono" id="exSetReps" placeholder="Reps" type="number" value="${esc(exerciseDetailInput.reps)}" style="width:70px;">
       `}
+      <button class="btn btn-primary" id="exLogSetBtn" style="margin-left:auto;min-width:44px;min-height:44px;flex:none;">✓</button>
     </div>`;
   return `<div style="margin-top:0.6rem;">${rows}${inputRow}</div>`;
 }
@@ -10174,6 +10181,7 @@ function exerciseFinishedSummaryHtml(ex) {
   return `<div style="margin-top:0.6rem;">
     <div class="muted small">Last: ${esc(lastLabel)}</div>
     ${currentE1RM ? `<div class="muted small">Estimated max ${toDisplayWeight(currentE1RM).value} ${weightUnitLabel()}${diff != null ? `, ${diff >= 0 ? 'up' : 'down'} ${Math.abs(diff)} ${weightUnitLabel()} from last session` : ''}.</div>` : ''}
+    <button class="btn btn-primary" id="exNextExerciseBtn" style="width:100%;margin-top:0.6rem;">Next exercise</button>
   </div>`;
 }
 
@@ -10203,14 +10211,20 @@ async function logCurrentSet(idx) {
     .filter((e) => e.supersetGroup === ex.supersetGroup)
     .every((e) => e.setsLogged.length >= ex.setsLogged.length);
 
-  const targetSets = ex.prescribedSets || 3; // generic fallback target for ad-hoc/quick-workout exercises with no plan behind them
-  if (ex.setsLogged.length >= targetSets) {
-    exerciseDetailJustFinished = true;
-    wlsClearRestTimer();
-  } else {
-    if (readyForRest) wlsStartRestTimer(90);
-    resetExerciseDetailInput(ex);
-  }
+  // No fixed set count ends the exercise automatically - the lifter
+  // decides when they're done via "Finish exercise" (finishCurrentExercise
+  // below). ex.prescribedSets, where present, is only a suggested target
+  // shown in the header, never an enforced stopping point.
+  if (readyForRest) wlsStartRestTimer(90);
+  resetExerciseDetailInput(ex);
+  renderLiftsTab();
+}
+
+function finishCurrentExercise(idx) {
+  const ex = liveWorkoutSession.exercises[idx];
+  if (!ex) return;
+  exerciseDetailJustFinished = true;
+  wlsClearRestTimer();
   renderLiftsTab();
 }
 
