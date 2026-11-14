@@ -405,8 +405,10 @@
      bar/+ button) while open. */
   .tab-panel.as-sheet.active { position: fixed; inset: 0; z-index: 38; background: var(--bg);
     overflow-y: auto; margin: 0; max-width: none;
+    /* Extra bottom room (mockup's own .body reserves 70px) so the floating
+       rest-timer pill never overlaps the last bit of real content. */
     padding: calc(56px + env(safe-area-inset-top, 0px)) calc(1.25rem + env(safe-area-inset-right, 0px))
-      calc(1.25rem + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px)); }
+      calc(4.5rem + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px)); }
   .screen-sheet-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 39; display: flex; align-items: center; gap: 0.6rem;
     padding: calc(0.7rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) 0.7rem calc(1rem + env(safe-area-inset-left, 0px));
     background: var(--nav-bg); border-bottom: 1px solid var(--border); }
@@ -781,10 +783,16 @@
      device's home-indicator safe area; the Lifts panel is a full-screen
      sheet (.as-sheet) while this is open, so it's already above the
      3-tab bar, never overlapping it. */
-  .rest-timer-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 39; display: flex; align-items: center; gap: 0.6rem;
-    padding: 0.6rem calc(1rem + env(safe-area-inset-right, 0px)) calc(0.6rem + env(safe-area-inset-bottom, 0px)) calc(1rem + env(safe-area-inset-left, 0px));
-    background: var(--nav-bg); border-top: 1px solid var(--border); }
-  .rest-timer-bar .btn-primary { margin-left: auto; min-width: 44px; min-height: 44px; }
+  /* Floating glass pill, same recipe as .bottom-nav/.plus-fab - the
+     mockup's .rest is this exact treatment, not a full-width flat bar. */
+  .rest-timer-bar { position: fixed; left: calc(14px + env(safe-area-inset-left, 0px)); right: calc(14px + env(safe-area-inset-right, 0px));
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 39; display: flex; align-items: center; gap: 0.6rem;
+    height: 48px; padding: 0 1rem; border-radius: 24px;
+    background: rgba(23,24,27,.86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    color: #fff; font-weight: 600; font-size: 0.8rem; }
+  .rest-timer-bar .mono { color: #fff; }
+  .rest-timer-bar .btn { background: transparent; border: none; color: var(--gold); padding: 0.3rem 0.4rem; }
+  .rest-timer-bar button:first-of-type { margin-left: auto; }
   .heatmap-legend { display: flex; align-items: center; gap: 0.25rem; margin-top: 0.6rem; font-size: 0.68rem; color: var(--text-dim); justify-content: center; }
   .heatmap-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
   .muscle-map-detail { border-top: 1px solid var(--border); margin-top: 0.75rem; padding-top: 0.75rem; }
@@ -849,6 +857,16 @@
   .recovery-row:last-child { border-bottom: none; }
   .goal-overview-row { padding: 0.5rem 0; border-bottom: 1px solid var(--border); cursor: pointer; }
   .goal-overview-row:last-child { border-bottom: none; }
+
+  /* Workout overview's per-exercise status indicator (mockup's Done/
+     Up-next/Later rings) - flex:none + an explicit min-width escapes
+     .row's ">*" rule above, which would otherwise stretch this to 120px. */
+  .ring { width: 30px; height: 30px; min-width: 30px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600; }
+  .ring-done { background: var(--success); color: #fff; }
+  .ring-progress { background: conic-gradient(var(--gold) calc(var(--ring-pct, 0) * 1%), var(--surface-3) 0); color: var(--text); position: relative; }
+  .ring-progress::after { content: attr(data-t); position: absolute; inset: 3px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
+  .ring-none { background: var(--surface-3); color: var(--text-dim); }
 
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
@@ -10126,6 +10144,17 @@ function exerciseSetSummaryLabel(ex) {
   return `${toDisplayWeight(ex.weight).value} ${weightUnitLabel()} × ${ex.setsLogged.map((s) => s.reps).join(', ')}`;
 }
 
+// Mockup's Done (filled check)/Up-next (conic-gradient fraction)/Later
+// (neutral fraction) status ring for a workout-overview exercise row.
+function exerciseRingHtml(ex) {
+  if (ex.done) return `<div class="ring ring-done">&#10003;</div>`;
+  const target = ex.prescribedSets || 3;
+  const logged = ex.setsLogged.length;
+  if (!logged) return `<div class="ring ring-none">0/${target}</div>`;
+  const pct = Math.min(100, Math.round((logged / target) * 100));
+  return `<div class="ring ring-progress" style="--ring-pct:${pct};" data-t="${logged}/${target}"></div>`;
+}
+
 function renderWorkoutOverview(panel) {
   const session = wlsEnsureSession();
   const exercises = session.exercises;
@@ -10143,23 +10172,26 @@ function renderWorkoutOverview(panel) {
       <h3 style="margin-top:0;">Today's workout</h3>
       ${done.length ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">Done</div>` : ''}
       ${done.map((ex) => `
-        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;" data-wo-open="${esc(ex.name)}">
-          <span>&#10003; ${esc(ex.name)}</span>
-          <span class="mono muted small">${esc(exerciseSetSummaryLabel(ex))}</span>
+        <div class="row" style="align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;opacity:0.65;" data-wo-open="${esc(ex.name)}">
+          ${exerciseRingHtml(ex)}
+          <div style="flex:1;min-width:0;">${esc(ex.name)}</div>
+          <span class="mono muted small" style="flex:none;min-width:0;">${esc(exerciseSetSummaryLabel(ex))}</span>
         </div>`).join('')}
       ${current ? `
         <div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.3rem;">Up next</div>
-        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
-          <div>
+        <div class="row" style="align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+          ${exerciseRingHtml(current)}
+          <div style="flex:1;min-width:0;">
             <div><strong>${esc(current.name)}</strong></div>
             <div class="muted small">${goalLineForOverview(current)}</div>
           </div>
-          <button class="btn btn-sm btn-primary" data-wo-open="${esc(current.name)}">Open</button>
+          <button class="btn btn-sm btn-primary" style="flex:none;min-width:0;" data-wo-open="${esc(current.name)}">Open</button>
         </div>` : ''}
       ${later.length ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.3rem;">Later</div>` : ''}
       ${later.map((ex) => `
-        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;" data-wo-open="${esc(ex.name)}">
-          <div>
+        <div class="row" style="align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;" data-wo-open="${esc(ex.name)}">
+          ${exerciseRingHtml(ex)}
+          <div style="flex:1;min-width:0;">
             <div>${esc(ex.name)}</div>
             <div class="muted small">${ex.prescribedSets ? `${ex.setsLogged.length}/${ex.prescribedSets} sets` : `${ex.setsLogged.length} set${ex.setsLogged.length === 1 ? '' : 's'} logged`}${isExerciseStalled(ex.name) ? ` &middot; stalled 4+ sessions` : ''}</div>
           </div>
