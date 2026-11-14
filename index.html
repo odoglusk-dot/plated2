@@ -3780,7 +3780,14 @@ function onPlusTileTap(key) {
   setLastUsedLogTile(key);
   closePlusSheet();
   if (key === 'food') { logSubTab = 'ai'; renderLogTab(); setActiveTab('log'); }
-  else if (key === 'set') { liftsSubTab = 'log'; renderLiftsTab(); setActiveTab('lifts'); }
+  else if (key === 'set') {
+    // Same entry point as Today's Lift card — straight into the live
+    // quick-workout/overview flow (Phase 3), never the old log-a-lift form.
+    liveWorkoutScreen = (liveWorkoutSession && liveWorkoutSession.date === localDateStr() && liveWorkoutSession.exercises?.length) ? 'overview' : 'start';
+    startLiveWorkoutTicker();
+    renderLiftsTab();
+    setActiveTab('lifts');
+  }
   else if (key === 'weight') { showWeightLogPopup(); }
 }
 $('#plusFab').addEventListener('click', openPlusSheet);
@@ -9375,6 +9382,12 @@ let showExerciseGlossary = false;
 let glossaryFilter = { search: '', muscleGroup: '', equipment: '', type: '' };
 let glossaryExpandedName = null;
 let liftsSubTab = 'log'; // 'log' | 'training'
+// The old log-a-lift form (weight/sets/reps-per-set/body-region/muscle-
+// map/superset fields) is no longer part of the default live-logging
+// path (Phase 3's quick-workout/A2 flow owns that now) — kept only for
+// backfilling a session you forgot to log live, behind this explicit,
+// clearly-separate toggle so it never competes with the new flow.
+let showPastSessionLog = false;
 
 let goalCardEditing = false;
 let goalCardError = '';
@@ -10206,7 +10219,7 @@ function suggestedExercisesHtml(alreadyLoggedNames) {
   return `
     <div class="card">
       <h3>Suggested for today</h3>
-      <p class="muted small" style="margin-top:0;">From today's focus (${esc(todayFocusGroups.join(', '))}) — tap to fill in the log form.</p>
+      <p class="muted small" style="margin-top:0;">From today's focus (${esc(todayFocusGroups.join(', '))}) — tap to start logging it.</p>
       <div class="chip-row">
         ${suggestions.map((e) => `<button class="chip" data-suggest-exercise="${esc(e.name)}">${esc(e.name)}</button>`).join('')}
       </div>
@@ -11309,6 +11322,73 @@ function wireTodaysLiftEditEvents(panel) {
   if (endBtn) endBtn.addEventListener('click', endWorkoutSession);
 }
 
+// The old log-a-lift form, unchanged, now reachable only via the
+// explicit "Log a past session" toggle (not the default/live-logging
+// path — see showPastSessionLog above). Lets you backfill any date,
+// which the live quick-workout/A2 flow deliberately doesn't do (it's a
+// live-session tracker, not a retroactive one) — that's the one real
+// capability gap between the two, and the reason this still exists.
+function pastSessionLogFormHtml(groupsForFormDate) {
+  return `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">Log a past session</h3>
+      </div>
+      <div class="field autocomplete-wrap" id="liftExerciseWrap"></div>
+      ${liftForm.exercise ? `
+      <div class="field"><label>Body region (for map)</label>
+        <select id="lift_bodyRegion">
+          <option value="">Body region…</option>
+          ${BODY_REGIONS.map((r) => `<option value="${r}" ${liftForm.bodyRegion === r ? 'selected' : ''}>${BODY_REGION_LABELS[r]}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <div class="row" style="justify-content:space-between;align-items:center;gap:0.5rem;">
+          <label style="margin:0;">Muscles worked <span class="muted">(optional)</span></label>
+          <button type="button" class="btn btn-sm btn-ghost" id="muscleDetailToggle" style="flex:none;">${liftMuscleDetailExpanded ? 'Hide' : (liftForm.muscleMapKeys.length ? 'Edit' : 'Add')}</button>
+        </div>
+        ${liftForm.muscleMapKeys.length ? `<p class="muted small" style="margin:0.25rem 0 0;">Primary: ${esc(MUSCLE_MAP_KEY_LABELS[liftForm.muscleMapKeys[0]])}${liftForm.muscleMapKeys.length > 1 ? ` · Secondary: ${liftForm.muscleMapKeys.slice(1).map((k) => esc(MUSCLE_MAP_KEY_LABELS[k])).join(', ')}` : ''}</p>` : ''}
+        ${liftMuscleDetailExpanded ? `
+        <div class="chip-row" style="margin-top:0.5rem;">
+          ${MUSCLE_MAP_KEYS.map((k) => `<button type="button" class="chip ${liftForm.muscleMapKeys.includes(k) ? 'chip-active' : ''}" data-lift-muscle-map-key="${k}">${esc(MUSCLE_MAP_KEY_LABELS[k])}</button>`).join('')}
+        </div>
+        <p class="muted small" style="margin-top:0.4rem;">First tap sets the primary muscle; more taps count as secondary (half weight). Leave blank to fall back to this exercise's library defaults, if any. Feeds Weekly Training Volume &amp; the Muscle Map.</p>
+        ` : ''}
+      </div>
+      <div class="field" id="liftLiveComparison">${liveComparisonHtml(liftForm.exercise, state.lifts)}</div>
+      ` : ''}
+      <div class="row">
+        <div class="field"><label>Weight (${weightUnitLabel()})</label><input class="input mono" id="lift_weight" type="number" value="${esc(liftForm.weight)}"></div>
+        <div class="field"><label>Sets</label><input class="input mono" id="lift_sets" type="number" min="1" max="20" value="${liftForm.sets}"></div>
+      </div>
+      <button type="button" class="btn btn-sm btn-ghost" id="warmupRampToggle" style="margin-bottom:0.75rem;">${showWarmupRamp ? 'Hide warm-up ramp' : 'Suggest a warm-up ramp'}</button>
+      ${showWarmupRamp ? `<div class="field" style="background:var(--surface-2);border-radius:8px;padding:0.6rem 0.75rem;margin-bottom:0.75rem;"><div id="warmupRampContent">${warmupRampHtml(Number(liftForm.weight) || 0)}</div></div>` : ''}
+      <div class="field">
+        <label>Reps per set (can vary set to set)</label>
+        <div class="reps-per-set-row" id="liftRepsRow">
+          ${liftForm.repsPerSet.map((r, i) => `<div class="reps-per-set-cell">
+            <span>Set ${i + 1}</span>
+            <input class="input mono" type="number" data-rep-idx="${i}" value="${esc(r)}">
+            <label class="warmup-toggle"><input type="checkbox" data-warmup-idx="${i}" ${liftForm.warmupPerSet[i] ? 'checked' : ''}> warm-up</label>
+          </div>`).join('')}
+        </div>
+        <div class="muted small" style="margin-top:0.4rem;">Avg: <span class="mono" style="color:var(--accent);">${avgReps(liftForm.repsPerSet.map((r) => Number(r) || 0)).toFixed(1)}</span> reps/set (used for charts) · total ${liftForm.repsPerSet.reduce((s, r) => s + (Number(r) || 0), 0)} reps</div>
+      </div>
+      <div class="field"><label>Date</label><input class="input" id="lift_date" type="date" value="${liftForm.date}"></div>
+      <label class="checkbox-row"><input type="checkbox" id="lift_isSuperset" ${liftForm.isSuperset ? 'checked' : ''}> Part of a superset/circuit</label>
+      ${liftForm.isSuperset ? `
+        <div class="field">
+          <input class="input" id="lift_supersetGroup" list="liftSupersetGroups" placeholder="Group name (e.g. Superset A)" value="${esc(liftForm.supersetGroup)}">
+          <datalist id="liftSupersetGroups">${groupsForFormDate.map((g) => `<option value="${esc(g)}">`).join('')}</datalist>
+        </div>
+        ${groupsForFormDate.length ? `<p class="muted small">Already on ${fmtLiftDate(liftForm.date)}: ${groupsForFormDate.map(esc).join(', ')} — reuse a name to add to that group.</p>` : ''}
+      ` : ''}
+      ${liftFormError ? `<div class="muted small" style="color:var(--danger);margin-bottom:0.5rem;">${esc(liftFormError)}</div>` : ''}
+      <button class="btn btn-primary" id="lift_save" ${liftFormSaving ? 'disabled' : ''}>${liftFormSaving ? 'Saving…' : 'Add lift'}</button>
+      ${pendingLiftSyncCount() ? `<p class="muted small" style="margin-top:0.4rem;">⏳ ${pendingLiftSyncCount()} set${pendingLiftSyncCount() === 1 ? '' : 's'} saved offline — will sync automatically once you're back online.</p>` : ''}
+    </div>`;
+}
+
 function renderLiftLog(panel) {
   // Skip the whole rebuild while the exercise field is actively focused.
   // This is what actually prevents an unrelated trigger from blurring the
@@ -11343,64 +11423,12 @@ function renderLiftLog(panel) {
   // split as before, now a real sub-tab instead of a collapsed section.
   const liftLogSubTabHtml = `
     ${todaysLiftPanelHtml()}
-    <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <h3 style="margin:0;">Log a lift</h3>
-        <button class="btn btn-sm btn-ghost" id="openGlossaryBtn" style="flex:none;">📖 Glossary</button>
-      </div>
-      <div class="field autocomplete-wrap" id="liftExerciseWrap"></div>
-      ${liftForm.exercise ? `
-      <div class="field"><label>Body region (for map)</label>
-        <select id="lift_bodyRegion">
-          <option value="">Body region…</option>
-          ${BODY_REGIONS.map((r) => `<option value="${r}" ${liftForm.bodyRegion === r ? 'selected' : ''}>${BODY_REGION_LABELS[r]}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field">
-        <div class="row" style="justify-content:space-between;align-items:center;gap:0.5rem;">
-          <label style="margin:0;">Muscles worked <span class="muted">(optional)</span></label>
-          <button type="button" class="btn btn-sm btn-ghost" id="muscleDetailToggle" style="flex:none;">${liftMuscleDetailExpanded ? 'Hide' : (liftForm.muscleMapKeys.length ? 'Edit' : 'Add')}</button>
-        </div>
-        ${liftForm.muscleMapKeys.length ? `<p class="muted small" style="margin:0.25rem 0 0;">Primary: ${esc(MUSCLE_MAP_KEY_LABELS[liftForm.muscleMapKeys[0]])}${liftForm.muscleMapKeys.length > 1 ? ` · Secondary: ${liftForm.muscleMapKeys.slice(1).map((k) => esc(MUSCLE_MAP_KEY_LABELS[k])).join(', ')}` : ''}</p>` : ''}
-        ${liftMuscleDetailExpanded ? `
-        <div class="chip-row" style="margin-top:0.5rem;">
-          ${MUSCLE_MAP_KEYS.map((k) => `<button type="button" class="chip ${liftForm.muscleMapKeys.includes(k) ? 'chip-active' : ''}" data-lift-muscle-map-key="${k}">${esc(MUSCLE_MAP_KEY_LABELS[k])}</button>`).join('')}
-        </div>
-        <p class="muted small" style="margin-top:0.4rem;">First tap sets the primary muscle; more taps count as secondary (half weight). Leave blank to fall back to this exercise's library defaults, if any. Feeds Weekly Training Volume &amp; the Muscle Map.</p>
-        ` : ''}
-      </div>
-      <div class="field" id="liftLiveComparison">${liveComparisonHtml(liftForm.exercise, lifts)}</div>
-      ` : ''}
-      <div class="row">
-        <div class="field"><label>Weight (${weightUnitLabel()})</label><input class="input mono" id="lift_weight" type="number" value="${esc(liftForm.weight)}"></div>
-        <div class="field"><label>Sets</label><input class="input mono" id="lift_sets" type="number" min="1" max="20" value="${liftForm.sets}"></div>
-      </div>
-      <button type="button" class="btn btn-sm btn-ghost" id="warmupRampToggle" style="margin-bottom:0.75rem;">${showWarmupRamp ? 'Hide warm-up ramp' : 'Suggest a warm-up ramp'}</button>
-      ${showWarmupRamp ? `<div class="field" style="background:var(--surface-2);border-radius:8px;padding:0.6rem 0.75rem;margin-bottom:0.75rem;"><div id="warmupRampContent">${warmupRampHtml(Number(liftForm.weight) || 0)}</div></div>` : ''}
-      <div class="field">
-        <label>Reps per set (can vary set to set)</label>
-        <div class="reps-per-set-row" id="liftRepsRow">
-          ${liftForm.repsPerSet.map((r, i) => `<div class="reps-per-set-cell">
-            <span>Set ${i + 1}</span>
-            <input class="input mono" type="number" data-rep-idx="${i}" value="${esc(r)}">
-            <label class="warmup-toggle"><input type="checkbox" data-warmup-idx="${i}" ${liftForm.warmupPerSet[i] ? 'checked' : ''}> warm-up</label>
-          </div>`).join('')}
-        </div>
-        <div class="muted small" style="margin-top:0.4rem;">Avg: <span class="mono" style="color:var(--accent);">${avgReps(liftForm.repsPerSet.map((r) => Number(r) || 0)).toFixed(1)}</span> reps/set (used for charts) · total ${liftForm.repsPerSet.reduce((s, r) => s + (Number(r) || 0), 0)} reps</div>
-      </div>
-      <div class="field"><label>Date</label><input class="input" id="lift_date" type="date" value="${liftForm.date}"></div>
-      <label class="checkbox-row"><input type="checkbox" id="lift_isSuperset" ${liftForm.isSuperset ? 'checked' : ''}> Part of a superset/circuit</label>
-      ${liftForm.isSuperset ? `
-        <div class="field">
-          <input class="input" id="lift_supersetGroup" list="liftSupersetGroups" placeholder="Group name (e.g. Superset A)" value="${esc(liftForm.supersetGroup)}">
-          <datalist id="liftSupersetGroups">${groupsForFormDate.map((g) => `<option value="${esc(g)}">`).join('')}</datalist>
-        </div>
-        ${groupsForFormDate.length ? `<p class="muted small">Already on ${fmtLiftDate(liftForm.date)}: ${groupsForFormDate.map(esc).join(', ')} — reuse a name to add to that group.</p>` : ''}
-      ` : ''}
-      ${liftFormError ? `<div class="muted small" style="color:var(--danger);margin-bottom:0.5rem;">${esc(liftFormError)}</div>` : ''}
-      <button class="btn btn-primary" id="lift_save" ${liftFormSaving ? 'disabled' : ''}>${liftFormSaving ? 'Saving…' : 'Add lift'}</button>
-      ${pendingLiftSyncCount() ? `<p class="muted small" style="margin-top:0.4rem;">⏳ ${pendingLiftSyncCount()} set${pendingLiftSyncCount() === 1 ? '' : 's'} saved offline — will sync automatically once you're back online.</p>` : ''}
+    ${suggestedExercisesHtml(exercises)}
+    <div class="row" style="justify-content:space-between;align-items:center;padding:0.25rem 0.1rem;">
+      <button class="btn-link" id="openGlossaryBtn">&#128214; Browse exercises</button>
+      <button class="btn-link" id="pastSessionToggleBtn">${showPastSessionLog ? 'Hide' : 'Log a past session'}</button>
     </div>
+    ${showPastSessionLog ? pastSessionLogFormHtml(groupsForFormDate) : ''}
     ${exercises.length ? `
     <div class="card">
       <button class="history-day-header" id="exercisesSectionToggle" aria-expanded="${liftExercisesSectionExpanded}">
@@ -11452,7 +11480,6 @@ function renderLiftLog(panel) {
       </div>
       </div>
     </div>` : ''}
-    ${suggestedExercisesHtml(exercises)}
   `;
 
   const liftTrainingSubTabHtml = `
@@ -11611,6 +11638,7 @@ function renderLiftLog(panel) {
   wireTodaysLiftPanel(panel);
   wireSessionAnalysisEvents(panel);
   $('#openGlossaryBtn')?.addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); });
+  $('#pastSessionToggleBtn')?.addEventListener('click', () => { showPastSessionLog = !showPastSessionLog; renderLiftsTab(); });
 
   // Exercises section itself collapses as one unit, independent of the
   // per-exercise rows inside it — same max-height/chevron technique, one
@@ -11677,14 +11705,7 @@ function renderLiftLog(panel) {
   if (staleStillTraining) staleStillTraining.addEventListener('click', () => { staleSessionPromptDismissed = true; renderLiftsTab(); });
   const staleEndWorkout = $('#staleEndWorkoutBtn');
   if (staleEndWorkout) staleEndWorkout.addEventListener('click', endWorkoutSession);
-  $$('[data-suggest-exercise]', panel).forEach((btn) => btn.addEventListener('click', () => {
-    const val = btn.dataset.suggestExercise;
-    liftForm.exercise = val;
-    liftForm.bodyRegion = exerciseDefFor(val)?.body_region || DEFAULT_BODY_REGION[val] || '';
-    liftForm.muscleMapKeys = defaultMuscleMapKeysFor(exerciseDefFor(val));
-    prefillLiftFormFromLast(val);
-    renderLiftsTab();
-  }));
+  $$('[data-suggest-exercise]', panel).forEach((btn) => btn.addEventListener('click', () => quickWorkoutAddExercise(btn.dataset.suggestExercise)));
   $('#lift_save')?.addEventListener('click', addLiftFromForm);
 }
 
@@ -11810,6 +11831,7 @@ function renderLiftDetail(panel) {
       <button class="chip ${liftDetailTab === 'form' ? 'chip-active' : ''}" data-lift-detail-tab="form">Form</button>
       <button class="chip ${liftDetailTab === 'swaps' ? 'chip-active' : ''}" data-lift-detail-tab="swaps">Swaps</button>
     </div>
+    <button class="btn btn-primary" id="addToTodaysWorkoutBtn" style="width:100%;margin-bottom:0.75rem;">Add to today's workout</button>
     ${liftDetailTab === 'form' ? liftDetailFormTabHtml(def)
       : liftDetailTab === 'swaps' ? liftDetailSwapsTabHtml(exercise, def)
       : history.length < 2 ? `<div class="card"><p class="muted" style="text-align:center;">${history.length === 0 ? "No sessions logged yet for this exercise." : "Log one more session to see trends and charts here."}</p></div>`
@@ -11864,6 +11886,10 @@ function renderLiftDetail(panel) {
     liftDetailTab = btn.dataset.liftDetailTab;
     renderLiftsTab();
   }));
+  $('#addToTodaysWorkoutBtn')?.addEventListener('click', () => {
+    liftsSelectedExercise = null;
+    quickWorkoutAddExercise(exercise);
+  });
   if (liftDetailTab === 'history') wireLiftDetailEvents(panel, exercise, history, goal);
   if (liftDetailTab === 'swaps') wireLiftDetailSwapEvents(panel);
 }
