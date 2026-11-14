@@ -201,7 +201,7 @@
   #initialLoadingScreen .display { font-size: 2rem; color: var(--accent); }
 
   /* ── Buttons / inputs ─────────────────────────────────────────── */
-  .btn { font-weight: 600; border-radius: 3px; padding: 0.65rem 1.1rem; border: 1px solid var(--border);
+  .btn { font-weight: 600; border-radius: 12px; padding: 0.65rem 1.1rem; border: 1px solid var(--border);
     background: var(--surface-2); color: var(--text); cursor: pointer; transition: filter .15s, border-color .15s; font-size: 0.92rem; }
   .btn:hover { border-color: var(--accent); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -214,7 +214,7 @@
   .btn-block { width: 100%; }
   .input, select, textarea {
     background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 3px; padding: 0.6rem 0.8rem; font-family: inherit; width: 100%; font-size: 0.92rem;
+    border-radius: 10px; padding: 0.6rem 0.8rem; font-family: inherit; width: 100%; font-size: 0.92rem;
   }
   textarea { resize: vertical; min-height: 4.5rem; }
   label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.3rem; font-weight: 600; }
@@ -227,7 +227,7 @@
      two-icon-button pair to 240px+ and starves the sibling text column. */
   .btn-group { display: flex; align-items: center; gap: 0.4rem; flex: none; min-width: 0; }
 
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 6px 16px rgba(23,24,27,0.04); }
+  .card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 6px 16px rgba(23,24,27,0.04); }
   .card h3 { margin: 0 0 0.75rem; font-size: 1.3rem; }
   .muted { color: var(--text-dim); font-size: 0.85rem; }
   .toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: var(--text);
@@ -3781,9 +3781,11 @@ function onPlusTileTap(key) {
   closePlusSheet();
   if (key === 'food') { logSubTab = 'ai'; renderLogTab(); setActiveTab('log'); }
   else if (key === 'set') {
-    // Same entry point as Today's Lift card — straight into the live
-    // quick-workout/overview flow (Phase 3), never the old log-a-lift form.
-    liveWorkoutScreen = (liveWorkoutSession && liveWorkoutSession.date === localDateStr() && liveWorkoutSession.exercises?.length) ? 'overview' : 'start';
+    // The fast path (mockup 3b): a dedicated picker + single-exercise
+    // quick-log screen, not the full quick-workout/overview flow - but it
+    // logs into the same liveWorkoutSession (same autosave, rest timer, PRs).
+    plusLogSetMode = 'pick';
+    plusLogSetSearch = '';
     startLiveWorkoutTicker();
     renderLiftsTab();
     setActiveTab('lifts');
@@ -9749,10 +9751,23 @@ function liftHistoryRowHtml(lift, isLast) {
 let liveWorkoutScreen = null;
 let liveWorkoutElapsedTickerId = null;
 
+// The "+" sheet's fast Set-logging path (mockup 3b): a dedicated picker
+// (search / today's workout / recent) plus a single-exercise quick-log
+// screen with steppers instead of typed fields, layered on top of
+// whatever liveWorkoutScreen state already is - it logs into the same
+// liveWorkoutSession as the full flow (shared autosave, rest timer, PRs).
+// null = not showing; 'pick' = the picker; 'quick' = the quick-log screen
+// for plusLogSetExerciseIdx.
+let plusLogSetMode = null;
+let plusLogSetExerciseIdx = null;
+let plusLogSetSearch = '';
+
 function renderLiftsTab() {
   const panel = $('#panel-lifts');
   if (!panel) return;
   updateScreenSheetTitle();
+  if (plusLogSetMode === 'pick') return renderPlusLogSetPicker(panel);
+  if (plusLogSetMode === 'quick') return renderPlusLogSetQuick(panel, plusLogSetExerciseIdx);
   if (liveWorkoutScreen === 'start') return renderQuickWorkoutStart(panel);
   if (liveWorkoutScreen === 'overview') return renderWorkoutOverview(panel);
   if (typeof liveWorkoutScreen === 'number') return renderExerciseDetailScreen(panel, liveWorkoutScreen);
@@ -9782,7 +9797,7 @@ function startLiveWorkoutTicker() {
     // Stop once there's nothing live to tick for, or the Lifts sheet
     // itself isn't the one open any more (e.g. the user backed out via
     // the outer sheet-close chevron) — no point re-rendering a hidden panel every second.
-    if (liveWorkoutScreen === null || state.sheetTab !== 'lifts') { stopLiveWorkoutTicker(); return; }
+    if ((liveWorkoutScreen === null && plusLogSetMode === null) || state.sheetTab !== 'lifts') { stopLiveWorkoutTicker(); return; }
     // renderLiftsTab() replaces the whole panel's innerHTML, which would
     // destroy and recreate any input the user is mid-keystroke in,
     // stealing focus and dropping characters. Skip this tick while a
@@ -9902,6 +9917,187 @@ function quickWorkoutAddExercise(name) {
   resetExerciseDetailInput(liveWorkoutSession.exercises[idx]);
   startLiveWorkoutTicker();
   renderLiftsTab();
+}
+
+// ── "+" sheet fast path: Log a set (mockup 3b) ───────────────────────────
+// A dedicated picker (search / today's workout / recent) and a single-
+// exercise quick-log screen with steppers instead of typed fields - both
+// write into the same liveWorkoutSession as the full quick-workout flow,
+// so a set logged here has the same autosave, rest timer and PR checks.
+function renderPlusLogSetPicker(panel) {
+  panel.innerHTML = `
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+      <div class="display" style="font-size:1.1rem;">Log a set</div>
+      <button class="btn btn-sm btn-ghost" id="plsCloseBtn">Close</button>
+    </div>
+    <div class="card">
+      <input class="input" id="plsSearch" placeholder="&#128269; Search exercises" value="${esc(plusLogSetSearch)}">
+      <div id="plsResultsArea" style="margin-top:0.6rem;"></div>
+    </div>
+  `;
+  renderPlsResults(panel);
+  $('#plsCloseBtn').addEventListener('click', () => { plusLogSetMode = null; stopLiveWorkoutTicker(); renderLiftsTab(); });
+  // Patches only #plsResultsArea below, never rebuilds this <input> - same
+  // fix as #qwSearch/#glossarySearch: a full re-render on every keystroke
+  // destroys and recreates the input, dropping focus mid-typing.
+  $('#plsSearch').addEventListener('input', (e) => { plusLogSetSearch = e.target.value; renderPlsResults(panel); });
+}
+
+function plsExerciseRowHtml(name, subtitle, highlighted) {
+  return `<div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+    <div><div>${esc(name)}</div><div class="muted small">${subtitle}</div></div>
+    <button class="chip ${highlighted ? 'chip-active' : ''}" data-pls-log="${esc(name)}">Log</button>
+  </div>`;
+}
+
+function renderPlsResults(panel) {
+  const resultsEl = $('#plsResultsArea', panel);
+  if (!resultsEl) return;
+  const q = plusLogSetSearch.trim().toLowerCase();
+  const session = liveWorkoutSession && liveWorkoutSession.date === localDateStr() ? liveWorkoutSession : null;
+  const inWorkout = session ? session.exercises.filter((e) => !e.done) : [];
+  const inWorkoutNames = new Set(inWorkout.map((e) => e.name));
+
+  if (q) {
+    const results = state.exercises.filter((e) => e.name.toLowerCase().includes(q) || (e.aliases || []).some((a) => a.toLowerCase().includes(q))).slice(0, 20);
+    resultsEl.innerHTML = results.length
+      ? results.map((e) => plsExerciseRowHtml(e.name, inWorkoutNames.has(e.name) ? "In today's workout" : (e.equipment || ''), inWorkoutNames.has(e.name))).join('')
+      : `<p class="muted small">No exercises match.</p>`;
+  } else {
+    const recentNames = recentExerciseNames(6).filter((n) => !inWorkoutNames.has(n));
+    resultsEl.innerHTML = `
+      ${inWorkout.length ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.5rem 0 0.25rem;">In today's workout</div>
+        ${inWorkout.map((e) => {
+          const goal = computeDoubleProgressionGoal(e.name, e.repRangeString);
+          const goalText = goal ? ` &middot; Goal ${toDisplayWeight(goal.weight).value} &times; ${goal.reps}` : '';
+          return plsExerciseRowHtml(e.name, `${e.setsLogged.length} set${e.setsLogged.length === 1 ? '' : 's'} logged${goalText}`, true);
+        }).join('')}` : ''}
+      <div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.5rem 0 0.25rem;">Recent</div>
+      ${recentNames.length ? recentNames.map((n) => {
+        const lt = lastTimeLabelFor(n, false);
+        return plsExerciseRowHtml(n, lt ? `Last ${lt.label}` : '', false);
+      }).join('') : `<p class="muted small">Nothing logged yet.</p>`}
+    `;
+  }
+  $$('[data-pls-log]', panel).forEach((btn) => btn.addEventListener('click', () => plsStartLoggingExercise(btn.dataset.plsLog)));
+}
+
+// Reps are left blank by resetExerciseDetailInput() for the A2 screen
+// (typed fields, no baseline needed) - the steppers here need a starting
+// number to adjust from, so this backfills one only when still empty.
+function plsPrefillRepsIfEmpty(ex) {
+  if (exerciseDetailInput.reps) return;
+  const goal = computeDoubleProgressionGoal(ex.name, ex.repRangeString);
+  const lastSet = ex.setsLogged[ex.setsLogged.length - 1];
+  exerciseDetailInput.reps = goal ? String(goal.reps) : (lastSet ? String(lastSet.reps) : '8');
+}
+
+function plsStartLoggingExercise(name) {
+  const def = exerciseDefFor(name);
+  const idx = wlsAddExercise(name, { trackingType: def?.tracking || 'weight_reps', repRangeString: null });
+  const ex = liveWorkoutSession.exercises[idx];
+  resetExerciseDetailInput(ex);
+  plsPrefillRepsIfEmpty(ex);
+  plusLogSetExerciseIdx = idx;
+  plusLogSetMode = 'quick';
+  startLiveWorkoutTicker();
+  renderLiftsTab();
+}
+
+function plsStepWeight(deltaDisplay) {
+  const current = Number(exerciseDetailInput.weight) || 0;
+  exerciseDetailInput.weight = String(Math.max(0, current + deltaDisplay));
+  renderLiftsTab();
+}
+function plsStepReps(delta) {
+  const current = Number(exerciseDetailInput.reps) || 0;
+  exerciseDetailInput.reps = String(Math.max(0, current + delta));
+  renderLiftsTab();
+}
+
+async function plsLogSetAndRefillReps(idx) {
+  await logCurrentSet(idx);
+  const ex = liveWorkoutSession?.exercises?.[idx];
+  if (ex && plusLogSetMode === 'quick') { plsPrefillRepsIfEmpty(ex); renderLiftsTab(); }
+}
+
+function renderPlusLogSetQuick(panel, idx) {
+  const ex = liveWorkoutSession?.exercises?.[idx];
+  if (!ex) { plusLogSetMode = 'pick'; renderPlusLogSetPicker(panel); return; }
+  const def = exerciseDefFor(ex.name);
+  const lastTime = lastTimeLabelFor(ex.name, true);
+  const goal = computeDoubleProgressionGoal(ex.name, ex.repRangeString);
+  const rest = wlsRestTimeRemainingMs();
+  const restSecs = Math.ceil(rest / 1000);
+  const trackingType = ex.trackingType || def?.tracking || 'weight_reps';
+  const nextSetNum = ex.setsLogged.length + 1;
+  const weightStep = weightUnitLabel() === 'kg' ? 2.5 : 5;
+  const supportsSteppers = trackingType === 'weight_reps' || trackingType === 'bodyweight_reps';
+
+  panel.innerHTML = `
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+      <button class="btn btn-sm btn-ghost" id="plsBackBtn">&#8249; Back</button>
+      <button class="btn-link" id="plsOpenFullBtn">Open full workout</button>
+    </div>
+    <div class="card">
+      <div class="row" style="align-items:flex-start;gap:0.75rem;">
+        ${exerciseMuscleMapSvg(def, 'body-map-compact--header')}
+        <div style="flex:1;">
+          <h3 style="margin:0 0 0.2rem;">${esc(ex.name)}</h3>
+          ${lastTime ? `<div class="muted small">Last: ${esc(lastTime.label)}</div>` : `<div class="muted small">First time logging this one</div>`}
+          ${goal ? `<div class="muted small">Goal: ${toDisplayWeight(goal.weight).value} &times; ${goal.reps}</div>` : ''}
+        </div>
+      </div>
+
+      ${supportsSteppers ? `
+      <div class="card" style="margin-top:0.6rem;background:var(--bg);box-shadow:none;">
+        <div class="row" style="justify-content:space-around;text-align:center;">
+          ${trackingType === 'weight_reps' ? `
+          <div>
+            <div class="muted small">Weight</div>
+            <div class="row" style="gap:0.5rem;align-items:center;margin-top:0.25rem;justify-content:center;">
+              <button class="chip" id="plsWeightMinus">&minus;</button>
+              <span class="display" style="min-width:2.5em;text-align:center;">${esc(exerciseDetailInput.weight || '0')}</span>
+              <button class="chip" id="plsWeightPlus">+</button>
+            </div>
+          </div>` : ''}
+          <div>
+            <div class="muted small">Reps</div>
+            <div class="row" style="gap:0.5rem;align-items:center;margin-top:0.25rem;justify-content:center;">
+              <button class="chip" id="plsRepsMinus">&minus;</button>
+              <span class="display" style="min-width:2.5em;text-align:center;">${esc(exerciseDetailInput.reps || '0')}</span>
+              <button class="chip" id="plsRepsPlus">+</button>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="plsLogSetBtn" style="width:100%;margin-top:0.75rem;">Log set ${nextSetNum}</button>
+      </div>` : `<div class="muted small" style="margin-top:0.6rem;">This exercise type isn't supported in the quick-log view yet &mdash; use "Open full workout" above to log it.</div>`}
+
+      ${ex.setsLogged.length ? exerciseSetsTableHtml(ex, def, true) : ''}
+    </div>
+
+    ${rest > 0 ? `
+    <div class="rest-timer-bar">
+      <span class="mono">⏱ Rest ${Math.floor(restSecs / 60)}:${String(restSecs % 60).padStart(2, '0')}</span>
+      <button class="btn btn-sm btn-ghost" id="plsRestPlus15Btn">+15s</button>
+      <button class="btn btn-sm btn-ghost" id="plsRestSkipBtn">Skip</button>
+    </div>` : ''}
+  `;
+
+  $('#plsBackBtn').addEventListener('click', () => { plusLogSetMode = 'pick'; plusLogSetSearch = ''; renderLiftsTab(); });
+  $('#plsOpenFullBtn').addEventListener('click', () => {
+    plusLogSetMode = null;
+    liveWorkoutScreen = idx;
+    resetExerciseDetailInput(ex);
+    renderLiftsTab();
+  });
+  $('#plsWeightMinus')?.addEventListener('click', () => plsStepWeight(-weightStep));
+  $('#plsWeightPlus')?.addEventListener('click', () => plsStepWeight(weightStep));
+  $('#plsRepsMinus')?.addEventListener('click', () => plsStepReps(-1));
+  $('#plsRepsPlus')?.addEventListener('click', () => plsStepReps(1));
+  $('#plsLogSetBtn')?.addEventListener('click', () => plsLogSetAndRefillReps(idx));
+  $('#plsRestPlus15Btn')?.addEventListener('click', () => { wlsStartRestTimer(Math.ceil(wlsRestTimeRemainingMs() / 1000) + 15); renderLiftsTab(); });
+  $('#plsRestSkipBtn')?.addEventListener('click', () => { wlsClearRestTimer(); renderLiftsTab(); });
 }
 
 function quickWorkoutRepeatDay(date) {
