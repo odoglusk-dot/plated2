@@ -207,6 +207,12 @@
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
   .btn-primary:hover { filter: brightness(1.2); }
+  /* The mockup's two-tone CTA convention: gold starts something new
+     (Start, Start workout, Log set N), ink confirms moving forward within
+     a flow already started (Continue, Next exercise). .btn-primary stays
+     ink for the latter; this is only for the former. */
+  .btn-gold { background: var(--gold); color: #1b1408; border-color: var(--gold); font-weight: 700; }
+  .btn-gold:hover { filter: brightness(1.05); }
   .btn-danger { background: transparent; border-color: var(--danger); color: var(--danger); }
   .btn-danger:hover { background: rgba(196,72,58,0.08); }
   .btn-ghost { background: transparent; border-color: transparent; }
@@ -4899,7 +4905,7 @@ function todaysLiftSummaryHtml() {
       <div class="row" style="justify-content:${canReschedule ? 'space-between' : (!hasPlanned && ctx.empty ? 'space-between' : 'flex-end')};align-items:center;border-top:none;padding-top:0.5rem;">
         ${!hasPlanned && ctx.empty ? `<button class="btn-link" id="todaysLiftProgramsLink">Programs</button>` : ''}
         ${canReschedule ? `<button class="btn-link" id="todaysLiftChangeBtn">Change &#8943;</button>` : ''}
-        <button class="btn btn-primary btn-sm" id="todaysLiftCardBtn">${esc(label)}</button>
+        <button class="btn ${label === 'Start' || label === 'Choose a workout' ? 'btn-gold' : 'btn-primary'} btn-sm" id="todaysLiftCardBtn">${esc(label)}</button>
       </div>`}
     </div>`;
 }
@@ -10070,7 +10076,7 @@ function renderPlusLogSetQuick(panel, idx) {
             </div>
           </div>
         </div>
-        <button class="btn btn-primary" id="plsLogSetBtn" style="width:100%;margin-top:0.75rem;">Log set ${nextSetNum}</button>
+        <button class="btn btn-gold" id="plsLogSetBtn" style="width:100%;margin-top:0.75rem;">Log set ${nextSetNum}</button>
       </div>` : `<div class="muted small" style="margin-top:0.6rem;">This exercise type isn't supported in the quick-log view yet &mdash; use "Open full workout" above to log it.</div>`}
 
       ${ex.setsLogged.length ? exerciseSetsTableHtml(ex, def, true) : ''}
@@ -10185,7 +10191,11 @@ function goalLineForOverview(ex) {
 async function finishLiveWorkout() {
   liveWorkoutScreen = null;
   stopLiveWorkoutTicker();
-  wlsReleaseWakeLock();
+  // Clears liveWorkoutSession too (not just the legacy ended_at flag below)
+  // - otherwise the Lifts tab's "is a workout in progress" checks still see
+  // the just-finished session as active, while the Today card (driven by
+  // ended_at) correctly shows it as done. The two must agree.
+  wlsEndSession();
   await endWorkoutSession();
 }
 
@@ -10912,6 +10922,7 @@ async function endWorkoutSession() {
   await loadWorkoutSession();
   showUndoToast('Workout ended', () => reopenWorkoutSession());
   renderLiftsTab();
+  renderDashboard(); // Today tab's card reads ended_at - setActiveTab() alone never re-renders it
   // Regenerates on every End Workout (not just the first) so reopening to
   // log a forgotten set and ending again reflects the updated session —
   // bounded by the 2/day cap in analyze-session.js rather than a "only
@@ -10931,6 +10942,7 @@ async function reopenWorkoutSession() {
   staleSessionPromptDismissed = false;
   await loadWorkoutSession();
   renderLiftsTab();
+  renderDashboard(); // Today tab's card reads ended_at - setActiveTab() alone never re-renders it
 }
 
 // ── Live workout session (Phase 2: workout reliability, before any visual
@@ -10973,6 +10985,10 @@ function wlsSave(session) {
 let liveWorkoutSession = null;
 
 function wlsEnsureSession() {
+  // A session is one calendar day (same rule wlsResume() already enforces)
+  // - a session left over from before midnight must never silently receive
+  // today's sets.
+  if (liveWorkoutSession && liveWorkoutSession.date !== localDateStr()) liveWorkoutSession = null;
   liveWorkoutSession = liveWorkoutSession || { date: localDateStr(), startedAt: new Date().toISOString(), exercises: [], currentExerciseIndex: 0, restTimer: null };
   return liveWorkoutSession;
 }
@@ -11017,6 +11033,11 @@ async function wlsLogSet(exerciseIndex, reps, weight) {
   wlsSave(session);
   renderAll();
   await wlsSyncExercise(exerciseIndex);
+  // A new set is proof today's workout is active, even if an earlier
+  // Finish (same day) left the legacy ended_at flag set - without this,
+  // the Today card keeps showing the day as "ended" while this very set
+  // just got logged into it.
+  if (isSessionEndedToday()) await reopenWorkoutSession();
 }
 
 async function wlsSyncExercise(exerciseIndex) {
@@ -11033,15 +11054,20 @@ async function wlsSyncExercise(exerciseIndex) {
   };
   if (!ex.liftRowId) {
     const { data, error } = await supabase.from('lifts').insert(basePayload).select('id').single();
-    if (!error && data) { ex.liftRowId = data.id; ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(session); await loadLifts(); }
+    if (!error && data) { ex.liftRowId = data.id; ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(session); await loadLifts(); renderDashboard(); }
     // On failure (offline or otherwise), liftRowId stays null — the next
     // wlsLogSet, the 'online' listener below, or wlsResume() will retry
     // the same insert; nothing is lost in the meantime since it's already
     // on disk via wlsSave() above.
   } else {
     const { error } = await supabase.from('lifts').update({ weight: ex.weight, sets: basePayload.sets, reps_per_set: basePayload.reps_per_set, reps: basePayload.reps }).eq('id', ex.liftRowId);
-    if (!error) { ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(session); await loadLifts(); }
+    if (!error) { ex.setsLogged.forEach((s) => (s.synced = true)); wlsSave(session); await loadLifts(); renderDashboard(); }
   }
+  // setActiveTab() only toggles which already-rendered tab-panel is
+  // visible, it never re-renders one - without the renderDashboard() calls
+  // above, the Today tab's "Today's Lift" card kept showing whatever it
+  // looked like before this set's data (today's lifts / ended_at) ever
+  // existed, until some unrelated action happened to re-render it.
 }
 
 // Marks an exercise done (moves it from Up-next into Done on the
