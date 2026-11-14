@@ -3597,6 +3597,7 @@ function screenSheetTitleFor(tab) {
     if (liveWorkoutScreen === 'start') return 'Quick Workout';
     if (liveWorkoutScreen === 'overview') return 'Today’s Workout';
     if (typeof liveWorkoutScreen === 'number') return liveWorkoutSession?.exercises?.[liveWorkoutScreen]?.name || 'Exercise';
+    if (showPlansHub) return plansHubPreviewId ? (PROGRAM_TEMPLATES.find((p) => p.id === plansHubPreviewId)?.name || 'Program') : 'Plans';
     if (showPlanBuilder) return 'Plan Builder';
     if (showBlockBuilder) return 'Block Builder';
     if (showExerciseGlossary) return 'Exercise Library';
@@ -4844,10 +4845,16 @@ function homeWidgetHtml(key, ctx) {
 // customizable screen) still exists unchanged and is reachable from the
 // Lift sheet's Training sub-tab; this is deliberately a short glance
 // card, not a second copy of that breakdown.
+let todaysLiftChangeMenuOpen = false;
+
 function todaysLiftSummaryHtml() {
   const ctx = computeTodaysLiftCtx();
   const activeBlock = state.profile?.active_training_block;
-  const hasPlanned = !!(activeBlock || state.plan);
+  const overrides = pruneScheduleOverrides(state.profile?.schedule_overrides_this_week);
+  const todaysDayIndex = activeBlock ? effectiveBlockDayIndex(activeBlock, localDateStr(), overrides) : null;
+  const restToday = !!activeBlock && todaysDayIndex == null; // explicitly skipped/moved away this week — never mutates the block itself
+  const hasPlanned = !!((activeBlock && !restToday) || state.plan);
+  const todaysEntry = overrides[localDateStr()];
   let label, sub;
   if (!ctx.empty && !ctx.ended) {
     label = 'Continue';
@@ -4855,28 +4862,49 @@ function todaysLiftSummaryHtml() {
   } else if (!ctx.empty && ctx.ended) {
     label = 'View';
     sub = `${ctx.exerciseCount} exercise${ctx.exerciseCount === 1 ? '' : 's'} · complete`;
+  } else if (restToday) {
+    label = 'Choose a workout';
+    sub = todaysEntry?.action === 'skip' ? 'Skipped for today' : 'Moved — rest today';
   } else if (hasPlanned) {
     label = 'Start';
-    sub = todaysFocusLabel();
+    sub = todaysFocusLabel() + (todaysEntry?.shortened ? ' · Shortened' : '');
   } else {
     label = 'Choose a workout';
     sub = 'Nothing planned for today';
   }
+  const canReschedule = ctx.empty && hasPlanned && !!activeBlock;
   return `
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
         <h3 style="margin:0;">Today's Lift</h3>
         <span class="muted small">${esc(sub)}</span>
       </div>
-      <div class="row" style="justify-content:flex-end;border-top:none;padding-top:0.5rem;">
+      ${todaysLiftChangeMenuOpen ? `
+        <div style="margin-top:0.5rem;border-top:1px solid var(--border);padding-top:0.5rem;">
+          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;" data-today-change="move_tomorrow">Move to tomorrow</button>
+          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;margin-top:0.3rem;" data-today-change="shorten">Shorten (mark as shortened)</button>
+          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;margin-top:0.3rem;" data-today-change="skip">Skip this workout</button>
+          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;margin-top:0.3rem;" id="todaysLiftChangeCancelBtn">Cancel</button>
+        </div>
+      ` : `
+      <div class="row" style="justify-content:${canReschedule ? 'space-between' : (!hasPlanned && ctx.empty ? 'space-between' : 'flex-end')};align-items:center;border-top:none;padding-top:0.5rem;">
+        ${!hasPlanned && ctx.empty ? `<button class="btn-link" id="todaysLiftProgramsLink">Programs</button>` : ''}
+        ${canReschedule ? `<button class="btn-link" id="todaysLiftChangeBtn">Change &#8943;</button>` : ''}
         <button class="btn btn-primary btn-sm" id="todaysLiftCardBtn">${esc(label)}</button>
-      </div>
+      </div>`}
     </div>`;
 }
 
 // One-line focus label reused by todaysLiftSummaryHtml's "Start" sub-text
-// — the split day's label when a split is set, else generic.
+// — the active block's day label (honoring this week's reschedule) when
+// one exists, else the split day's label, else generic.
 function todaysFocusLabel() {
+  const block = state.profile?.active_training_block;
+  if (block) {
+    const overrides = pruneScheduleOverrides(state.profile?.schedule_overrides_this_week);
+    const idx = effectiveBlockDayIndex(block, localDateStr(), overrides);
+    if (idx != null) return block.blockDays[idx]?.label || 'Planned workout ready';
+  }
   const split = state.trainingSplit;
   if (!split) return 'Planned workout ready';
   const idx = computeSplitDayIndex(split, localDateStr());
@@ -5734,6 +5762,18 @@ function renderDashboard() {
     renderLiftsTab();
     setActiveTab('lifts');
   });
+  const programsLink = $('#todaysLiftProgramsLink', panel);
+  if (programsLink) programsLink.addEventListener('click', () => {
+    showPlansHub = true;
+    plansHubPreviewId = null;
+    renderLiftsTab();
+    setActiveTab('lifts');
+  });
+  const changeBtn = $('#todaysLiftChangeBtn', panel);
+  if (changeBtn) changeBtn.addEventListener('click', () => { todaysLiftChangeMenuOpen = true; renderDashboard(); });
+  const changeCancelBtn = $('#todaysLiftChangeCancelBtn', panel);
+  if (changeCancelBtn) changeCancelBtn.addEventListener('click', () => { todaysLiftChangeMenuOpen = false; renderDashboard(); });
+  $$('[data-today-change]', panel).forEach((btn) => btn.addEventListener('click', () => applyScheduleChange(btn.dataset.todayChange)));
 
   $$('[data-water]', panel).forEach((btn) => btn.addEventListener('click', () => logWater(Number(btn.dataset.water))));
 
@@ -9703,6 +9743,7 @@ function renderLiftsTab() {
   if (liveWorkoutScreen === 'start') return renderQuickWorkoutStart(panel);
   if (liveWorkoutScreen === 'overview') return renderWorkoutOverview(panel);
   if (typeof liveWorkoutScreen === 'number') return renderExerciseDetailScreen(panel, liveWorkoutScreen);
+  if (showPlansHub) return renderPlansHub(panel);
   if (showPlanBuilder) renderPlanBuilder(panel);
   else if (showBlockBuilder) renderBlockBuilder(panel);
   else if (showExerciseGlossary) renderExerciseGlossary(panel);
@@ -12003,6 +12044,68 @@ function computeSplitDayIndex(split, dateStr) {
   return ((daysSince % n) + n) % n;
 }
 
+// Same rotation math as computeSplitDayIndex, for active_training_block —
+// nothing in this codebase previously resolved "which block day is
+// today" at all (Phase 3's exerciseGoalRepRangeFor had to search every
+// day for a name match as a workaround). createdDate is the block's own
+// rotation start, same role split.start_date plays above.
+function computeBlockDayIndex(block, dateStr) {
+  const start = new Date(`${block.createdDate}T00:00:00`);
+  const today = new Date(`${dateStr}T00:00:00`);
+  const daysSince = Math.round((today - start) / 86400000);
+  const n = block.blockDays.length;
+  return ((daysSince % n) + n) % n;
+}
+
+// ── This-week-only reschedule (Phase 5e) — never touches the program/
+// block itself, just which day shows on which date this week. Pruned to
+// the current week automatically, so a stale override never bleeds into
+// next week's rotation.
+function currentWeekKey(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return localDateStr(monday);
+}
+function pruneScheduleOverrides(overrides) {
+  const thisWeek = currentWeekKey(localDateStr());
+  const pruned = {};
+  for (const [date, entry] of Object.entries(overrides || {})) {
+    if (currentWeekKey(date) === thisWeek) pruned[date] = entry;
+  }
+  return pruned;
+}
+// Resolves the effective block-day index for a date, honoring this
+// week's overrides: null means "rest today" (skipped, or moved away).
+function effectiveBlockDayIndex(block, dateStr, overrides) {
+  const entry = (overrides || {})[dateStr];
+  if (entry?.action === 'skip' || entry?.action === 'moved_away') return null;
+  if (entry?.action === 'moved_in') return entry.dayIndex;
+  return computeBlockDayIndex(block, dateStr);
+}
+async function applyScheduleChange(action) {
+  const block = state.profile?.active_training_block;
+  if (!block) return;
+  const today = localDateStr();
+  const tomorrow = subtractDays(today, -1);
+  const overrides = pruneScheduleOverrides(state.profile.schedule_overrides_this_week);
+  if (action === 'skip') {
+    overrides[today] = { action: 'skip' };
+  } else if (action === 'move_tomorrow') {
+    const todayIdx = effectiveBlockDayIndex(block, today, overrides);
+    if (todayIdx == null) return;
+    overrides[today] = { action: 'moved_away' };
+    overrides[tomorrow] = { action: 'moved_in', dayIndex: todayIdx };
+  } else if (action === 'shorten') {
+    overrides[today] = { ...(overrides[today] || {}), shortened: true };
+  }
+  const { error } = await supabase.from('profiles').update({ schedule_overrides_this_week: overrides }).eq('id', state.user.id);
+  if (error) { toast('Could not change today’s schedule: ' + error.message); return; }
+  state.profile = { ...state.profile, schedule_overrides_this_week: overrides };
+  todaysLiftChangeMenuOpen = false;
+  renderAll();
+}
+
 // ── Split rationale cards ────────────────────────────────────────────────
 // Static "what is this / who's it for" copy per preset, plus a frequency
 // note computed live from the actual days array — same code path for
@@ -12506,6 +12609,1627 @@ function generateBlock({ focus, priorities, days, equipment, avoid, poolKey }) {
   });
   return { focus, priorities, days, equipment, avoid, blockDays, createdDate: localDateStr() };
 }
+
+// 10 named, read-only program templates (Phase 5a of the training
+// redesign). Every exercise name is verbatim from the exercises table —
+// see docs/programs-review.md for the full reviewed day-by-day listing.
+// NOT YET WIRED TO ANY SCREEN — this is inert reference data until the
+// Plans hub (Phase 5b) is built and reviewed.
+const PROGRAM_TEMPLATES = [
+  {
+    "id": "ppl-6day",
+    "name": "Push / Pull / Legs",
+    "days": 6,
+    "level": "Intermediate",
+    "goal": "Size",
+    "description": "Each muscle group trained twice a week across two rounds of Push/Pull/Legs. The standard choice for an intermediate lifter training 6 days who wants to add muscle.",
+    "schedule": [
+      {
+        "label": "Push A",
+        "exercises": [
+          {
+            "name": "Bench Press",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Incline Dumbbell Press",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Fly (High-to-Low)",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Overhead Press",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Lateral Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Triceps Pushdown (Rope)",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Pull A",
+        "exercises": [
+          {
+            "name": "Deadlift",
+            "sets": 3,
+            "reps": "5",
+            "rest": "3:00"
+          },
+          {
+            "name": "Pull-Up",
+            "sets": 4,
+            "reps": "6-10",
+            "rest": "2:00"
+          },
+          {
+            "name": "Barbell Row",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Seated Cable Row",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Face Pull",
+            "sets": 3,
+            "reps": "15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Barbell Curl",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Legs A",
+        "exercises": [
+          {
+            "name": "Back Squat",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:30"
+          },
+          {
+            "name": "Romanian Deadlift",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Press",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Extension",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Standing Calf Raise",
+            "sets": 4,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Push B",
+        "exercises": [
+          {
+            "name": "Overhead Press",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Dumbbell Bench Press",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Incline Dumbbell Fly",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Dip (Tricep-Focused)",
+            "sets": 3,
+            "reps": "8-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Lateral Raise",
+            "sets": 3,
+            "reps": "15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Skull Crusher",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Pull B",
+        "exercises": [
+          {
+            "name": "Pendlay Row",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Lat Pulldown",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Chest-Supported Dumbbell Row",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Cable Rear Delt Fly",
+            "sets": 3,
+            "reps": "15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Hammer Curl",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Face Pull",
+            "sets": 2,
+            "reps": "15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Legs B",
+        "exercises": [
+          {
+            "name": "Front Squat",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:30"
+          },
+          {
+            "name": "Bulgarian Split Squat",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Hip Thrust",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Standing Calf Raise",
+            "sets": 4,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Hanging Leg Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "upper-lower-4day",
+    "name": "Upper / Lower",
+    "days": 4,
+    "level": "Intermediate",
+    "goal": "Strength",
+    "description": "Two upper, two lower sessions a week, built around the big barbell lifts at a strength-focused rep range. A good fit for 4 days with solid recovery between sessions.",
+    "schedule": [
+      {
+        "label": "Upper A",
+        "exercises": [
+          {
+            "name": "Bench Press",
+            "sets": 4,
+            "reps": "5",
+            "rest": "2:30"
+          },
+          {
+            "name": "Barbell Row",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Overhead Press",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Lat Pulldown",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Lateral Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Barbell Curl",
+            "sets": 2,
+            "reps": "10-12",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Lower A",
+        "exercises": [
+          {
+            "name": "Back Squat",
+            "sets": 4,
+            "reps": "5",
+            "rest": "2:30"
+          },
+          {
+            "name": "Romanian Deadlift",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Leg Press",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Standing Calf Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Upper B",
+        "exercises": [
+          {
+            "name": "Overhead Press",
+            "sets": 4,
+            "reps": "5",
+            "rest": "2:30"
+          },
+          {
+            "name": "Pull-Up",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Incline Dumbbell Press",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Seated Cable Row",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Lateral Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Triceps Pushdown (Rope)",
+            "sets": 2,
+            "reps": "10-12",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Lower B",
+        "exercises": [
+          {
+            "name": "Deadlift",
+            "sets": 3,
+            "reps": "5",
+            "rest": "3:00"
+          },
+          {
+            "name": "Front Squat",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Bulgarian Split Squat",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Extension",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Seated Calf Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "full-body-3day",
+    "name": "Full Body",
+    "days": 3,
+    "level": "Beginner",
+    "goal": "Strength",
+    "description": "Every major movement pattern, three times a week, with the same core barbell lifts across all three days. The standard starting point for someone new to structured training.",
+    "schedule": [
+      {
+        "label": "Day A",
+        "exercises": [
+          {
+            "name": "Back Squat",
+            "sets": 3,
+            "reps": "5",
+            "rest": "2:30"
+          },
+          {
+            "name": "Bench Press",
+            "sets": 3,
+            "reps": "5",
+            "rest": "2:30"
+          },
+          {
+            "name": "Barbell Row",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Lat Pulldown",
+            "sets": 2,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Plank",
+            "sets": 3,
+            "reps": "30-45s",
+            "rest": "0:45"
+          }
+        ]
+      },
+      {
+        "label": "Day B",
+        "exercises": [
+          {
+            "name": "Deadlift",
+            "sets": 3,
+            "reps": "5",
+            "rest": "3:00"
+          },
+          {
+            "name": "Overhead Press",
+            "sets": 3,
+            "reps": "5",
+            "rest": "2:30"
+          },
+          {
+            "name": "Pull-Up",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Leg Press",
+            "sets": 2,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Crunch",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "0:45"
+          }
+        ]
+      },
+      {
+        "label": "Day C",
+        "exercises": [
+          {
+            "name": "Front Squat",
+            "sets": 3,
+            "reps": "5",
+            "rest": "2:30"
+          },
+          {
+            "name": "Incline Dumbbell Press",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Seated Cable Row",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Romanian Deadlift",
+            "sets": 2,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Hanging Knee Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "0:45"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "bro-split-5day",
+    "name": "Bro Split",
+    "days": 5,
+    "level": "Intermediate",
+    "goal": "Size",
+    "description": "One muscle group per day — chest, back, shoulders, arms, legs — for lifters who want maximum focus and volume on each area per session.",
+    "schedule": [
+      {
+        "label": "Chest",
+        "exercises": [
+          {
+            "name": "Bench Press",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Incline Dumbbell Press",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Fly (Low-to-High)",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Dip (Chest-Focused)",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Push-Up",
+            "sets": 2,
+            "reps": "AMRAP",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Back",
+        "exercises": [
+          {
+            "name": "Deadlift",
+            "sets": 3,
+            "reps": "5",
+            "rest": "3:00"
+          },
+          {
+            "name": "Pull-Up",
+            "sets": 4,
+            "reps": "6-10",
+            "rest": "2:00"
+          },
+          {
+            "name": "Barbell Row",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Lat Pulldown",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Straight-Arm Pulldown",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Shoulders",
+        "exercises": [
+          {
+            "name": "Overhead Press",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Lateral Raise",
+            "sets": 4,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Cable Rear Delt Fly",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Front Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Upright Row",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Arms",
+        "exercises": [
+          {
+            "name": "Barbell Curl",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:00"
+          },
+          {
+            "name": "Close-Grip Bench Press",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Hammer Curl",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Skull Crusher",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Cable Curl",
+            "sets": 2,
+            "reps": "12-15",
+            "rest": "0:45"
+          },
+          {
+            "name": "Triceps Pushdown (Rope)",
+            "sets": 2,
+            "reps": "12-15",
+            "rest": "0:45"
+          }
+        ]
+      },
+      {
+        "label": "Legs",
+        "exercises": [
+          {
+            "name": "Back Squat",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:30"
+          },
+          {
+            "name": "Romanian Deadlift",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Press",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Extension",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Standing Calf Raise",
+            "sets": 4,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "phul-4day",
+    "name": "PHUL",
+    "days": 4,
+    "level": "Intermediate",
+    "goal": "Strength",
+    "description": "Power Hypertrophy Upper Lower: one heavy strength-focused upper/lower pair and one higher-rep hypertrophy-focused upper/lower pair each week.",
+    "schedule": [
+      {
+        "label": "Upper Power",
+        "exercises": [
+          {
+            "name": "Bench Press",
+            "sets": 4,
+            "reps": "3-5",
+            "rest": "2:30"
+          },
+          {
+            "name": "Barbell Row",
+            "sets": 4,
+            "reps": "3-5",
+            "rest": "2:30"
+          },
+          {
+            "name": "Overhead Press",
+            "sets": 3,
+            "reps": "5-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Lat Pulldown",
+            "sets": 3,
+            "reps": "6-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Barbell Curl",
+            "sets": 2,
+            "reps": "6-10",
+            "rest": "1:00"
+          },
+          {
+            "name": "Skull Crusher",
+            "sets": 2,
+            "reps": "6-10",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Lower Power",
+        "exercises": [
+          {
+            "name": "Back Squat",
+            "sets": 4,
+            "reps": "3-5",
+            "rest": "3:00"
+          },
+          {
+            "name": "Romanian Deadlift",
+            "sets": 3,
+            "reps": "5-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Leg Press",
+            "sets": 3,
+            "reps": "6-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "6-10",
+            "rest": "1:00"
+          },
+          {
+            "name": "Standing Calf Raise",
+            "sets": 3,
+            "reps": "6-10",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Upper Hypertrophy",
+        "exercises": [
+          {
+            "name": "Incline Dumbbell Press",
+            "sets": 4,
+            "reps": "8-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Seated Cable Row",
+            "sets": 4,
+            "reps": "8-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Lateral Raise",
+            "sets": 3,
+            "reps": "8-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Chest-Supported T-Bar Row",
+            "sets": 3,
+            "reps": "8-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Hammer Curl",
+            "sets": 2,
+            "reps": "8-12",
+            "rest": "0:45"
+          },
+          {
+            "name": "Triceps Pushdown (Rope)",
+            "sets": 2,
+            "reps": "8-12",
+            "rest": "0:45"
+          }
+        ]
+      },
+      {
+        "label": "Lower Hypertrophy",
+        "exercises": [
+          {
+            "name": "Front Squat",
+            "sets": 4,
+            "reps": "8-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Stiff-Leg Deadlift",
+            "sets": 3,
+            "reps": "8-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Extension",
+            "sets": 3,
+            "reps": "8-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "8-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Seated Calf Raise",
+            "sets": 4,
+            "reps": "8-12",
+            "rest": "1:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "arnold-split-6day",
+    "name": "Arnold Split",
+    "days": 6,
+    "level": "Advanced",
+    "goal": "Size",
+    "description": "Chest/back, shoulders/arms, and legs, each trained twice a week. High weekly volume per muscle group — built for an experienced lifter who recovers well.",
+    "schedule": [
+      {
+        "label": "Chest & Back A",
+        "exercises": [
+          {
+            "name": "Bench Press",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Barbell Row",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Incline Dumbbell Fly",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Lat Pulldown",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Dumbbell Pullover",
+            "sets": 2,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Shoulders & Arms A",
+        "exercises": [
+          {
+            "name": "Overhead Press",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Lateral Raise",
+            "sets": 4,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Barbell Curl",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Skull Crusher",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Cable Rear Delt Fly",
+            "sets": 2,
+            "reps": "15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Legs A",
+        "exercises": [
+          {
+            "name": "Back Squat",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "2:00"
+          },
+          {
+            "name": "Leg Press",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Extension",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Standing Calf Raise",
+            "sets": 4,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Chest & Back B",
+        "exercises": [
+          {
+            "name": "Incline Dumbbell Press",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Pull-Up",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Fly (High-to-Low)",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Seated Cable Row",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Straight-Arm Pulldown",
+            "sets": 2,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Shoulders & Arms B",
+        "exercises": [
+          {
+            "name": "Dumbbell Shoulder Press (Standing)",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Lateral Raise",
+            "sets": 4,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Hammer Curl",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Close-Grip Bench Press",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Face Pull",
+            "sets": 2,
+            "reps": "15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Legs B",
+        "exercises": [
+          {
+            "name": "Front Squat",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "2:00"
+          },
+          {
+            "name": "Romanian Deadlift",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Bulgarian Split Squat",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Seated Calf Raise",
+            "sets": 4,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "upper-lower-ppl-5day",
+    "name": "Upper/Lower + PPL",
+    "days": 5,
+    "level": "Intermediate",
+    "goal": "Size",
+    "description": "A 5-day hybrid: two Upper/Lower days to build strength on the big lifts, then a Push/Pull/Legs round for extra volume and isolation work.",
+    "schedule": [
+      {
+        "label": "Upper",
+        "exercises": [
+          {
+            "name": "Bench Press",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Barbell Row",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Overhead Press",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Lat Pulldown",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Lateral Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Lower",
+        "exercises": [
+          {
+            "name": "Back Squat",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:30"
+          },
+          {
+            "name": "Romanian Deadlift",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Press",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Standing Calf Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Push",
+        "exercises": [
+          {
+            "name": "Incline Dumbbell Press",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Dip (Chest-Focused)",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Lateral Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Triceps Pushdown (Rope)",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Pull",
+        "exercises": [
+          {
+            "name": "Deadlift",
+            "sets": 3,
+            "reps": "5",
+            "rest": "3:00"
+          },
+          {
+            "name": "Pull-Up",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "2:00"
+          },
+          {
+            "name": "Seated Cable Row",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Barbell Curl",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Legs",
+        "exercises": [
+          {
+            "name": "Front Squat",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "2:00"
+          },
+          {
+            "name": "Bulgarian Split Squat",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Hanging Leg Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "full-body-2day",
+    "name": "Minimal Full Body",
+    "days": 2,
+    "level": "Beginner",
+    "goal": "Maintenance",
+    "description": "Two sessions a week covering every major movement — for a busy schedule, or maintaining strength while other training (sport, cardio) takes priority.",
+    "schedule": [
+      {
+        "label": "Day A",
+        "exercises": [
+          {
+            "name": "Back Squat",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Bench Press",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Barbell Row",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Plank",
+            "sets": 3,
+            "reps": "30-45s",
+            "rest": "0:45"
+          }
+        ]
+      },
+      {
+        "label": "Day B",
+        "exercises": [
+          {
+            "name": "Deadlift",
+            "sets": 3,
+            "reps": "5",
+            "rest": "3:00"
+          },
+          {
+            "name": "Overhead Press",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Pull-Up",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Cable Crunch",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "0:45"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "glute-focus-4day",
+    "name": "Glute & Hamstring Focus",
+    "days": 4,
+    "level": "Intermediate",
+    "goal": "Size",
+    "description": "Two lower-body days built around hip-hinge and single-leg work for glute/hamstring priority, balanced with two upper-body days so nothing else falls behind.",
+    "schedule": [
+      {
+        "label": "Lower (Glute Focus) A",
+        "exercises": [
+          {
+            "name": "Hip Thrust",
+            "sets": 4,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Romanian Deadlift",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Bulgarian Split Squat",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Cable Pull-Through",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Standing Calf Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Upper A",
+        "exercises": [
+          {
+            "name": "Bench Press",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Barbell Row",
+            "sets": 3,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Overhead Press",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Lat Pulldown",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Lower (Glute Focus) B",
+        "exercises": [
+          {
+            "name": "Back Squat",
+            "sets": 4,
+            "reps": "6-8",
+            "rest": "2:00"
+          },
+          {
+            "name": "Single-Leg Hip Thrust",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Leg Curl",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Glute Kickback Machine",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Seated Calf Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          }
+        ]
+      },
+      {
+        "label": "Upper B",
+        "exercises": [
+          {
+            "name": "Incline Dumbbell Press",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Seated Cable Row",
+            "sets": 3,
+            "reps": "8-10",
+            "rest": "1:30"
+          },
+          {
+            "name": "Lateral Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Hammer Curl",
+            "sets": 2,
+            "reps": "10-12",
+            "rest": "0:45"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "bodyweight-3day",
+    "name": "Bodyweight Full Body",
+    "days": 3,
+    "level": "Beginner",
+    "goal": "Strength",
+    "description": "No equipment beyond a pull-up bar. Full-body strength built from progressions of push-ups, pull-ups, and single-leg squats — works anywhere, including travel.",
+    "schedule": [
+      {
+        "label": "Day A",
+        "exercises": [
+          {
+            "name": "Push-Up",
+            "sets": 4,
+            "reps": "AMRAP",
+            "rest": "1:30"
+          },
+          {
+            "name": "Pull-Up",
+            "sets": 4,
+            "reps": "6-10",
+            "rest": "2:00"
+          },
+          {
+            "name": "Bodyweight Squat",
+            "sets": 3,
+            "reps": "15-20",
+            "rest": "1:00"
+          },
+          {
+            "name": "Plank",
+            "sets": 3,
+            "reps": "30-45s",
+            "rest": "0:45"
+          }
+        ]
+      },
+      {
+        "label": "Day B",
+        "exercises": [
+          {
+            "name": "Pike Push-Up",
+            "sets": 3,
+            "reps": "8-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Chin-Up",
+            "sets": 4,
+            "reps": "6-10",
+            "rest": "2:00"
+          },
+          {
+            "name": "Pistol Squat",
+            "sets": 3,
+            "reps": "5-8",
+            "rest": "1:30"
+          },
+          {
+            "name": "Hollow Hold",
+            "sets": 3,
+            "reps": "20-30s",
+            "rest": "0:45"
+          }
+        ]
+      },
+      {
+        "label": "Day C",
+        "exercises": [
+          {
+            "name": "Diamond Push-Up",
+            "sets": 3,
+            "reps": "10-15",
+            "rest": "1:00"
+          },
+          {
+            "name": "Inverted Row",
+            "sets": 4,
+            "reps": "8-12",
+            "rest": "1:30"
+          },
+          {
+            "name": "Split Squat",
+            "sets": 3,
+            "reps": "10-12",
+            "rest": "1:00"
+          },
+          {
+            "name": "Hanging Knee Raise",
+            "sets": 3,
+            "reps": "12-15",
+            "rest": "0:45"
+          }
+        ]
+      }
+    ]
+  }
+];
+
+
+// Converts a static program template into the SAME shape generateBlock()
+// produces, so the entire existing Block Builder edit UI (swap/remove+
+// undo/add/sets-reps-edit, all already built) works as Phase 5's 'your
+// version' editing with zero new editor code. sourceProgramId/Name are
+// additive fields (generateBlock's own output never sets them) used by
+// Reset-to-original to know which template to regenerate from — the
+// template itself (PROGRAM_TEMPLATES) is never mutated, only this copy.
+function programTemplateToBlock(template) {
+  const blockDays = template.schedule.map((day) => ({
+    label: day.label,
+    groups: [],
+    exercises: day.exercises.map((ex) => ({
+      name: ex.name,
+      muscle: exerciseDefFor(ex.name)?.muscle_map_key || null,
+      sets: ex.sets,
+      reps: ex.reps,
+      tags: [],
+      reason: `From the ${template.name} program.`,
+    })),
+  }));
+  return {
+    focus: template.name, priorities: [], days: template.days, equipment: [], avoid: [],
+    blockDays, createdDate: localDateStr(),
+    sourceProgramId: template.id, sourceProgramName: template.name,
+  };
+}
+
+// ── Plans hub (Phase 5b/5c: programs, "your version" editing) ──────────
+// Browsing/previewing a program template is its own small flow; starting
+// or customizing one hands off to the EXISTING Block Builder step-3 edit
+// view (see programTemplateToBlock above) rather than a new editor.
+let showPlansHub = false;
+let plansHubFilterLevel = '';
+let plansHubPreviewId = null; // a PROGRAM_TEMPLATES id, or null when showing the hub list
+let plansHubChangeDaysTargetId = null; // 5d: a candidate template id being previewed as a day-count change
 
 let showBlockBuilder = false;
 let blockBuilderStep = 1;
@@ -13016,20 +14740,30 @@ function wireBlockBuilderEditEvents(panel) {
 
 function blockBuilderStep3Html() {
   const block = blockBuilderPreview;
+  const isProgram = !!block.sourceProgramId;
   const focusOpt = BLOCK_FOCUS_OPTIONS.find((o) => o.key === block.focus);
   return `<div class="card">
-    <h3>4-week ${esc(focusOpt ? focusOpt.name : block.focus)} block</h3>
-    <p class="muted small" style="margin-top:-0.5rem;">${block.priorities.length ? `Priority: ${block.priorities.map((p) => esc(MUSCLE_MAP_KEY_LABELS[p])).join(', ')}` : 'No priority areas selected'}</p>
-    <div class="chip-row" style="margin-top:0.5rem;">
-      <span class="mono muted small">${esc(blockSplitName(block.days))}</span>
-      <span class="mono muted small">${block.days} days/week</span>
-      <span class="mono muted small">${block.equipment.length ? esc(block.equipment.join(', ')) : 'Any equipment'}</span>
-      <span class="mono muted small">${block.avoid.length ? 'Avoiding: ' + esc(block.avoid.map((a) => BLOCK_AVOID_OPTIONS.find((o) => o.key === a)?.label || a).join(', ')) : 'No avoid filters'}</span>
-    </div>
-    <div class="stat-grid-2" style="margin-top:0.9rem;grid-template-columns:repeat(4,1fr);gap:0.4rem;">
-      ${BLOCK_WEEK_STRIP.map((w, i) => `<div class="stat-card-sm" style="padding:0.5rem;text-align:center;"><div class="muted small">Wk ${i + 1}</div><div style="font-size:0.78rem;font-weight:600;">${esc(w)}</div></div>`).join('')}
-    </div>
-    <p class="muted small" style="margin-top:0.6rem;">Weeks 2–3 add a set to each main lift. Week 4 (deload) drops to about half the sets at lighter, non-max effort.</p>
+    ${isProgram ? `
+      <h3>${esc(block.sourceProgramName)} &middot; Your version${block.deloadActive ? ' &middot; Deload week' : ''}</h3>
+      <p class="muted small" style="margin-top:-0.5rem;">Based on the ${esc(block.sourceProgramName)} program. The original template is untouched — this is your own editable copy.${block.deloadActive ? ' Sets below are reduced to about 60% for this deload week; End deload restores your normal sets exactly as they were.' : ''}</p>
+      <div class="chip-row" style="margin-top:0.5rem;">
+        <span class="mono muted small">${block.days} days/week</span>
+      </div>
+      <p class="muted small" style="margin-top:0.5rem;">No visual deload timeline yet — simplified to this one-tap toggle for time. Double progression (the Goal: line on each exercise screen) already runs continuously underneath.</p>
+    ` : `
+      <h3>4-week ${esc(focusOpt ? focusOpt.name : block.focus)} block</h3>
+      <p class="muted small" style="margin-top:-0.5rem;">${block.priorities.length ? `Priority: ${block.priorities.map((p) => esc(MUSCLE_MAP_KEY_LABELS[p])).join(', ')}` : 'No priority areas selected'}</p>
+      <div class="chip-row" style="margin-top:0.5rem;">
+        <span class="mono muted small">${esc(blockSplitName(block.days))}</span>
+        <span class="mono muted small">${block.days} days/week</span>
+        <span class="mono muted small">${block.equipment.length ? esc(block.equipment.join(', ')) : 'Any equipment'}</span>
+        <span class="mono muted small">${block.avoid.length ? 'Avoiding: ' + esc(block.avoid.map((a) => BLOCK_AVOID_OPTIONS.find((o) => o.key === a)?.label || a).join(', ')) : 'No avoid filters'}</span>
+      </div>
+      <div class="stat-grid-2" style="margin-top:0.9rem;grid-template-columns:repeat(4,1fr);gap:0.4rem;">
+        ${BLOCK_WEEK_STRIP.map((w, i) => `<div class="stat-card-sm" style="padding:0.5rem;text-align:center;"><div class="muted small">Wk ${i + 1}</div><div style="font-size:0.78rem;font-weight:600;">${esc(w)}</div></div>`).join('')}
+      </div>
+      <p class="muted small" style="margin-top:0.6rem;">Weeks 2–3 add a set to each main lift. Week 4 (deload) drops to about half the sets at lighter, non-max effort.</p>
+    `}
   </div>
   ${block.blockDays.map((day, i) => blockDayCardHtml(day, i, i === blockBuilderExpandedDayIndex)).join('')}
   <div class="card">
@@ -13037,7 +14771,11 @@ function blockBuilderStep3Html() {
       ? `<button class="btn btn-ghost" id="blockCloseBtn" style="width:100%;">Close</button>`
       : `<button class="btn btn-primary" id="blockStartBtn" style="width:100%;" ${blockBuilderStarting ? 'disabled' : ''}>${blockBuilderStarting ? 'Starting…' : 'Start block'}</button>
          <button class="btn btn-ghost" id="blockBackStep3" style="width:100%;margin-top:0.5rem;">Back</button>`}
-    <p class="muted small" style="text-align:center;margin-top:0.6rem;margin-bottom:0;">Built from your inputs — focus, priorities, days, equipment, and what to avoid.</p>
+    ${isProgram && blockBuilderViewingActive ? `<button class="btn btn-ghost" id="blockResetToOriginalBtn" style="width:100%;margin-top:0.5rem;">Reset to original</button>` : ''}
+    ${isProgram && blockBuilderViewingActive ? (block.deloadActive
+      ? `<button class="btn btn-ghost" id="blockEndDeloadBtn" style="width:100%;margin-top:0.5rem;">End deload week</button>`
+      : `<button class="btn btn-ghost" id="blockStartDeloadBtn" style="width:100%;margin-top:0.5rem;">Start a deload week</button>`) : ''}
+    <p class="muted small" style="text-align:center;margin-top:0.6rem;margin-bottom:0;">${isProgram ? 'Drag handles aren’t available yet — use swap/add/remove on each day below.' : 'Built from your inputs — focus, priorities, days, equipment, and what to avoid.'}</p>
   </div>`;
 }
 
@@ -13072,6 +14810,222 @@ function wireBlockBuilderStep3(panel) {
     toast('Block started — check Training for your Week 1 plan.');
     renderLiftsTab();
   });
+  const resetBtn = $('#blockResetToOriginalBtn', panel);
+  if (resetBtn) resetBtn.addEventListener('click', async () => {
+    const template = PROGRAM_TEMPLATES.find((p) => p.id === blockBuilderPreview.sourceProgramId);
+    if (!template) return;
+    const fresh = programTemplateToBlock(template);
+    const { error } = await supabase.from('profiles').update({ active_training_block: fresh }).eq('id', state.user.id);
+    if (error) { toast('Could not reset: ' + error.message); return; }
+    state.profile = { ...state.profile, active_training_block: fresh };
+    blockBuilderPreview = fresh;
+    blockBuilderExpandedDayIndex = 0;
+    toast('Reset to the original program.');
+    renderLiftsTab();
+  });
+  const startDeloadBtn = $('#blockStartDeloadBtn', panel);
+  if (startDeloadBtn) startDeloadBtn.addEventListener('click', () => applyDeloadToggle(true));
+  const endDeloadBtn = $('#blockEndDeloadBtn', panel);
+  if (endDeloadBtn) endDeloadBtn.addEventListener('click', () => applyDeloadToggle(false));
+}
+
+// 5f deload: sets reduced to ~60% (min 1), exact pre-deload sets restored
+// on End deload rather than reconstructed from scratch, so a user's own
+// manual edits (swaps/added exercises) survive the round trip untouched.
+async function applyDeloadToggle(startingDeload) {
+  const current = blockBuilderPreview;
+  let next;
+  if (startingDeload) {
+    next = {
+      ...current, deloadActive: true,
+      preDeloadBlockDays: current.blockDays,
+      blockDays: current.blockDays.map((day) => ({
+        ...day,
+        exercises: day.exercises.map((ex) => ({ ...ex, sets: Math.max(1, Math.round(ex.sets * 0.6)) })),
+      })),
+    };
+  } else {
+    next = { ...current, deloadActive: false, blockDays: current.preDeloadBlockDays || current.blockDays, preDeloadBlockDays: undefined };
+  }
+  const { error } = await supabase.from('profiles').update({ active_training_block: next }).eq('id', state.user.id);
+  if (error) { toast('Could not update: ' + error.message); return; }
+  state.profile = { ...state.profile, active_training_block: next };
+  blockBuilderPreview = next;
+  toast(startingDeload ? 'Deload week started — sets reduced to about 60%.' : 'Deload ended — back to your normal sets.');
+  renderLiftsTab();
+}
+
+const PLANS_HUB_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
+
+function renderPlansHub(panel) {
+  if (plansHubChangeDaysTargetId) return renderChangeDaysPreview(panel);
+  if (plansHubPreviewId) return renderProgramPreview(panel, plansHubPreviewId);
+  const active = state.profile?.active_training_block;
+  const level = plansHubFilterLevel;
+  const templates = PROGRAM_TEMPLATES.filter((p) => !level || p.level === level);
+  // 5d: "change days per week" for a program-sourced block means switching
+  // to a different template at the target day count and previewing what
+  // changes first — reflowing ONE program's own exercises across a
+  // different day count isn't well-defined for a fixed template (there's
+  // no rule for which exercises merge/drop), so this is the honest scope.
+  const otherDayCounts = active?.sourceProgramId
+    ? [...new Set(PROGRAM_TEMPLATES.filter((p) => p.id !== active.sourceProgramId).map((p) => p.days))].sort((a, b) => a - b)
+    : [];
+
+  panel.innerHTML = `
+    ${active ? `<div class="card">
+      <h3 style="margin-top:0;">Your program</h3>
+      <p style="margin:0;">${esc(active.sourceProgramName || active.focus)}</p>
+      <p class="muted small" style="margin:0.2rem 0 0;">${active.days} day${active.days === 1 ? '' : 's'}/week &middot; ${active.blockDays.length} day${active.blockDays.length === 1 ? '' : 's'} in rotation</p>
+      <button class="btn btn-sm" id="plansHubViewActiveBtn" style="margin-top:0.6rem;">View / customize</button>
+      ${active.sourceProgramId ? `
+        <div class="chip-row" style="margin-top:0.6rem;">
+          <span class="muted small">Change days/week:</span>
+          ${otherDayCounts.map((d) => `<button class="chip" data-plans-change-days="${d}">${d}</button>`).join('')}
+        </div>` : ''}
+    </div>` : `<div class="card"><p class="muted" style="margin:0;">No program active. Browse one below, or keep using Start workout from Today without one — a program is never required.</p></div>`}
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">Browse programs</h3>
+        <button class="btn btn-sm btn-ghost" id="plansHubCloseBtn">Close</button>
+      </div>
+      <div class="chip-row" style="margin-top:0.5rem;">
+        <button class="chip ${level === '' ? 'chip-active' : ''}" data-plans-level="">All</button>
+        ${PLANS_HUB_LEVELS.map((l) => `<button class="chip ${level === l ? 'chip-active' : ''}" data-plans-level="${l}">${l}</button>`).join('')}
+      </div>
+    </div>
+    <div class="card" style="padding:0.25rem 0;">
+      ${templates.map((p) => `
+        <div class="row" style="justify-content:space-between;align-items:center;padding:0.6rem 1rem;border-bottom:1px solid var(--border);cursor:pointer;" data-plans-open="${p.id}">
+          <div>
+            <div><strong>${esc(p.name)}</strong></div>
+            <div class="muted small">${p.days} days &middot; ${esc(p.level)} &middot; ${esc(p.goal)}</div>
+          </div>
+          <span class="muted">&rsaquo;</span>
+        </div>`).join('')}
+    </div>
+  `;
+  $('#plansHubCloseBtn').addEventListener('click', () => { showPlansHub = false; renderLiftsTab(); });
+  const viewActiveBtn = $('#plansHubViewActiveBtn', panel);
+  if (viewActiveBtn) viewActiveBtn.addEventListener('click', () => {
+    showPlansHub = false;
+    blockBuilderPreview = state.profile.active_training_block;
+    blockBuilderExpandedDayIndex = 0;
+    blockBuilderViewingActive = true;
+    blockBuilderStep = 3;
+    showBlockBuilder = true;
+    renderLiftsTab();
+  });
+  $$('[data-plans-change-days]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    const targetDays = Number(btn.dataset.plansChangeDays);
+    // Prefer a candidate matching the current program's goal, else the
+    // first template at that day count.
+    const candidates = PROGRAM_TEMPLATES.filter((p) => p.days === targetDays);
+    const match = candidates.find((p) => p.goal === active.goal) || candidates[0];
+    if (match) { plansHubChangeDaysTargetId = match.id; renderLiftsTab(); }
+  }));
+  $$('[data-plans-level]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    plansHubFilterLevel = btn.dataset.plansLevel;
+    renderLiftsTab();
+  }));
+  $$('[data-plans-open]', panel).forEach((row) => row.addEventListener('click', () => {
+    plansHubPreviewId = row.dataset.plansOpen;
+    renderLiftsTab();
+  }));
+}
+
+// 5d: mandatory preview before applying a days/week change. Shows exactly
+// what moves: which day labels disappear, which are new, and which
+// exercises carry over by name between the current program and the
+// candidate at the new day count — conservative in that it only ever
+// shows the comparison and requires an explicit Apply, never switches
+// anything silently.
+function renderChangeDaysPreview(panel) {
+  const target = PROGRAM_TEMPLATES.find((p) => p.id === plansHubChangeDaysTargetId);
+  const active = state.profile?.active_training_block;
+  if (!target || !active) { plansHubChangeDaysTargetId = null; renderLiftsTab(); return; }
+
+  const oldLabels = active.blockDays.map((d) => d.label);
+  const newLabels = target.schedule.map((d) => d.label);
+  const oldExerciseNames = new Set(active.blockDays.flatMap((d) => d.exercises.map((e) => e.name)));
+  const newExerciseNames = new Set(target.schedule.flatMap((d) => d.exercises.map((e) => e.name)));
+  const kept = [...oldExerciseNames].filter((n) => newExerciseNames.has(n));
+  const dropped = [...oldExerciseNames].filter((n) => !newExerciseNames.has(n));
+  const added = [...newExerciseNames].filter((n) => !oldExerciseNames.has(n));
+
+  panel.innerHTML = `
+    <div class="card">
+      <h3 style="margin-top:0;">${active.days} days &rarr; ${target.days} days</h3>
+      <p class="muted small">Switching from <strong>${esc(active.sourceProgramName || active.focus)}</strong> to <strong>${esc(target.name)}</strong>. Your current version is replaced by a fresh copy of the new program — nothing is merged exercise-by-exercise, since the two programs don't share a day structure.</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">What will change</h3>
+      <div class="row" style="justify-content:space-between;"><span class="muted small">Days</span><span class="mono small">${esc(oldLabels.join(', '))}</span></div>
+      <div class="row" style="justify-content:space-between;margin-top:0.3rem;"><span class="muted small">&rarr;</span><span class="mono small">${esc(newLabels.join(', '))}</span></div>
+      <div style="margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.6rem;">
+        <p class="muted small" style="margin:0;">${kept.length} exercise${kept.length === 1 ? '' : 's'} carry over, ${added.length} new, ${dropped.length} dropped.</p>
+        ${dropped.length ? `<p class="muted small" style="margin:0.3rem 0 0;">Dropped: ${esc(dropped.join(', '))}</p>` : ''}
+        ${added.length ? `<p class="muted small" style="margin:0.3rem 0 0;">Added: ${esc(added.join(', '))}</p>` : ''}
+      </div>
+    </div>
+    <div class="row" style="gap:0.5rem;">
+      <button class="btn" id="changeDaysCancelBtn" style="flex:1;">Cancel</button>
+      <button class="btn btn-primary" id="changeDaysApplyBtn" style="flex:1;">Apply</button>
+    </div>
+  `;
+  $('#changeDaysCancelBtn').addEventListener('click', () => { plansHubChangeDaysTargetId = null; renderLiftsTab(); });
+  $('#changeDaysApplyBtn').addEventListener('click', async () => {
+    plansHubChangeDaysTargetId = null;
+    await startProgramTemplate(target, false);
+  });
+}
+
+function renderProgramPreview(panel, templateId) {
+  const template = PROGRAM_TEMPLATES.find((p) => p.id === templateId);
+  if (!template) { plansHubPreviewId = null; renderPlansHub(panel); return; }
+  panel.innerHTML = `
+    <button class="btn btn-sm btn-ghost" id="programPreviewBackBtn">&#8249; Programs</button>
+    <div class="card">
+      <h3 style="margin-top:0;">${esc(template.name)}</h3>
+      <p class="muted small" style="margin:0;">${template.days} days/week &middot; ${esc(template.level)} &middot; ${esc(template.goal)}</p>
+      <p style="margin-top:0.5rem;">${esc(template.description)}</p>
+    </div>
+    ${template.schedule.map((day) => `
+      <div class="card">
+        <h3 style="margin-top:0;">${esc(day.label)}</h3>
+        ${day.exercises.map((ex) => `<div class="row" style="justify-content:space-between;padding:0.3rem 0;"><span>${esc(ex.name)}</span><span class="mono muted small">${ex.sets} &times; ${esc(ex.reps)}</span></div>`).join('')}
+      </div>`).join('')}
+    <div class="row" style="gap:0.5rem;">
+      <button class="btn" id="programPreviewCustomizeBtn" style="flex:1;">Customize</button>
+      <button class="btn btn-primary" id="programPreviewStartBtn" style="flex:1;">Start program</button>
+    </div>
+  `;
+  $('#programPreviewBackBtn').addEventListener('click', () => { plansHubPreviewId = null; renderLiftsTab(); });
+  $('#programPreviewCustomizeBtn').addEventListener('click', () => startProgramTemplate(template, true));
+  $('#programPreviewStartBtn').addEventListener('click', () => startProgramTemplate(template, false));
+}
+
+// "A program is always copied before it's edited, so the original is
+// never lost" — both Start and Customize write a fresh copy (never the
+// template itself, which lives only in the static PROGRAM_TEMPLATES
+// constant) to active_training_block. Customize additionally jumps
+// straight into the Block Builder's edit view; Start just activates it.
+async function startProgramTemplate(template, goToEditor) {
+  const block = programTemplateToBlock(template);
+  const { error } = await supabase.from('profiles').update({ active_training_block: block }).eq('id', state.user.id);
+  if (error) { toast('Could not start program: ' + error.message); return; }
+  state.profile = { ...state.profile, active_training_block: block };
+  plansHubPreviewId = null;
+  showPlansHub = false;
+  if (goToEditor) {
+    blockBuilderPreview = block;
+    blockBuilderExpandedDayIndex = 0;
+    blockBuilderViewingActive = true;
+    blockBuilderStep = 3;
+    showBlockBuilder = true;
+  }
+  toast(goToEditor ? `Now editing your version of ${template.name}.` : `${template.name} started.`);
+  renderLiftsTab();
 }
 
 function renderBlockBuilder(panel) {
@@ -13873,6 +15827,7 @@ function progressHistoryLinksHtml() {
 function progressToolsSectionHtml() {
   return `
     <div class="muted small" style="text-transform:uppercase;letter-spacing:0.04em;margin:1rem 0 0.4rem;">Tools</div>
+    <div class="card" id="progressPlansRow" style="cursor:pointer;"><div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;"><span>Programs</span><span class="muted small">›</span></div></div>
     <div class="card" id="progressExerciseLibraryRow" style="cursor:pointer;"><div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;"><span>Exercise Library <span class="muted small">— includes 1RM tracking</span></span><span class="muted small">›</span></div></div>
     <div class="card" id="progressBudgetProteinRow" style="cursor:pointer;"><div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;"><span>Budget-Optimized Protein</span><span class="muted small">›</span></div></div>`;
 }
@@ -13941,6 +15896,9 @@ function renderProgressTab() {
   if (muscleMapRow) muscleMapRow.addEventListener('click', openLiftsTraining);
   const plansRow = $('#progressPlansBlocksRow', panel);
   if (plansRow) plansRow.addEventListener('click', openLiftsTraining);
+
+  const plansHubRow = $('#progressPlansRow', panel);
+  if (plansHubRow) plansHubRow.addEventListener('click', () => { showPlansHub = true; plansHubPreviewId = null; renderLiftsTab(); setActiveTab('lifts'); });
 
   const libRow = $('#progressExerciseLibraryRow', panel);
   if (libRow) libRow.addEventListener('click', () => { showExerciseGlossary = true; renderLiftsTab(); setActiveTab('lifts'); });
