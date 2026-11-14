@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Krafft Training Redesign Full Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cream:#F4F2ED;--card:#FBFAF7;--ink:#17181B;--muted:#77756F;--line:#E4E0D6;
+  --brass:#8A6A3A;--gold:#C7A15E;--ok:#4C7A5A;--warn:#B5532F;
+  --glass:rgba(23,24,27,.86);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#E9E6DF;color:var(--ink);font-family:Inter,system-ui,sans-serif;line-height:1.45;padding:40px 24px 80px}
+.wrap{max-width:1280px;margin:0 auto}
+h1{font-family:Fraunces,serif;font-weight:600;font-size:34px;letter-spacing:-.01em}
+h2{font-family:Fraunces,serif;font-weight:600;font-size:26px;margin-top:56px}
+h3{font-size:15px;font-weight:700;margin-bottom:4px}
+.lede{color:var(--muted);max-width:720px;margin-top:8px}
+.mono{font-family:"IBM Plex Mono",monospace}
+.tag{display:inline-block;font:500 11px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--brass);margin-bottom:6px}
+.sec-note{color:var(--muted);font-size:14px;max-width:760px;margin:6px 0 22px}
+.opt{margin-top:30px;padding-top:22px;border-top:1px solid #D5D0C4}
+.opt-head{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
+.opt-head h3{font-size:18px;font-family:Fraunces,serif;font-weight:600}
+.pill{font:500 11px "IBM Plex Mono",monospace;padding:3px 8px;border-radius:99px;background:#fff;border:1px solid var(--line);color:var(--muted)}
+.pill.rec{background:var(--ink);color:#fff;border-color:var(--ink)}
+.opt p{color:var(--muted);font-size:14px;max-width:760px}
+.phones{display:flex;flex-wrap:wrap;gap:26px;margin-top:16px}
+.cap{font-size:12px;color:var(--muted);margin-top:8px;text-align:center;max-width:290px}
+
+/* phone */
+.ph{width:290px;height:600px;background:var(--ink);border-radius:40px;padding:8px;box-shadow:0 18px 40px rgba(23,24,27,.18)}
+.scr{width:100%;height:100%;background:var(--cream);border-radius:33px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.sb{height:34px;flex:none;display:flex;justify-content:space-between;align-items:flex-end;padding:0 22px 4px;font:600 11px Inter}
+.body{flex:1;overflow:hidden;padding:6px 14px 70px;display:flex;flex-direction:column;gap:9px}
+.date{font:500 9.5px "IBM Plex Mono";letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ttl{font:600 24px Fraunces,serif;letter-spacing:-.01em;line-height:1.1}
+.ttl.s{font-size:19px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:11px 12px}
+.dark{background:linear-gradient(160deg,#25272C,#17181B);color:#fff;border:0;border-radius:18px;padding:13px}
+.dark .m{color:#B9B6AD}
+.m{color:var(--muted);font-size:11px}
+.b{font-weight:600}
+.row{display:flex;align-items:center;gap:8px}
+.sp{justify-content:space-between}
+.grow{flex:1;min-width:0}
+.btn{background:var(--gold);color:#1b1408;font-weight:700;font-size:12px;border-radius:12px;padding:9px 14px;text-align:center}
+.btn.ink{background:var(--ink);color:#fff}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.chip{font-size:10.5px;font-weight:600;padding:5px 9px;border-radius:99px;background:#fff;border:1px solid var(--line);white-space:nowrap}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chips{display:flex;gap:6px;overflow:hidden}
+.dots{display:flex;gap:4px}
+.dots i{width:18px;height:5px;border-radius:3px;background:#DAD5C8;display:block}
+.dots i.d{background:var(--brass)}.dots i.n{background:var(--gold)}
+.wk{display:flex;gap:5px}
+.wk div{flex:1;text-align:center;font:500 9.5px "IBM Plex Mono";padding:6px 0;border-radius:9px;background:#fff;border:1px solid var(--line);color:var(--muted)}
+.wk div.t{background:var(--ink);color:#fff;border-color:var(--ink)}
+.wk div.ok{background:#E3EDE6;color:var(--ok);border-color:#CFE0D4}
+.ico{width:34px;height:34px;border-radius:10px;background:#EFEBE0;display:grid;place-items:center;font-size:15px;flex:none}
+.bar{height:6px;border-radius:4px;background:#E7E2D6;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--brass);border-radius:4px}
+.bar i.ok{background:var(--ok)}.bar i.w{background:var(--warn)}
+.tabs{position:absolute;left:14px;bottom:14px;height:48px;border-radius:24px;background:var(--glass);backdrop-filter:blur(14px);display:flex;gap:2px;padding:5px;color:#fff;font-size:11px;font-weight:600}
+.tabs span{padding:0 13px;display:grid;place-items:center;border-radius:20px}
+.tabs .a{background:rgba(255,255,255,.16)}
+.fab{position:absolute;right:14px;bottom:14px;width:48px;height:48px;border-radius:50%;background:var(--gold);display:grid;place-items:center;font:700 24px Inter;color:#1b1408;box-shadow:0 8px 18px rgba(199,161,94,.4)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:24px 24px 0 0;padding:10px 14px 18px;box-shadow:0 -14px 30px rgba(0,0,0,.18)}
+.grab{width:36px;height:4px;border-radius:2px;background:#CFC9BA;margin:0 auto 10px}
+.scrim{position:absolute;inset:0;background:rgba(23,24,27,.35)}
+.sel{border:2px solid var(--ink)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tbl{width:100%;border-collapse:collapse;font-size:11px}
+.tbl td,.tbl th{padding:5px 4px;text-align:left;border-bottom:1px solid var(--line)}
+.tbl th{font:500 9px "IBM Plex Mono";color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.set{display:grid;grid-template-columns:20px 1fr 52px 52px 26px;gap:6px;align-items:center;font-size:11px;padding:4px 0}
+.set .in{background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 0;text-align:center;font:500 11px "IBM Plex Mono"}
+.set .ck{width:24px;height:24px;border-radius:8px;border:1.5px solid #CFC9BA;display:grid;place-items:center;font-size:12px}
+.set .ck.y{background:var(--ok);border-color:var(--ok);color:#fff}
+.set .pv{color:var(--muted);font:400 10px "IBM Plex Mono"}
+.rest{position:absolute;left:14px;right:76px;bottom:14px;height:48px;border-radius:24px;background:var(--glass);color:#fff;display:flex;align-items:center;gap:10px;padding:0 16px;font-size:12px;font-weight:600}
+.callout{background:var(--ink);color:#fff;border-radius:18px;padding:20px 24px;margin-top:36px}
+.callout h3{font-family:Fraunces,serif;font-size:20px;margin-bottom:6px}
+.callout p{color:#CFCBC0;font-size:14px;max-width:820px}
+table.cmp{width:100%;border-collapse:collapse;margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:13px}
+table.cmp th,table.cmp td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+table.cmp th{font:500 11px "IBM Plex Mono";text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:#F1EEE6}
+
+.hand{color:#B3AD9F;font-size:14px;letter-spacing:-2px;width:16px;flex:none}
+.stp{display:flex;align-items:center;gap:6px;font:500 12px "IBM Plex Mono"}
+.stp i{font-style:normal;width:22px;height:22px;border-radius:7px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font:600 13px Inter}
+.banner{background:#F3E9D2;border:1px solid #E5D3A8;border-radius:12px;padding:8px 10px;font-size:11px;color:#5A4520}
+.diff{display:grid;gap:5px;font-size:11.5px}
+.diff div{display:flex;gap:7px;align-items:flex-start}
+.diff b{font:600 11px "IBM Plex Mono";width:14px;flex:none}
+.add{color:var(--ok)}.rem{color:var(--warn)}.mov{color:var(--brass)}
+.big{font:600 30px Fraunces,serif;line-height:1}
+.stat{flex:1;text-align:center;padding:9px 4px;border-radius:14px;background:#fff;border:1px solid var(--line)}
+.stat .m{font-size:10px;margin-top:3px}
+.ring{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font:600 10px "IBM Plex Mono";flex:none}
+.ring.d{background:var(--ok);color:#fff}.ring.p{background:conic-gradient(var(--gold) 0 66%,#E5DFD0 0);color:var(--ink);position:relative}
+.ring.p::after{content:attr(data-t);position:absolute;inset:4px;border-radius:50%;background:var(--card);display:grid;place-items:center}
+.ring.n{background:#E5DFD0;color:var(--muted)}
+.lbl{font:500 9.5px "IBM Plex Mono";letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+.fig{width:62px;height:96px;flex:none}
+.figbox{width:76px;height:104px;border-radius:14px;background:linear-gradient(160deg,#EFEBE0,#E4DFD1);display:grid;place-items:center;flex:none;position:relative}
+.figbox small{position:absolute;bottom:3px;left:0;right:0;text-align:center;font:500 8px "IBM Plex Mono";color:var(--muted);letter-spacing:.06em}
+.prb{background:#F3E9D2;color:#6B4E1C;border:1px solid #E5D3A8;border-radius:99px;font:600 10px Inter;padding:3px 8px}
+.flow{margin-top:14px;color:var(--muted);font-size:13px;max-width:780px}
+.note{font-size:13px;color:var(--muted);max-width:780px;margin-top:10px}
+.note b{color:var(--ink)}
+.sbar{display:flex;gap:6px;align-items:center}
+.toast{position:absolute;left:14px;right:14px;bottom:72px;background:var(--glass);color:#fff;border-radius:14px;padding:10px 14px;font-size:12px;display:flex;justify-content:space-between}
+.find{display:flex;gap:8px;align-items:flex-start;font-size:11.5px;padding:7px 0;border-bottom:1px solid var(--line)}
+.find:last-child{border:0}
+.find i{font-style:normal;width:20px;height:20px;border-radius:7px;display:grid;place-items:center;font-size:11px;flex:none}
+@media(max-width:700px){body{padding:24px 14px 60px}.ph{width:100%;max-width:320px}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="figF" viewBox="0 0 60 100">
+  <circle cx="30" cy="8" r="6" fill="#D9D3C4"/>
+  <rect x="26" y="13" width="8" height="6" rx="2" fill="#D9D3C4"/>
+  <circle cx="16" cy="25" r="6.5" fill="var(--delt,#D9D3C4)"/><circle cx="44" cy="25" r="6.5" fill="var(--delt,#D9D3C4)"/>
+  <rect x="20" y="21" width="20" height="13" rx="5" fill="var(--chest,#D9D3C4)"/>
+  <rect x="23" y="35" width="14" height="19" rx="4" fill="var(--abs,#D9D3C4)"/>
+  <rect x="8" y="31" width="8" height="21" rx="4" fill="var(--arm,#D9D3C4)"/><rect x="44" y="31" width="8" height="21" rx="4" fill="var(--arm,#D9D3C4)"/>
+  <rect x="19" y="56" width="10" height="26" rx="5" fill="var(--quad,#D9D3C4)"/><rect x="31" y="56" width="10" height="26" rx="5" fill="var(--quad,#D9D3C4)"/>
+  <rect x="20" y="84" width="8" height="14" rx="4" fill="var(--calf,#D9D3C4)"/><rect x="32" y="84" width="8" height="14" rx="4" fill="var(--calf,#D9D3C4)"/>
+</symbol>
+<symbol id="figB" viewBox="0 0 60 100">
+  <circle cx="30" cy="8" r="6" fill="#D9D3C4"/>
+  <path d="M22 17 L38 17 L36 24 L24 24 Z" fill="var(--trap,#D9D3C4)"/>
+  <circle cx="16" cy="26" r="6.5" fill="var(--delt,#D9D3C4)"/><circle cx="44" cy="26" r="6.5" fill="var(--delt,#D9D3C4)"/>
+  <path d="M20 26 L40 26 L37 46 L23 46 Z" fill="var(--lat,#D9D3C4)"/>
+  <rect x="24" y="26" width="12" height="9" rx="3" fill="var(--uback,#D9D3C4)"/>
+  <rect x="24" y="46" width="12" height="9" rx="3" fill="var(--lback,#D9D3C4)"/>
+  <rect x="8" y="32" width="8" height="21" rx="4" fill="var(--arm,#D9D3C4)"/><rect x="44" y="32" width="8" height="21" rx="4" fill="var(--arm,#D9D3C4)"/>
+  <rect x="20" y="56" width="20" height="10" rx="5" fill="var(--glute,#D9D3C4)"/>
+  <rect x="20" y="67" width="9" height="16" rx="4" fill="var(--ham,#D9D3C4)"/><rect x="31" y="67" width="9" height="16" rx="4" fill="var(--ham,#D9D3C4)"/>
+  <rect x="20" y="85" width="8" height="13" rx="4" fill="var(--calf,#D9D3C4)"/><rect x="32" y="85" width="8" height="13" rx="4" fill="var(--calf,#D9D3C4)"/>
+</symbol>
+</defs></svg>
+
+<div class="wrap">
+<span class="tag">Full mockup · design reference for Claude Code · mock data</span>
+<h1>Krafft training redesign: the whole flow</h1>
+<p class="lede">Everything we picked, together in one walk-through: Today, Plans hub (1A), editable "your version" splits (B1, B2, B3), the muscle-first exercise screen (A2) inside the improved workout flow (3A + A3), session analysis, and the exercise library with history, form and swaps (2A). It uses the same look as the live app (cream, brass, Fraunces / Inter / IBM Plex Mono), the 3-tab bar and gold + button. Sample numbers only.</p>
+
+<div class="note" style="background:#F3E9D2;border:1px solid #E5D3A8;border-radius:12px;padding:10px 14px;color:#5A4520"><b style="color:#5A4520">Body map:</b> the figures in this mockup are placeholders. In the build, every diagram uses the app's existing muscle map from the website, with the same look. Only the highlighting (brass = primary muscle, lighter = secondary) and the sizing are new.</div>
+<div class="note"><b>Design tokens:</b> cream <span class="mono">#F4F2ED</span> · card <span class="mono">#FBFAF7</span> · ink <span class="mono">#17181B</span> · muted <span class="mono">#77756F</span> · line <span class="mono">#E4E0D6</span> · brass <span class="mono">#8A6A3A</span> · gold <span class="mono">#C7A15E</span> · ok <span class="mono">#4C7A5A</span> · warn <span class="mono">#B5532F</span>. Glass tab bar <span class="mono">rgba(23,24,27,.86)</span>, blur 14px. Minimum tap target 44pt. Numbers in IBM Plex Mono.</div>
+
+<!-- ============ 1 TODAY ============ -->
+<h2>1. Today: start the next workout in one tap</h2>
+<p class="flow">The Today tab keeps its protein hero, now with all macros, and the "Today's lift" card shows the active program's next workout.</p>
+<div class="phones">
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:8px">
+      <div class="row sp"><div><div class="date">Fri Nov 13</div><div class="ttl">Today</div></div><span class="chip">🔥 12</span></div>
+      <div class="dark">
+        <div class="row sp"><div class="m mono" style="font-size:9.5px;letter-spacing:.08em">PROTEIN</div><div class="m">Goal 180 g</div></div>
+        <div class="row" style="align-items:baseline;gap:6px;margin:3px 0 6px"><div class="big" style="color:#fff;font-size:34px">128</div><div class="m">g · 71%</div></div>
+        <div class="bar" style="background:#34363B"><i style="width:71%;background:var(--gold)"></i></div>
+        <div style="display:grid;gap:6px;margin-top:10px;font-size:10.5px">
+          <div class="row"><span style="width:54px;color:#B9B6AD">Calories</span><div class="bar grow" style="background:#34363B"><i style="width:68%;background:#E9E5DA"></i></div><span class="mono" style="color:#fff">1,880 / 2,750</span></div>
+          <div class="row"><span style="width:54px;color:#B9B6AD">Carbs</span><div class="bar grow" style="background:#34363B"><i style="width:60%;background:#E9E5DA"></i></div><span class="mono" style="color:#fff">190 / 315</span></div>
+          <div class="row"><span style="width:54px;color:#B9B6AD">Fat</span><div class="bar grow" style="background:#34363B"><i style="width:74%;background:#E9E5DA"></i></div><span class="mono" style="color:#fff">62 / 84</span></div>
+        </div>
+      </div>
+      <div class="card"><div class="row sp"><div class="m mono" style="font-size:9.5px;letter-spacing:.08em">TODAY'S LIFT · UPPER / LOWER WK 3</div></div>
+        <div class="row sp" style="margin-top:4px"><div><div class="b" style="font-size:15px;font-family:Fraunces,serif">Upper B</div><div class="m">6 exercises · about 55 min</div></div><div class="btn" style="padding:9px 18px">Start</div></div></div>
+      <div class="grid2"><div class="card"><div class="m">Water</div><div class="b" style="font-size:17px;font-family:Fraunces,serif">64 oz</div></div><div class="card"><div class="m">Weight</div><div class="b" style="font-size:17px;font-family:Fraunces,serif">182.4</div></div></div>
+    </div>
+    <div class="tabs"><span class="a">Today</span><span>Progress</span><span>You</span></div><div class="fab">+</div>
+  </div></div><div class="cap">Protein stays the hero; calories, carbs and fat sit under it. Start opens the workout.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:8px">
+      <div class="row sp"><div><div class="date">Fri Nov 13</div><div class="ttl">Today</div></div><span class="chip">🔥 12</span></div>
+      <div class="card"><div class="m mono" style="font-size:9.5px;letter-spacing:.08em;margin-bottom:6px">TODAY'S LIFT</div><div class="b" style="font-size:14px;font-family:Fraunces,serif">Ready when you are</div><div class="m" style="margin:2px 0 9px">No program needed. Start a workout and add exercises as you go.</div><div class="btn" style="margin-bottom:7px">Start workout</div><div class="row sp" style="font-size:11px"><span class="chip">↻ Repeat last: Upper B</span><span class="m" style="text-decoration:underline">Programs</span></div></div>
+      <div class="card"><div class="m mono" style="font-size:9.5px;letter-spacing:.08em;margin-bottom:6px">WORKOUT IN PROGRESS</div><div class="row sp"><div><div class="b" style="font-size:14px;font-family:Fraunces,serif">Upper B</div><div class="m">3 of 6 exercises · 34:12</div></div><div class="btn ink" style="padding:9px 14px">Continue</div></div></div>
+    </div>
+    <div class="tabs"><span class="a">Today</span><span>Progress</span><span>You</span></div><div class="fab">+</div>
+  </div></div><div class="cap">Other lift-card states: no program (Start workout, Repeat last, optional Programs link) and workout in progress. A program is never required.</div></div>
+</div>
+
+<!-- ============ 2 PLANS ============ -->
+<h2>2. Plans: find a program, make it yours</h2>
+<p class="flow">Reached from Today's lift card or Progress → Plans. A program is always copied before it's edited, so the original is never lost.</p>
+<div class="phones">
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body">
+      <div><div class="date">Progress · Plans</div><div class="ttl">Your program</div></div>
+      <div class="dark"><div class="row sp"><div class="m mono" style="font-size:9.5px;letter-spacing:.08em">UPPER / LOWER · WEEK 3 OF 8</div></div>
+        <div class="ttl s" style="margin:6px 0 2px">Upper B</div><div class="m">6 exercises · about 55 min</div>
+        <div class="dots" style="margin:10px 0"><i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i><i></i><i></i><i></i></div><div class="btn">Start workout</div></div>
+      <div class="wk"><div class="ok">M ✓</div><div class="ok">T ✓</div><div>W</div><div class="t">T</div><div>F</div><div>S</div><div>S</div></div>
+      <div class="row sp"><div class="b" style="font-size:13px">Browse programs</div><div class="m">See all</div></div>
+      <div class="chips"><span class="chip on">All</span><span class="chip">Beginner</span><span class="chip">Size</span><span class="chip">Strength</span></div>
+      <div class="card row"><div class="ico">🏋️</div><div class="grow"><div class="b" style="font-size:12.5px">Push / Pull / Legs</div><div class="m">6 days · Intermediate · Size</div></div><div class="m">›</div></div>
+    </div>
+    <div class="tabs"><span>Today</span><span class="a">Progress</span><span>You</span></div><div class="fab">+</div>
+  </div></div><div class="cap">Plans hub.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body">
+      <div class="m">‹ Programs</div>
+      <div><div class="ttl">Push / Pull / Legs</div><div class="m" style="margin-top:3px">6 days · 8 weeks · Intermediate · Size</div></div>
+      <div class="card"><div class="m" style="margin-bottom:6px">Add weight when you hit the top of the rep range. Deload in week 8.</div><div class="row" style="gap:6px"><span class="chip">Barbell</span><span class="chip">Cables</span><span class="chip">Machines</span></div></div>
+      <div class="b" style="font-size:13px">Week 1</div>
+      <div class="card row"><div class="grow"><div class="b" style="font-size:12.5px">Push A</div><div class="m">Chest, shoulders, triceps · 7 ex</div></div><div class="m">›</div></div>
+      <div class="card row"><div class="grow"><div class="b" style="font-size:12.5px">Pull A</div><div class="m">Back, biceps, rear delts · 7 ex</div></div><div class="m">›</div></div>
+      <div class="card row"><div class="grow"><div class="b" style="font-size:12.5px">Legs A</div><div class="m">Quads, hamstrings, calves · 6 ex</div></div><div class="m">›</div></div>
+      <div class="row" style="margin-top:auto"><div class="btn ghost grow">Customize</div><div class="btn ink grow">Start program</div></div>
+    </div>
+  </div></div><div class="cap">Program preview. Customize makes "your version".</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body">
+      <div class="row sp"><div class="m">‹ Done</div><div class="m">⋯</div></div>
+      <div><div class="ttl s">Push / Pull / Legs</div><div class="m" style="margin-top:2px">Your version · based on the Krafft program</div></div>
+      <div class="banner">You're editing your own copy. The original stays safe, and you can reset any time.</div>
+      <div class="card row"><span class="hand">⋮⋮</span><div class="grow"><div class="b" style="font-size:12.5px">Push A</div><div class="m">Mon · 7 exercises</div></div><span class="chip">Edit</span></div>
+      <div class="card row"><span class="hand">⋮⋮</span><div class="grow"><div class="b" style="font-size:12.5px">Pull A</div><div class="m">Tue · 7 exercises</div></div><span class="chip">Edit</span></div>
+      <div class="card row"><span class="hand">⋮⋮</span><div class="grow"><div class="b" style="font-size:12.5px">Legs A</div><div class="m">Wed · 6 exercises</div></div><span class="chip">Edit</span></div>
+      <div class="card" style="border-style:dashed;text-align:center;color:var(--muted);font-size:12px">+ Add a day</div>
+      <div class="row" style="margin-top:auto;gap:7px"><div class="btn ghost grow">Change days / week</div><div class="btn ghost grow" style="color:var(--warn)">Reset</div></div>
+    </div>
+  </div></div><div class="cap">Your version: drag to reorder days, rename, add, reset.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body">
+      <div class="row sp"><div class="m">‹ Back</div><div class="b" style="font-size:12px;color:var(--ok)">Saved</div></div>
+      <div class="ttl s">Push A</div>
+      <div class="card row"><span class="hand">⋮⋮</span><div class="grow"><div class="b" style="font-size:12px">Barbell Bench Press</div><div class="m">3 × 6–8 · Rest 2:00</div></div><span class="chip">⇄</span><span class="chip" style="color:var(--warn)">✕</span></div>
+      <div class="card row"><span class="hand">⋮⋮</span><div class="grow"><div class="b" style="font-size:12px">Incline Dumbbell Press</div><div class="m">3 × 8–10 · Rest 1:30</div></div><span class="chip">⇄</span><span class="chip" style="color:var(--warn)">✕</span></div>
+      <div class="card row" style="border-left:4px solid var(--gold)"><span class="hand">⋮⋮</span><div class="grow"><div class="b" style="font-size:12px">Cable Fly (High-to-Low)</div><div class="m">Superset A · 3 × 10–12</div></div><span class="chip">⇄</span><span class="chip" style="color:var(--warn)">✕</span></div>
+      <div class="card row" style="border-left:4px solid var(--gold)"><span class="hand">⋮⋮</span><div class="grow"><div class="b" style="font-size:12px">Triceps Pushdown (Rope)</div><div class="m">Superset A · 3 × 10–12</div></div><span class="chip">⇄</span><span class="chip" style="color:var(--warn)">✕</span></div>
+      <div class="card" style="border-style:dashed;text-align:center;color:var(--muted);font-size:12px">+ Add exercise</div>
+      <div class="toast"><span>Removed Lateral Raise</span><b style="color:#C7A15E">Undo</b></div>
+    </div>
+  </div></div><div class="cap">Edit a day. Tap an exercise for sets, reps, rest, progression, superset. Remove shows Undo.</div></div>
+</div>
+
+<div class="phones" style="margin-top:20px">
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body">
+      <div class="ttl s">5 days → 4 days</div>
+      <div class="card"><div class="lbl" style="margin-bottom:6px">What will change</div><div class="diff">
+        <div><b class="mov">↻</b><span>Arms day merges into Push A and Pull A</span></div>
+        <div><b class="mov">→</b><span>Legs B moves from Sat to Fri</span></div>
+        <div><b class="rem">−</b><span>2 isolation exercises removed</span></div>
+        <div><b class="add">+</b><span>Biceps and triceps added to Pull and Push</span></div></div></div>
+      <div class="card"><div class="lbl" style="margin-bottom:6px">Weekly sets after</div><div style="display:grid;gap:5px;font-size:10.5px">
+        <div class="row"><span style="width:54px">Chest</span><div class="bar grow"><i class="ok" style="width:76%"></i></div><span class="mono">14</span></div>
+        <div class="row"><span style="width:54px">Back</span><div class="bar grow"><i class="ok" style="width:80%"></i></div><span class="mono">15</span></div>
+        <div class="row"><span style="width:54px">Arms</span><div class="bar grow"><i class="w" style="width:34%"></i></div><span class="mono">7</span></div></div></div>
+      <div class="row" style="margin-top:auto"><div class="btn ghost grow">Cancel</div><div class="btn ink grow">Apply</div></div>
+    </div>
+  </div></div><div class="cap">Change days per week: always a preview first.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body">
+      <div><div class="date">Today</div><div class="ttl">Thursday</div></div>
+      <div class="dark"><div class="ttl s" style="margin:0 0 2px">Upper B</div><div class="m">6 exercises · about 55 min</div><div class="row" style="margin-top:10px;gap:7px"><div class="btn grow">Start</div><div class="btn ghost grow" style="color:#fff;border-color:#4B4D52">Change ⋯</div></div></div>
+      <div class="wk"><div class="ok">M ✓</div><div class="ok">T ✓</div><div>W</div><div class="t">T</div><div>F</div><div>S</div><div>S</div></div>
+    </div>
+    <div class="scrim" style="background:rgba(23,24,27,.28)"></div>
+    <div class="sheet"><div class="grab"></div><div class="b" style="font-size:13px;margin-bottom:6px">Change today</div>
+      <div class="row sp" style="padding:8px 0;border-bottom:1px solid var(--line)"><span style="font-size:12.5px">Move to tomorrow</span><span class="m">›</span></div>
+      <div class="row sp" style="padding:8px 0;border-bottom:1px solid var(--line)"><span style="font-size:12.5px">Swap with Lower B</span><span class="m">›</span></div>
+      <div class="row sp" style="padding:8px 0;border-bottom:1px solid var(--line)"><span style="font-size:12.5px">Shorten (about 35 min)</span><span class="m">›</span></div>
+      <div class="row sp" style="padding:8px 0"><span style="font-size:12.5px;color:var(--warn)">Skip this workout</span><span class="m">›</span></div></div>
+  </div></div><div class="cap">Reschedule without editing the program.</div></div>
+</div>
+
+<!-- ============ 3 WORKOUT ============ -->
+<h2>3. The workout: quick start, overview, exercise screen, supersets, PRs</h2>
+<p class="flow">A program is optional: anyone can start a workout from Today and add exercises as they go. The exercise screen uses the muscle-first header (A2). The rest timer and the ✓ button stay pinned. Every set autosaves the moment it's checked, and the rest timer keeps running if the app goes to the background.</p>
+<div class="phones">
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:9px">
+      <div class="row sp"><div><div class="lbl">Quick workout · 0:00</div><div class="ttl s">Add your first exercise</div></div><span class="chip">Cancel</span></div>
+      <div class="card row" style="padding:8px 10px"><span class="m">🔍</span><span class="m">Search exercises</span></div>
+      <div class="lbl">Repeat a recent workout</div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Upper B</div><div class="m">6 exercises · 2 days ago</div></div><span class="chip on">Use</span></div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Lower A</div><div class="m">5 exercises · 5 days ago</div></div><span class="chip on">Use</span></div>
+      <div class="lbl">Recent exercises</div>
+      <div class="chips" style="flex-wrap:wrap"><span class="chip">Barbell Bench Press</span><span class="chip">Lat Pulldown</span><span class="chip">Leg Press</span></div>
+      <div class="btn ink" style="margin-top:auto">+ Add exercise</div>
+    </div>
+  </div></div><div class="cap">Quick workout: no program needed. Pick an exercise, repeat a recent workout, or search.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:8px">
+      <div class="row sp"><div><div class="lbl">Quick workout · 12:40</div><div class="ttl s">Today's workout</div></div><span class="chip on">Finish</span></div>
+      <div class="card row" style="border:2px solid var(--ink)"><div class="ring p" data-t="1/3"></div><div class="grow"><div class="b" style="font-size:13px">Lat Pulldown</div><div class="m">Last: 120 × 10</div></div><span class="chip on">Open</span></div>
+      <div class="card row" style="padding:9px 11px"><div class="ring d">✓</div><div class="grow"><div class="b" style="font-size:12.5px">Barbell Bench Press</div><div class="m">140 × 8, 8, 7</div></div></div>
+      <div class="card" style="border-style:dashed;text-align:center;color:var(--muted);font-size:12px">+ Add exercise</div>
+      <div class="banner">When you finish, you can save this as a workout to reuse. Optional.</div>
+    </div>
+  </div></div><div class="cap">Exercises added on the fly. On Finish, "Save as workout" is offered but never required.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:8px">
+      <div class="row sp"><div><div class="lbl">Upper B · 34:12</div><div class="ttl s">Today's workout</div></div><span class="chip on">Finish</span></div>
+      <div class="bar"><i class="ok" style="width:42%"></i></div>
+      <div class="lbl">Done</div>
+      <div class="card row" style="opacity:.62;padding:9px 11px"><div class="ring d">✓</div><div class="grow"><div class="b" style="font-size:12.5px">Barbell Bench Press</div><div class="m">140 × 8, 8, 7</div></div></div>
+      <div class="lbl">Up next</div>
+      <div class="card row" style="border:2px solid var(--ink)"><div class="ring p" data-t="2/3"></div><div class="grow"><div class="b" style="font-size:13px">Incline Dumbbell Press</div><div class="m">Goal 70 × 10</div></div><span class="chip on">Open</span></div>
+      <div class="lbl">Later</div>
+      <div class="card row" style="padding:9px 11px"><div class="ring n">0/3</div><div class="grow"><div class="b" style="font-size:12.5px">Cable Fly (High-to-Low)</div><div class="m">3 × 10–12</div></div></div>
+      <div class="card row" style="padding:9px 11px"><div class="ring n">0/3</div><div class="grow"><div class="b" style="font-size:12.5px">Overhead Press</div><div class="m">3 × 6–8 · stalled 4 sessions</div></div></div>
+      <div class="card row" style="padding:9px 11px"><div class="ring n">0/3</div><div class="grow"><div class="b" style="font-size:12.5px">Triceps Pushdown</div><div class="m">3 × 10–12</div></div></div>
+    </div>
+  </div></div><div class="cap">Overview: done, up next, later.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:10px">
+      <div class="row sp"><div class="m">‹ Overview</div><div class="m">2 of 6</div></div>
+      <div class="card row" style="gap:12px;padding:10px">
+        <div class="figbox"><svg class="fig" style="--chest:#8A6A3A;--delt:#D3B988;--arm:#D3B988"><use href="#figF"/></svg><small>FRONT</small></div>
+        <div class="grow"><div class="ttl s">Incline Dumbbell Press</div><div class="chips" style="margin-top:6px;flex-wrap:wrap"><span class="chip">Dumbbell</span><span class="chip">3 × 8–10</span></div><div class="m" style="margin-top:6px;font-size:11.5px">Last: 70 × 9, 8, 8</div><div class="m" style="font-size:11.5px;color:var(--ink);font-weight:600">Goal: 70 × 10</div></div>
+      </div>
+      <div class="card" style="padding:6px 12px">
+        <div class="set" style="grid-template-columns:20px 1fr 54px 54px 30px;padding:9px 0"><b>1</b><span class="pv">70 × 9</span><span class="in">70</span><span class="in">10</span><span class="ck y">✓</span></div>
+        <div class="set" style="grid-template-columns:20px 1fr 54px 54px 30px;padding:9px 0;border-top:1px solid var(--line)"><b>2</b><span class="pv">70 × 8</span><span class="in">70</span><span class="in">9</span><span class="ck y">✓</span></div>
+        <div class="set" style="grid-template-columns:20px 1fr 54px 54px 30px;padding:9px 0;border-top:1px solid var(--line)"><b>3</b><span class="pv">70 × 8</span><span class="in">70</span><span class="in">–</span><span class="ck"></span></div>
+      </div>
+      <div class="card row sp"><div><div class="b" style="font-size:12px">Cue</div><div class="m" style="font-size:11.5px">Bench at 30°, elbows 45°</div></div><span class="chip">More</span></div>
+    </div>
+    <div class="rest"><span>⏱ Rest 1:12</span><span style="margin-left:auto;color:#C7A15E">+15s</span></div><div class="fab">✓</div>
+  </div></div><div class="cap">Exercise screen (A2): diagram, name, last time, goal, sets, cue. Brass = primary muscle, lighter = secondary. Figure shown is a placeholder for the existing muscle map.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:10px">
+      <div class="row sp"><div class="m">‹ Overview</div><div class="m">1 of 6</div></div>
+      <div class="card row" style="gap:12px;padding:10px">
+        <div class="figbox"><svg class="fig" style="--chest:#8A6A3A;--delt:#D3B988;--arm:#D3B988"><use href="#figF"/></svg><small>FRONT</small></div>
+        <div class="grow"><div class="ttl s">Barbell Bench Press</div><div class="chips" style="margin-top:6px"><span class="prb">★ New PR</span></div><div class="m" style="margin-top:6px;font-size:11.5px">Last: 135 × 8, 7, 6</div></div>
+      </div>
+      <div class="card" style="padding:6px 12px">
+        <div class="set" style="grid-template-columns:20px 1fr 54px 54px 30px;padding:9px 0"><b>1</b><span class="pv">135 × 8</span><span class="in">140</span><span class="in">8</span><span class="ck y">✓</span></div>
+        <div class="set" style="grid-template-columns:20px 1fr 54px 54px 30px;padding:9px 0;border-top:1px solid var(--line)"><b>2</b><span class="pv">135 × 7</span><span class="in">140</span><span class="in">8</span><span class="ck y">✓</span></div>
+        <div class="set" style="grid-template-columns:20px 1fr 54px 54px 30px;padding:9px 0;border-top:1px solid var(--line)"><b>3</b><span class="pv">135 × 6</span><span class="in">140</span><span class="in">7</span><span class="ck y">✓</span></div>
+      </div>
+      <div class="banner">Estimated max 177 lb, up 5 lb from last session.</div>
+      <div class="btn ink">Next exercise</div>
+    </div>
+  </div></div><div class="cap">Finished exercise with a PR badge and the estimated max change.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:10px">
+      <div class="row sp"><div class="m">‹ Overview</div><div class="lbl">Superset A1 / A2</div></div>
+      <div class="card row" style="gap:10px;padding:9px;border-left:4px solid var(--gold)">
+        <div class="figbox" style="width:52px;height:72px"><svg class="fig" style="width:40px;height:62px;--chest:#8A6A3A;--delt:#D3B988"><use href="#figF"/></svg></div>
+        <div class="grow"><div class="b" style="font-size:12.5px">A1 Incline DB Press</div><div class="m">Last 70 × 9</div>
+          <div class="row" style="gap:6px;margin-top:6px"><span class="in" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font:500 11px 'IBM Plex Mono'">70</span><span class="in" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font:500 11px 'IBM Plex Mono'">10</span><span class="ck y" style="width:24px;height:24px;border-radius:8px;background:var(--ok);color:#fff;display:grid;place-items:center;font-size:12px">✓</span></div></div></div>
+      <div class="card row" style="gap:10px;padding:9px;border-left:4px solid var(--gold)">
+        <div class="figbox" style="width:52px;height:72px"><svg class="fig" style="width:40px;height:62px;--lat:#8A6A3A;--uback:#D3B988;--arm:#D3B988"><use href="#figB"/></svg></div>
+        <div class="grow"><div class="b" style="font-size:12.5px">A2 Seated Cable Row</div><div class="m">Last 110 × 12</div>
+          <div class="row" style="gap:6px;margin-top:6px"><span style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font:500 11px 'IBM Plex Mono'">110</span><span style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font:500 11px 'IBM Plex Mono'">–</span><span style="width:24px;height:24px;border-radius:8px;border:1.5px solid #CFC9BA;display:grid;place-items:center"></span></div></div></div>
+      <div class="m" style="text-align:center">Set 1 of 3 · rest starts after A2</div>
+    </div>
+    <div class="rest"><span>⏱ Rest 0:48</span><span style="margin-left:auto;color:#C7A15E">Skip</span></div><div class="fab">✓</div>
+  </div></div><div class="cap">Superset: two exercises stacked, one rest timer. Back exercises use the back view.</div></div>
+</div>
+
+
+<!-- ============ 3B LOG A LIFT FROM + ============ -->
+<h2>3b. Log a lift from the + button</h2>
+<p class="flow">The fast path: tap +, tap Set, pick the exercise, log. It uses the same set-entry component and styling as the full exercise screen, so there is only one "log a set" look in the whole app. Logging here starts or continues the current workout automatically (same autosave, rest timer and PR checks). A link opens the full workout view.</p>
+<div class="phones">
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:8px">
+      <div><div class="date">Fri Nov 13</div><div class="ttl">Today</div></div>
+      <div class="dark" style="height:110px"></div>
+      <div class="card" style="height:70px"></div>
+    </div>
+    <div class="scrim"></div>
+    <div class="sheet" style="padding-bottom:22px"><div class="grab"></div>
+      <div class="card row" style="padding:9px 11px;margin-bottom:10px"><span class="m" style="font-size:12.5px;flex:1">Log anything…</span><span style="font-size:15px">📷</span><span style="font-size:15px">▥</span></div>
+      <div class="grid2">
+        <div class="card" style="text-align:center;padding:14px 6px"><div style="font-size:20px">🍽</div><div class="b" style="font-size:12.5px;margin-top:3px">Food</div></div>
+        <div class="card sel" style="text-align:center;padding:14px 6px"><div style="font-size:20px">🏋️</div><div class="b" style="font-size:12.5px;margin-top:3px">Set</div><div class="m" style="font-size:9.5px">Last used</div></div>
+        <div class="card" style="text-align:center;padding:14px 6px"><div style="font-size:20px">💧</div><div class="b" style="font-size:12.5px;margin-top:3px">Water</div></div>
+        <div class="card" style="text-align:center;padding:14px 6px"><div style="font-size:20px">⚖️</div><div class="b" style="font-size:12.5px;margin-top:3px">Weight</div></div>
+      </div>
+    </div>
+  </div></div><div class="cap">+ sheet. Set is highlighted as the last-used tile.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:8px">
+      <div class="row sp"><div class="ttl s">Log a set</div><span class="chip">Close</span></div>
+      <div class="card row" style="padding:8px 10px"><span class="m">🔍</span><span class="m">Search exercises</span></div>
+      <div class="lbl">In today's workout</div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Incline Dumbbell Press</div><div class="m">2 sets logged · Goal 70 × 10</div></div><span class="chip on">Log</span></div>
+      <div class="lbl">Recent</div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Lat Pulldown</div><div class="m">Last 120 × 10</div></div><span class="chip">Log</span></div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Leg Press</div><div class="m">Last 270 × 12</div></div><span class="chip">Log</span></div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Barbell Bench Press</div><div class="m">Last 135 × 8</div></div><span class="chip">Log</span></div>
+    </div>
+  </div></div><div class="cap">Pick the exercise: today's exercises first, then recents. Typing searches the whole catalog.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:10px">
+      <div class="row sp"><div class="m">‹ Back</div><div class="m" style="text-decoration:underline">Open full workout</div></div>
+      <div class="card row" style="gap:12px;padding:10px">
+        <div class="figbox" style="width:62px;height:86px"><svg class="fig" style="width:50px;height:78px;--chest:#8A6A3A;--delt:#D3B988;--arm:#D3B988"><use href="#figF"/></svg></div>
+        <div class="grow"><div class="ttl s" style="font-size:17px">Incline Dumbbell Press</div><div class="m" style="margin-top:5px;font-size:11.5px">Last: 70 × 9, 8, 8</div><div class="m" style="font-size:11.5px;color:var(--ink);font-weight:600">Goal: 70 × 10</div></div>
+      </div>
+      <div class="card" style="padding:12px">
+        <div class="row" style="justify-content:space-around">
+          <div style="text-align:center"><div class="m">Weight</div><div class="row" style="gap:8px;margin-top:4px"><span class="chip" style="padding:8px 11px">−</span><span class="ttl">70</span><span class="chip" style="padding:8px 11px">+</span></div></div>
+          <div style="text-align:center"><div class="m">Reps</div><div class="row" style="gap:8px;margin-top:4px"><span class="chip" style="padding:8px 11px">−</span><span class="ttl">10</span><span class="chip" style="padding:8px 11px">+</span></div></div>
+        </div>
+        <div class="btn" style="margin-top:12px;padding:12px">Log set 3</div>
+      </div>
+      <div class="card" style="padding:4px 12px">
+        <div class="set" style="grid-template-columns:20px 1fr 54px 54px 30px;padding:7px 0"><b>1</b><span class="pv">70 × 9</span><span class="in">70</span><span class="in">10</span><span class="ck y">✓</span></div>
+        <div class="set" style="grid-template-columns:20px 1fr 54px 54px 30px;padding:7px 0;border-top:1px solid var(--line)"><b>2</b><span class="pv">70 × 8</span><span class="in">70</span><span class="in">9</span><span class="ck y">✓</span></div>
+      </div>
+    </div>
+    <div class="rest"><span>⏱ Rest 1:12</span><span style="margin-left:auto;color:#C7A15E">+15s</span></div><div class="fab">✓</div>
+  </div></div><div class="cap">Log one set: big steppers prefilled from the previous set, today's sets listed below, rest timer pinned. Same components as the full exercise screen.</div></div>
+</div>
+
+<!-- ============ 4 FINISH ============ -->
+<h2>4. Finish: session analysis that gives advice</h2>
+<p class="flow">After Finish: a short headline, up to three findings from the numbers, and the targets for next time. Free users see a basic summary (PRs, volume, sets). Pro users see the full version. The code computes every number; the AI only explains them.</p>
+<div class="phones">
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:9px">
+      <div class="lbl">Upper B · 52 min</div>
+      <div class="ttl s" style="line-height:1.15">Strongest upper day in 6 weeks.</div>
+      <div class="grid2"><div class="stat"><div class="big" style="font-size:22px">9,420</div><div class="m">lb total volume</div></div><div class="stat"><div class="big" style="font-size:22px;color:var(--ok)">2 PRs</div><div class="m">bench, row</div></div></div>
+      <div class="card" style="padding:4px 12px">
+        <div class="find"><i style="background:#E3EDE6;color:var(--ok)">↑</i><span>Bench estimated max is up 6 lb in 4 weeks (171 to 177).</span></div>
+        <div class="find"><i style="background:#F2E0D6;color:var(--warn)">!</i><span>Overhead press has not progressed in 4 sessions. Consider a lighter weight for 8 reps.</span></div>
+        <div class="find"><i style="background:#EFEBE0;color:var(--muted)">→</i><span>Back got 6 hard sets this week against 14 for chest.</span></div>
+      </div>
+      <div class="card"><div class="b" style="font-size:12px;margin-bottom:5px">Next session</div><div class="mono" style="font-size:11px;line-height:1.7">Bench Press · 145 × 6–8<br>Incline DB Press · 70 × 10<br>Overhead Press · 85 × 8</div></div>
+    </div>
+  </div></div><div class="cap">Pro: headline, findings, next-session targets.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:9px">
+      <div class="lbl">Upper B · 52 min</div>
+      <div class="ttl s">Workout saved.</div>
+      <div class="grid2"><div class="stat"><div class="big" style="font-size:22px">9,420</div><div class="m">lb total volume</div></div><div class="stat"><div class="big" style="font-size:22px;color:var(--ok)">2 PRs</div><div class="m">bench, row</div></div></div>
+      <div class="card"><div class="b" style="font-size:12px">Sets completed</div><div class="m" style="margin-top:3px">18 of 18 · all planned sets done</div></div>
+      <div class="card row sp" style="background:#F3E9D2;border-color:#E5D3A8"><div><div class="b" style="font-size:12px;color:#5A4520">Want advice for next session?</div><div class="m" style="color:#7A6335">Targets, trends and weak spots, with Pro.</div></div><span class="chip on">Try Pro</span></div>
+    </div>
+  </div></div><div class="cap">Free: basic summary and one quiet upsell row. (On iPhone this opens the in-app purchase paywall.)</div></div>
+</div>
+
+<!-- ============ 5 LIBRARY ============ -->
+<h2>5. Exercise library: bigger catalog, easier to use</h2>
+<p class="flow">The catalog grows from the current list to 255 exercises, with every machine, cable and free-weight variation people use at a normal gym, plus bodyweight, carries, conditioning and cardio. Reached from any exercise name, from the + sheet, and from Progress → Library.</p>
+<div class="phones">
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:8px">
+      <div class="ttl">Exercises</div>
+      <div class="card row" style="padding:8px 10px"><span class="m">🔍</span><span class="m">Search 255 exercises</span></div>
+      <div class="chips"><span class="chip on">All</span><span class="chip">Chest</span><span class="chip">Back</span><span class="chip">Legs</span><span class="chip">Arms</span></div>
+      <div class="chips"><span class="chip">Barbell</span><span class="chip">Dumbbell</span><span class="chip on">Machine</span><span class="chip">Cable</span></div>
+      <div class="lbl">Recent</div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Incline Dumbbell Press</div><div class="m">70 × 9 · 2 days ago</div></div><div class="m">›</div></div>
+      <div class="lbl">Needs attention</div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Barbell Overhead Press</div><div class="m" style="color:var(--warn)">No progress in 4 sessions</div></div><div class="m">›</div></div>
+      <div class="lbl">A–Z</div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Ab Crunch Machine</div><div class="m">Abs · Machine</div></div><div class="m">›</div></div>
+    </div>
+  </div></div><div class="cap">Library home: search, muscle and equipment filters, recents, stalled lifts, A–Z.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:9px">
+      <div class="m">‹ Library</div>
+      <div class="card row" style="gap:12px;padding:10px"><div class="figbox"><svg class="fig" style="--chest:#8A6A3A;--delt:#D3B988;--arm:#D3B988"><use href="#figF"/></svg><small>FRONT</small></div><div class="grow"><div class="ttl s">Incline Dumbbell Press</div><div class="chips" style="margin-top:6px"><span class="chip">Dumbbell</span><span class="chip">Compound</span></div></div></div>
+      <div class="row" style="gap:6px"><span class="chip on">History</span><span class="chip">Form</span><span class="chip">Swaps</span></div>
+      <div class="card"><div class="row sp"><div><div class="m">Estimated max</div><div class="ttl s">88 lb <span class="m" style="font-size:11px;color:var(--ok);font-family:Inter;font-weight:600">+6 in 8 wks</span></div></div></div>
+        <svg viewBox="0 0 240 60" width="100%" height="56" style="margin-top:4px"><path d="M0 50 L30 46 L60 48 L90 38 L120 34 L150 30 L180 24 L210 18 L240 10" fill="none" stroke="#8A6A3A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="240" cy="10" r="4" fill="#C7A15E"/></svg></div>
+      <table class="tbl"><tr><th>Date</th><th>Top set</th><th>Vol</th></tr><tr><td>Nov 11</td><td class="mono">70 × 9</td><td class="mono">1,890</td></tr><tr><td>Nov 7</td><td class="mono">70 × 8</td><td class="mono">1,750</td></tr></table>
+      <div class="btn ink" style="margin-top:auto">Add to today's workout</div>
+    </div>
+  </div></div><div class="cap">Exercise page, History tab.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:9px">
+      <div class="m">‹ Library</div>
+      <div class="ttl s">Incline Dumbbell Press</div>
+      <div class="row" style="gap:6px"><span class="chip">History</span><span class="chip on">Form</span><span class="chip">Swaps</span></div>
+      <div class="b" style="font-size:12.5px">Cues</div>
+      <div class="card" style="font-size:11.5px;display:grid;gap:7px">
+        <div class="row" style="align-items:flex-start"><b class="mono">1</b><span>Bench at 30°, shoulder blades pinched back and down.</span></div>
+        <div class="row" style="align-items:flex-start"><b class="mono">2</b><span>Lower to the upper chest, elbows about 45° from your body.</span></div>
+        <div class="row" style="align-items:flex-start"><b class="mono">3</b><span>Press up and slightly in, no hard lockout.</span></div></div>
+      <div class="b" style="font-size:12.5px">Common mistakes</div>
+      <div class="card m" style="font-size:11.5px">Bench too steep (shoulders take over) · flared elbows · bouncing off the chest</div>
+    </div>
+  </div></div><div class="cap">Form tab.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:9px">
+      <div class="m">‹ Library</div>
+      <div class="ttl s">Incline Dumbbell Press</div>
+      <div class="row" style="gap:6px"><span class="chip">History</span><span class="chip">Form</span><span class="chip on">Swaps</span></div>
+      <div class="m">Same muscles. Pick by equipment or what's busy.</div>
+      <div class="card row"><div class="grow"><div class="b" style="font-size:12px">Incline Chest Press Machine</div><div class="m">Machine · Easier to stabilize</div></div><span class="chip">Swap</span></div>
+      <div class="card row"><div class="grow"><div class="b" style="font-size:12px">Incline Barbell Bench Press</div><div class="m">Barbell · Heavier loading</div></div><span class="chip">Swap</span></div>
+      <div class="card row"><div class="grow"><div class="b" style="font-size:12px">Cable Fly (Low-to-High)</div><div class="m">Cable · Isolation</div></div><span class="chip">Swap</span></div>
+      <div class="card row"><div class="grow"><div class="b" style="font-size:12px">Incline Push-Up</div><div class="m">Bodyweight · No equipment</div></div><span class="chip">Swap</span></div>
+    </div>
+  </div></div><div class="cap">Swaps tab: same primary muscle, filtered by equipment.</div></div>
+</div>
+
+<div class="phones" style="margin-top:20px">
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:8px">
+      <div class="ttl s">Add exercise</div>
+      <div class="card row" style="padding:8px 10px"><span class="m">🔍</span><span class="m">cable</span></div>
+      <div class="chips"><span class="chip on">Chest</span><span class="chip">Back</span><span class="chip">Shoulders</span><span class="chip">Arms</span></div>
+      <div class="chips"><span class="chip">Barbell</span><span class="chip">Dumbbell</span><span class="chip">Machine</span><span class="chip on">Cable</span></div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Cable Fly (High-to-Low)</div><div class="m">Chest · Last 40 × 12</div></div><span class="chip">+</span></div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Cable Fly (Low-to-High)</div><div class="m">Chest · New</div></div><span class="chip">+</span></div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Cable Fly (Mid)</div><div class="m">Chest · Also called Cable Crossover</div></div><span class="chip">+</span></div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Standing Cable Chest Press</div><div class="m">Chest · New</div></div><span class="chip">+</span></div>
+      <div class="card row" style="padding:9px 11px"><div class="grow"><div class="b" style="font-size:12px">Single-Arm Cable Chest Press</div><div class="m">Chest · New</div></div><span class="chip">+</span></div>
+    </div>
+  </div></div><div class="cap">Picker: filters, aliases in search (Cable Crossover finds Cable Fly), last numbers inline.</div></div>
+
+  <div><div class="ph"><div class="scr"><div class="sb"><span>9:41</span><span>●●●</span></div>
+    <div class="body" style="gap:9px">
+      <div class="m">‹ Overview</div>
+      <div class="card row" style="gap:12px;padding:10px"><div class="figbox"><svg class="fig" style="--lat:#8A6A3A;--uback:#D3B988;--arm:#D3B988"><use href="#figB"/></svg><small>BACK</small></div><div class="grow"><div class="ttl s">Lat Pulldown</div><div class="chips" style="margin-top:6px"><span class="chip">Cable</span><span class="chip">3 × 8–12</span></div><div class="m" style="margin-top:6px;font-size:11.5px">Last: 120 × 10, 10, 9</div></div></div>
+      <div class="card" style="padding:6px 12px">
+        <div class="set" style="grid-template-columns:20px 1fr 54px 54px 30px;padding:9px 0"><b>1</b><span class="pv">120 × 10</span><span class="in">120</span><span class="in">–</span><span class="ck"></span></div></div>
+      <div class="m" style="text-align:center">Cardio and timed exercises swap the inputs: Plank shows a timer, Treadmill shows distance and time, Farmer's Carry shows weight and distance.</div>
+      <div class="card row sp"><div><div class="b" style="font-size:12px">Plank</div><div class="m">Timed</div></div><div class="mono" style="font-size:16px">0:45</div><span class="chip on">Start</span></div>
+    </div>
+    <div class="rest"><span>⏱ Rest 1:30</span><span style="margin-left:auto;color:#C7A15E">+15s</span></div><div class="fab">✓</div>
+  </div></div><div class="cap">Back exercises show the back view. Timed and cardio exercises use different inputs.</div></div>
+</div>
+
+<div class="callout">
+  <h3>Rules that hold across every screen</h3>
+  <p><b>Editing:</b> always your own copy; original untouched; Undo on every removal; Reset to original; preview before changing days per week. <b>Reliability:</b> every set saves the instant it's checked, the rest timer survives backgrounding and a locked screen, an interrupted workout resumes exactly where it left off. <b>History safety:</b> swapping or removing an exercise never changes past logged sessions. <b>Reading:</b> max 3 chips visible at a time, numbers in mono at 13pt or larger, color only for state. <b>Free vs Pro:</b> everything on these screens is free except the full session analysis (AI) and anything already Pro. On iPhone, the Pro row opens the in-app purchase paywall.</p>
+</div>
+</div>
+</body>
+</html>
