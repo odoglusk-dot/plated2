@@ -9783,6 +9783,14 @@ function startLiveWorkoutTicker() {
     // itself isn't the one open any more (e.g. the user backed out via
     // the outer sheet-close chevron) — no point re-rendering a hidden panel every second.
     if (liveWorkoutScreen === null || state.sheetTab !== 'lifts') { stopLiveWorkoutTicker(); return; }
+    // renderLiftsTab() replaces the whole panel's innerHTML, which would
+    // destroy and recreate any input the user is mid-keystroke in,
+    // stealing focus and dropping characters. Skip this tick while a
+    // text/number field in the panel is focused — elapsed time and the
+    // rest timer are always derived fresh from stored timestamps, so
+    // they just catch up on the very next tick once the user looks away.
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') && active.closest('#panel-lifts')) return;
     renderLiftsTab();
   }, 1000);
 }
