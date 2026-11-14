@@ -1,0 +1,256 @@
+name,primary_muscle,secondary_muscles,equipment,type,tracking,aliases
+Barbell Bench Press,Chest,Triceps; Front Delts,Barbell,compound,weight_reps,Bench Press; Flat Bench
+Incline Barbell Bench Press,Chest,Front Delts; Triceps,Barbell,compound,weight_reps,Incline Bench
+Decline Barbell Bench Press,Chest,Triceps; Front Delts,Barbell,compound,weight_reps,Decline Bench
+Close-Grip Bench Press,Triceps,Chest; Front Delts,Barbell,compound,weight_reps,CGBP
+Barbell Floor Press,Chest,Triceps; Front Delts,Barbell,compound,weight_reps,Floor Press
+Dumbbell Bench Press,Chest,Triceps; Front Delts,Dumbbell,compound,weight_reps,DB Bench
+Incline Dumbbell Press,Chest,Front Delts; Triceps,Dumbbell,compound,weight_reps,Incline DB Press
+Decline Dumbbell Press,Chest,Triceps; Front Delts,Dumbbell,compound,weight_reps,
+Dumbbell Floor Press,Chest,Triceps,Dumbbell,compound,weight_reps,
+Dumbbell Hex Press,Chest,Triceps,Dumbbell,compound,weight_reps,Squeeze Press
+Dumbbell Fly,Chest,Front Delts,Dumbbell,isolation,weight_reps,DB Fly; Flat Fly
+Incline Dumbbell Fly,Chest,Front Delts,Dumbbell,isolation,weight_reps,Incline Fly
+Dumbbell Pullover,Chest,Lats; Triceps,Dumbbell,compound,weight_reps,DB Pullover
+Push-Up,Chest,Triceps; Front Delts; Abs,Bodyweight,compound,bodyweight_reps,Pushup
+Incline Push-Up,Chest,Triceps; Front Delts,Bodyweight,compound,bodyweight_reps,
+Decline Push-Up,Chest,Front Delts; Triceps,Bodyweight,compound,bodyweight_reps,Feet-Elevated Push-Up
+Weighted Push-Up,Chest,Triceps; Front Delts,Bodyweight,compound,weight_reps,
+Diamond Push-Up,Triceps,Chest; Front Delts,Bodyweight,compound,bodyweight_reps,Close-Grip Push-Up
+Chest Dip,Chest,Triceps; Front Delts,Bodyweight,compound,bodyweight_reps,Dips
+Assisted Dip Machine,Triceps,Chest; Front Delts,Machine,compound,weight_reps,Dip Machine (Assisted)
+Chest Press Machine,Chest,Triceps; Front Delts,Machine,compound,weight_reps,Machine Chest Press
+Incline Chest Press Machine,Chest,Front Delts; Triceps,Machine,compound,weight_reps,Incline Machine Press
+Decline Chest Press Machine,Chest,Triceps,Machine,compound,weight_reps,
+Pec Deck,Chest,Front Delts,Machine,isolation,weight_reps,Machine Fly; Pec Fly Machine
+Smith Machine Bench Press,Chest,Triceps; Front Delts,Smith Machine,compound,weight_reps,
+Smith Machine Incline Press,Chest,Front Delts; Triceps,Smith Machine,compound,weight_reps,
+Smith Machine Decline Press,Chest,Triceps,Smith Machine,compound,weight_reps,
+Cable Fly (Mid),Chest,Front Delts,Cable,isolation,weight_reps,Cable Crossover
+Cable Fly (High-to-Low),Chest,Front Delts,Cable,isolation,weight_reps,High-to-Low Cable Fly
+Cable Fly (Low-to-High),Chest,Front Delts,Cable,isolation,weight_reps,Low-to-High Cable Fly
+Standing Cable Chest Press,Chest,Triceps; Front Delts,Cable,compound,weight_reps,
+Single-Arm Cable Chest Press,Chest,Triceps; Front Delts; Abs,Cable,compound,weight_reps,
+Landmine Press,Front Delts,Chest; Triceps,Landmine,compound,weight_reps,Landmine Shoulder Press
+Plate Press,Chest,Front Delts; Triceps,Other,isolation,weight_reps,Svend Press
+Resistance Band Chest Press,Chest,Triceps; Front Delts,Band,compound,weight_reps,
+Barbell Row,Lats,Upper Back; Biceps; Rear Delts; Lower Back,Barbell,compound,weight_reps,Bent-Over Row
+Underhand Barbell Row,Lats,Biceps; Upper Back,Barbell,compound,weight_reps,Reverse-Grip Row
+Pendlay Row,Upper Back,Lats; Biceps; Lower Back,Barbell,compound,weight_reps,
+Seal Row,Upper Back,Lats; Biceps; Rear Delts,Barbell,compound,weight_reps,
+Dumbbell Row,Lats,Upper Back; Biceps; Rear Delts,Dumbbell,compound,weight_reps,One-Arm Dumbbell Row; DB Row
+Chest-Supported Dumbbell Row,Upper Back,Lats; Rear Delts; Biceps,Dumbbell,compound,weight_reps,Incline Bench Row
+Meadows Row,Lats,Upper Back; Biceps,Landmine,compound,weight_reps,
+Landmine Row,Upper Back,Lats; Biceps,Landmine,compound,weight_reps,
+T-Bar Row,Upper Back,Lats; Biceps; Rear Delts,Machine,compound,weight_reps,
+Chest-Supported T-Bar Row,Upper Back,Lats; Biceps; Rear Delts,Machine,compound,weight_reps,
+Machine Row (Seated),Lats,Upper Back; Biceps,Machine,compound,weight_reps,Seated Row Machine
+Machine Row (Chest-Supported),Upper Back,Lats; Biceps; Rear Delts,Machine,compound,weight_reps,Chest-Supported Machine Row
+High Row Machine,Lats,Upper Back; Biceps,Machine,compound,weight_reps,Hammer Strength High Row
+Iso-Lateral Low Row Machine,Lats,Upper Back; Biceps,Machine,compound,weight_reps,Hammer Strength Low Row
+Seated Cable Row (Close-Grip),Lats,Upper Back; Biceps,Cable,compound,weight_reps,Seated Cable Row; V-Bar Row
+Wide-Grip Seated Cable Row,Upper Back,Lats; Rear Delts; Biceps,Cable,compound,weight_reps,
+Single-Arm Cable Row,Lats,Upper Back; Biceps,Cable,compound,weight_reps,
+Lat Pulldown,Lats,Biceps; Upper Back,Cable,compound,weight_reps,Wide-Grip Lat Pulldown
+Close-Grip Lat Pulldown,Lats,Biceps; Upper Back,Cable,compound,weight_reps,
+Neutral-Grip Lat Pulldown,Lats,Biceps; Upper Back,Cable,compound,weight_reps,
+Underhand Lat Pulldown,Lats,Biceps,Cable,compound,weight_reps,Reverse-Grip Pulldown
+Single-Arm Lat Pulldown,Lats,Biceps; Upper Back,Cable,compound,weight_reps,
+Straight-Arm Pulldown,Lats,Triceps; Abs,Cable,isolation,weight_reps,Lat Prayer
+Plate-Loaded Pulldown Machine,Lats,Biceps; Upper Back,Machine,compound,weight_reps,
+Pull-Up,Lats,Biceps; Upper Back; Forearms,Bodyweight,compound,bodyweight_reps,Pullup
+Chin-Up,Lats,Biceps; Upper Back,Bodyweight,compound,bodyweight_reps,Chinup
+Neutral-Grip Pull-Up,Lats,Biceps; Upper Back,Bodyweight,compound,bodyweight_reps,
+Wide-Grip Pull-Up,Lats,Upper Back; Biceps,Bodyweight,compound,bodyweight_reps,
+Weighted Pull-Up,Lats,Biceps; Upper Back,Bodyweight,compound,weight_reps,
+Assisted Pull-Up Machine,Lats,Biceps; Upper Back,Machine,compound,weight_reps,Assisted Pull-Up
+Band-Assisted Pull-Up,Lats,Biceps; Upper Back,Band,compound,bodyweight_reps,
+Inverted Row,Upper Back,Lats; Biceps; Rear Delts,Bodyweight,compound,bodyweight_reps,Bodyweight Row
+Conventional Deadlift,Hamstrings,Glutes; Lower Back; Traps; Forearms,Barbell,compound,weight_reps,Deadlift
+Sumo Deadlift,Glutes,Hamstrings; Quads; Adductors; Lower Back,Barbell,compound,weight_reps,
+Trap Bar Deadlift,Quads,Glutes; Hamstrings; Traps; Lower Back,Trap Bar,compound,weight_reps,Hex Bar Deadlift
+Romanian Deadlift,Hamstrings,Glutes; Lower Back,Barbell,compound,weight_reps,RDL
+Dumbbell Romanian Deadlift,Hamstrings,Glutes; Lower Back,Dumbbell,compound,weight_reps,DB RDL
+Stiff-Leg Deadlift,Hamstrings,Glutes; Lower Back,Barbell,compound,weight_reps,
+Single-Leg Romanian Deadlift,Hamstrings,Glutes; Lower Back; Abs,Dumbbell,compound,weight_reps,Single-Leg RDL
+Rack Pull,Traps,Lower Back; Glutes; Hamstrings; Upper Back,Barbell,compound,weight_reps,
+Good Morning,Hamstrings,Lower Back; Glutes,Barbell,compound,weight_reps,
+Back Extension (45-Degree),Lower Back,Glutes; Hamstrings,Bodyweight,isolation,bodyweight_reps,Hyperextension
+Back Extension Machine,Lower Back,Glutes; Hamstrings,Machine,isolation,weight_reps,
+Reverse Hyperextension,Glutes,Lower Back; Hamstrings,Machine,isolation,weight_reps,Reverse Hyper
+Face Pull (Cable),Rear Delts,Upper Back; Traps; Side Delts,Cable,isolation,weight_reps,Face Pull
+Reverse Pec Deck,Rear Delts,Upper Back,Machine,isolation,weight_reps,Rear Delt Machine; Machine Reverse Fly
+Rear Delt Fly (Dumbbell),Rear Delts,Upper Back,Dumbbell,isolation,weight_reps,Bent-Over Lateral Raise
+Cable Rear Delt Fly,Rear Delts,Upper Back,Cable,isolation,weight_reps,
+Barbell Shrug,Traps,Forearms,Barbell,isolation,weight_reps,
+Dumbbell Shrug,Traps,Forearms,Dumbbell,isolation,weight_reps,
+Smith Machine Shrug,Traps,Forearms,Smith Machine,isolation,weight_reps,
+Machine Shrug,Traps,Forearms,Machine,isolation,weight_reps,
+Cable Shrug,Traps,Forearms,Cable,isolation,weight_reps,
+Upright Row (Barbell),Side Delts,Traps; Biceps,Barbell,compound,weight_reps,Upright Row
+Upright Row (Cable),Side Delts,Traps; Biceps,Cable,compound,weight_reps,
+Barbell Overhead Press,Front Delts,Side Delts; Triceps; Abs,Barbell,compound,weight_reps,Overhead Press; Military Press; OHP
+Seated Barbell Overhead Press,Front Delts,Side Delts; Triceps,Barbell,compound,weight_reps,
+Push Press,Front Delts,Triceps; Side Delts; Quads,Barbell,compound,weight_reps,
+Dumbbell Shoulder Press (Seated),Front Delts,Side Delts; Triceps,Dumbbell,compound,weight_reps,Seated Dumbbell Press
+Dumbbell Shoulder Press (Standing),Front Delts,Side Delts; Triceps; Abs,Dumbbell,compound,weight_reps,Standing Dumbbell Press
+Arnold Press,Front Delts,Side Delts; Triceps,Dumbbell,compound,weight_reps,
+Single-Arm Dumbbell Press,Front Delts,Side Delts; Triceps; Obliques,Dumbbell,compound,weight_reps,
+Shoulder Press Machine,Front Delts,Side Delts; Triceps,Machine,compound,weight_reps,Machine Shoulder Press
+Smith Machine Shoulder Press,Front Delts,Side Delts; Triceps,Smith Machine,compound,weight_reps,
+Kettlebell Overhead Press,Front Delts,Side Delts; Triceps; Abs,Kettlebell,compound,weight_reps,
+Pike Push-Up,Front Delts,Triceps; Side Delts,Bodyweight,compound,bodyweight_reps,
+Handstand Push-Up,Front Delts,Triceps; Side Delts; Traps,Bodyweight,compound,bodyweight_reps,HSPU
+Dumbbell Lateral Raise,Side Delts,Traps,Dumbbell,isolation,weight_reps,Lateral Raise; Side Raise
+Cable Lateral Raise,Side Delts,Traps,Cable,isolation,weight_reps,
+Single-Arm Cable Lateral Raise,Side Delts,Traps,Cable,isolation,weight_reps,
+Machine Lateral Raise,Side Delts,Traps,Machine,isolation,weight_reps,
+Dumbbell Front Raise,Front Delts,Side Delts,Dumbbell,isolation,weight_reps,Front Raise
+Cable Front Raise,Front Delts,Side Delts,Cable,isolation,weight_reps,
+Plate Front Raise,Front Delts,Side Delts,Other,isolation,weight_reps,
+Incline Y Raise,Rear Delts,Traps; Side Delts,Dumbbell,isolation,weight_reps,Y Raise
+Cuban Press,Rear Delts,Side Delts; Traps,Dumbbell,compound,weight_reps,
+Barbell Curl,Biceps,Forearms,Barbell,isolation,weight_reps,Standing Barbell Curl
+EZ-Bar Curl,Biceps,Forearms,EZ Bar,isolation,weight_reps,EZ Curl
+Dumbbell Curl,Biceps,Forearms,Dumbbell,isolation,weight_reps,Alternating Dumbbell Curl; DB Curl
+Hammer Curl,Biceps,Forearms,Dumbbell,isolation,weight_reps,Dumbbell Hammer Curl
+Cross-Body Hammer Curl,Biceps,Forearms,Dumbbell,isolation,weight_reps,
+Incline Dumbbell Curl,Biceps,Forearms,Dumbbell,isolation,weight_reps,
+Preacher Curl (EZ Bar),Biceps,Forearms,EZ Bar,isolation,weight_reps,Preacher Curl
+Preacher Curl Machine,Biceps,Forearms,Machine,isolation,weight_reps,
+Dumbbell Preacher Curl,Biceps,Forearms,Dumbbell,isolation,weight_reps,Single-Arm Preacher Curl
+Concentration Curl,Biceps,Forearms,Dumbbell,isolation,weight_reps,
+Spider Curl,Biceps,Forearms,Dumbbell,isolation,weight_reps,
+Bayesian Curl,Biceps,Forearms,Cable,isolation,weight_reps,Behind-the-Body Cable Curl
+Cable Curl (Straight Bar),Biceps,Forearms,Cable,isolation,weight_reps,Cable Curl
+Cable Curl (Single Arm),Biceps,Forearms,Cable,isolation,weight_reps,
+Cable Hammer Curl (Rope),Biceps,Forearms,Cable,isolation,weight_reps,Rope Hammer Curl
+Machine Biceps Curl,Biceps,Forearms,Machine,isolation,weight_reps,Biceps Curl Machine
+Zottman Curl,Biceps,Forearms,Dumbbell,isolation,weight_reps,
+Drag Curl,Biceps,Forearms,Barbell,isolation,weight_reps,
+Reverse Curl,Forearms,Biceps,EZ Bar,isolation,weight_reps,Reverse Barbell Curl
+Triceps Pushdown (Rope),Triceps,,Cable,isolation,weight_reps,Rope Pushdown
+Triceps Pushdown (Bar),Triceps,,Cable,isolation,weight_reps,Straight-Bar Pushdown
+Triceps Pushdown (V-Bar),Triceps,,Cable,isolation,weight_reps,
+Reverse-Grip Triceps Pushdown,Triceps,Forearms,Cable,isolation,weight_reps,Underhand Pushdown
+Single-Arm Triceps Pushdown,Triceps,,Cable,isolation,weight_reps,
+Overhead Cable Triceps Extension,Triceps,,Cable,isolation,weight_reps,Cable Overhead Extension
+Overhead Dumbbell Triceps Extension,Triceps,,Dumbbell,isolation,weight_reps,
+Skull Crusher (EZ Bar),Triceps,,EZ Bar,isolation,weight_reps,Lying Triceps Extension
+Dumbbell Skull Crusher,Triceps,,Dumbbell,isolation,weight_reps,
+JM Press,Triceps,Chest,Barbell,compound,weight_reps,
+Cable Triceps Kickback,Triceps,,Cable,isolation,weight_reps,
+Dumbbell Triceps Kickback,Triceps,,Dumbbell,isolation,weight_reps,
+Triceps Dip,Triceps,Chest; Front Delts,Bodyweight,compound,bodyweight_reps,Parallel Bar Dip
+Bench Dip,Triceps,Chest; Front Delts,Bodyweight,compound,bodyweight_reps,
+Triceps Extension Machine,Triceps,,Machine,isolation,weight_reps,
+Dip Machine,Triceps,Chest,Machine,compound,weight_reps,
+Wrist Curl,Forearms,,Dumbbell,isolation,weight_reps,
+Reverse Wrist Curl,Forearms,,Dumbbell,isolation,weight_reps,
+Barbell Wrist Curl,Forearms,,Barbell,isolation,weight_reps,
+Dead Hang,Forearms,Lats; Upper Back,Bodyweight,isolation,time,Bar Hang
+Farmer's Carry,Forearms,Traps; Abs; Glutes,Dumbbell,compound,distance_time,Farmer's Walk
+Barbell Back Squat,Quads,Glutes; Adductors; Lower Back; Abs,Barbell,compound,weight_reps,Back Squat; Squat
+Front Squat,Quads,Glutes; Abs; Upper Back,Barbell,compound,weight_reps,
+Box Squat,Quads,Glutes; Hamstrings; Lower Back,Barbell,compound,weight_reps,
+Goblet Squat,Quads,Glutes; Abs,Dumbbell,compound,weight_reps,
+Smith Machine Squat,Quads,Glutes; Adductors,Smith Machine,compound,weight_reps,
+Hack Squat Machine,Quads,Glutes; Adductors,Machine,compound,weight_reps,Hack Squat
+Pendulum Squat,Quads,Glutes,Machine,compound,weight_reps,
+Belt Squat,Quads,Glutes; Adductors,Machine,compound,weight_reps,
+Leg Press,Quads,Glutes; Adductors; Hamstrings,Machine,compound,weight_reps,45-Degree Leg Press
+Horizontal Leg Press,Quads,Glutes; Adductors,Machine,compound,weight_reps,Seated Leg Press
+Single-Leg Leg Press,Quads,Glutes,Machine,compound,weight_reps,
+Bulgarian Split Squat,Quads,Glutes; Adductors,Dumbbell,compound,weight_reps,Rear-Foot-Elevated Split Squat
+Split Squat,Quads,Glutes; Adductors,Dumbbell,compound,weight_reps,
+Walking Lunge,Quads,Glutes; Hamstrings,Dumbbell,compound,weight_reps,Dumbbell Walking Lunge
+Reverse Lunge,Glutes,Quads; Hamstrings,Dumbbell,compound,weight_reps,
+Forward Lunge,Quads,Glutes; Hamstrings,Dumbbell,compound,weight_reps,
+Lateral Lunge,Adductors,Quads; Glutes,Dumbbell,compound,weight_reps,Side Lunge
+Cossack Squat,Adductors,Quads; Glutes,Bodyweight,compound,bodyweight_reps,
+Step-Up,Quads,Glutes; Hamstrings,Dumbbell,compound,weight_reps,Dumbbell Step-Up
+Sissy Squat,Quads,,Bodyweight,isolation,bodyweight_reps,
+Bodyweight Squat,Quads,Glutes; Abs,Bodyweight,compound,bodyweight_reps,Air Squat
+Jump Squat,Quads,Glutes; Calves,Bodyweight,compound,bodyweight_reps,
+Pistol Squat,Quads,Glutes; Abs,Bodyweight,compound,bodyweight_reps,Single-Leg Squat
+Wall Sit,Quads,Glutes,Bodyweight,isolation,time,
+Leg Extension,Quads,,Machine,isolation,weight_reps,Machine Leg Extension
+Single-Leg Extension,Quads,,Machine,isolation,weight_reps,
+Seated Leg Curl,Hamstrings,,Machine,isolation,weight_reps,Hamstring Curl
+Lying Leg Curl,Hamstrings,,Machine,isolation,weight_reps,Prone Leg Curl
+Standing Leg Curl,Hamstrings,,Machine,isolation,weight_reps,Single-Leg Curl
+Nordic Hamstring Curl,Hamstrings,Glutes,Bodyweight,isolation,bodyweight_reps,Nordic Curl
+Glute-Ham Raise,Hamstrings,Glutes; Lower Back,Bodyweight,compound,bodyweight_reps,GHR
+Barbell Hip Thrust,Glutes,Hamstrings; Quads,Barbell,compound,weight_reps,Hip Thrust
+Hip Thrust Machine,Glutes,Hamstrings,Machine,compound,weight_reps,
+Glute Bridge,Glutes,Hamstrings,Bodyweight,compound,bodyweight_reps,
+Single-Leg Hip Thrust,Glutes,Hamstrings,Bodyweight,compound,bodyweight_reps,
+Cable Pull-Through,Glutes,Hamstrings; Lower Back,Cable,compound,weight_reps,
+Cable Glute Kickback,Glutes,Hamstrings,Cable,isolation,weight_reps,Cable Kickback
+Glute Kickback Machine,Glutes,Hamstrings,Machine,isolation,weight_reps,
+Donkey Kick,Glutes,Hamstrings,Bodyweight,isolation,bodyweight_reps,
+Hip Abduction Machine,Abductors,Glutes,Machine,isolation,weight_reps,Abductor Machine
+Hip Adduction Machine,Adductors,,Machine,isolation,weight_reps,Adductor Machine
+Banded Lateral Walk,Abductors,Glutes,Band,isolation,distance_time,Monster Walk
+Clamshell,Abductors,Glutes,Band,isolation,bodyweight_reps,
+45-Degree Hip Extension,Glutes,Hamstrings; Lower Back,Machine,compound,weight_reps,
+Standing Calf Raise Machine,Calves,,Machine,isolation,weight_reps,Standing Calf Raise
+Seated Calf Raise Machine,Calves,,Machine,isolation,weight_reps,Seated Calf Raise
+Smith Machine Calf Raise,Calves,,Smith Machine,isolation,weight_reps,
+Leg Press Calf Raise,Calves,,Machine,isolation,weight_reps,Calf Press
+Donkey Calf Raise,Calves,,Machine,isolation,weight_reps,
+Single-Leg Calf Raise,Calves,,Bodyweight,isolation,bodyweight_reps,
+Dumbbell Calf Raise,Calves,,Dumbbell,isolation,weight_reps,
+Tibialis Raise,Calves,,Bodyweight,isolation,bodyweight_reps,
+Cable Crunch,Abs,Obliques,Cable,isolation,weight_reps,Kneeling Cable Crunch
+Ab Crunch Machine,Abs,,Machine,isolation,weight_reps,
+Crunch,Abs,,Bodyweight,isolation,bodyweight_reps,
+Reverse Crunch,Abs,Hip Flexors,Bodyweight,isolation,bodyweight_reps,
+Sit-Up,Abs,Hip Flexors,Bodyweight,isolation,bodyweight_reps,
+Decline Sit-Up,Abs,Hip Flexors,Bodyweight,isolation,bodyweight_reps,
+Weighted Crunch,Abs,,Other,isolation,weight_reps,
+Hanging Leg Raise,Abs,Hip Flexors; Forearms,Bodyweight,isolation,bodyweight_reps,
+Hanging Knee Raise,Abs,Hip Flexors; Forearms,Bodyweight,isolation,bodyweight_reps,
+Captain's Chair Leg Raise,Abs,Hip Flexors,Machine,isolation,bodyweight_reps,Roman Chair Leg Raise
+Toes-to-Bar,Abs,Hip Flexors; Lats; Forearms,Bodyweight,compound,bodyweight_reps,
+Plank,Abs,Obliques; Glutes,Bodyweight,isolation,time,Front Plank
+Side Plank,Obliques,Abs; Abductors,Bodyweight,isolation,time,
+Copenhagen Plank,Adductors,Obliques; Abs,Bodyweight,isolation,time,
+Ab Wheel Rollout,Abs,Lats; Front Delts,Other,compound,bodyweight_reps,Ab Roller
+Russian Twist,Obliques,Abs,Bodyweight,isolation,bodyweight_reps,
+Cable Woodchop (High-to-Low),Obliques,Abs; Front Delts,Cable,compound,weight_reps,Woodchop
+Cable Woodchop (Low-to-High),Obliques,Abs; Front Delts,Cable,compound,weight_reps,
+Pallof Press,Obliques,Abs; Front Delts,Cable,isolation,weight_reps,
+Dead Bug,Abs,Hip Flexors,Bodyweight,isolation,bodyweight_reps,
+Bird Dog,Lower Back,Glutes; Abs,Bodyweight,isolation,bodyweight_reps,
+Bicycle Crunch,Abs,Obliques,Bodyweight,isolation,bodyweight_reps,
+V-Up,Abs,Hip Flexors,Bodyweight,isolation,bodyweight_reps,
+Hollow Hold,Abs,Hip Flexors,Bodyweight,isolation,time,
+Landmine Rotation,Obliques,Abs; Front Delts,Landmine,compound,weight_reps,
+Suitcase Carry,Obliques,Forearms; Traps; Abs,Dumbbell,compound,distance_time,
+Mountain Climber,Abs,Hip Flexors; Front Delts,Bodyweight,compound,time,
+Power Clean,Full Body,Traps; Quads; Glutes; Hamstrings,Barbell,compound,weight_reps,
+Hang Clean,Full Body,Traps; Quads; Glutes; Hamstrings,Barbell,compound,weight_reps,
+Kettlebell Swing,Glutes,Hamstrings; Lower Back; Front Delts,Kettlebell,compound,weight_reps,
+Turkish Get-Up,Full Body,Front Delts; Abs; Glutes,Kettlebell,compound,weight_reps,
+Barbell Thruster,Full Body,Quads; Front Delts; Triceps,Barbell,compound,weight_reps,Thruster
+Burpee,Full Body,Chest; Quads; Front Delts,Bodyweight,compound,bodyweight_reps,
+Box Jump,Quads,Glutes; Calves,Bodyweight,compound,bodyweight_reps,
+Sled Push,Quads,Glutes; Calves,Sled,compound,distance_time,
+Sled Pull,Hamstrings,Glutes; Upper Back,Sled,compound,distance_time,
+Medicine Ball Slam,Full Body,Abs; Lats; Front Delts,Other,compound,bodyweight_reps,
+Battle Ropes,Full Body,Front Delts; Forearms; Abs,Other,compound,time,
+Treadmill,Cardio,Quads; Calves,Cardio,cardio,distance_time,Treadmill Run; Treadmill Walk
+Incline Treadmill Walk,Cardio,Glutes; Calves,Cardio,cardio,distance_time,Incline Walk
+Stationary Bike,Cardio,Quads,Cardio,cardio,distance_time,Exercise Bike; Spin Bike
+Rowing Machine,Cardio,Lats; Quads; Upper Back,Cardio,cardio,distance_time,Erg
+Elliptical,Cardio,Quads; Glutes,Cardio,cardio,distance_time,
+Stair Climber,Cardio,Glutes; Quads; Calves,Cardio,cardio,distance_time,StairMaster
+Air Bike,Cardio,Quads; Front Delts,Cardio,cardio,distance_time,Assault Bike
+Ski Erg,Cardio,Lats; Abs; Triceps,Cardio,cardio,distance_time,
+Jump Rope,Cardio,Calves; Forearms,Other,cardio,time,
+Outdoor Run,Cardio,Quads; Calves; Glutes,Cardio,cardio,distance_time,Run
+Outdoor Walk,Cardio,Quads; Calves,Cardio,cardio,distance_time,Walk
+Outdoor Cycling,Cardio,Quads; Glutes,Cardio,cardio,distance_time,Bike Ride
+Swimming,Cardio,Lats; Front Delts; Quads,Cardio,cardio,distance_time,
+Hiking,Cardio,Quads; Glutes; Calves,Cardio,cardio,distance_time,
