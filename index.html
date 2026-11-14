@@ -9851,7 +9851,6 @@ function exercisePickerResultsHtml(query, actionAttr, actionLabel = '+') {
 }
 
 function renderQuickWorkoutStart(panel) {
-  const q = quickWorkoutSearch.trim();
   panel.innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
       <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.8rem;">Quick workout &middot; ${esc(liveWorkoutElapsedLabel())}</div>
@@ -9859,9 +9858,24 @@ function renderQuickWorkoutStart(panel) {
     </div>
     <div class="card">
       <input class="input" id="qwSearch" placeholder="&#128269; Search exercises" value="${esc(quickWorkoutSearch)}">
-      ${q ? `<div style="margin-top:0.6rem;">${exercisePickerResultsHtml(q, 'data-qw-add')}</div>` : ''}
+      <div id="qwResultsArea" style="margin-top:0.6rem;"></div>
     </div>
-    ${!q ? `
+    <div id="qwRecentArea"></div>
+  `;
+  renderQwSearchResults(panel);
+  $('#qwCancelBtn').addEventListener('click', () => { liveWorkoutScreen = null; stopLiveWorkoutTicker(); renderLiftsTab(); });
+  // Patches only the results/recent-workouts areas below, never rebuilds
+  // this <input> itself — a full renderLiftsTab() on every keystroke would
+  // destroy and recreate it, dropping focus (and characters) mid-typing.
+  $('#qwSearch').addEventListener('input', (e) => { quickWorkoutSearch = e.target.value; renderQwSearchResults(panel); });
+}
+
+function renderQwSearchResults(panel) {
+  const q = quickWorkoutSearch.trim();
+  const resultsEl = $('#qwResultsArea', panel);
+  if (resultsEl) resultsEl.innerHTML = q ? exercisePickerResultsHtml(q, 'data-qw-add') : '';
+  const recentEl = $('#qwRecentArea', panel);
+  if (recentEl) recentEl.innerHTML = !q ? `
     <div class="card">
       <h3 style="margin-top:0;">Repeat a recent workout</h3>
       ${recentWorkoutDays().map((d) => `
@@ -9875,10 +9889,7 @@ function renderQuickWorkoutStart(panel) {
       <div class="chip-row">
         ${recentExerciseNames().map((n) => `<button class="chip" data-qw-add="${esc(n)}">${esc(n)}</button>`).join('') || `<p class="muted small">Nothing logged yet.</p>`}
       </div>
-    </div>` : ''}
-  `;
-  $('#qwCancelBtn').addEventListener('click', () => { liveWorkoutScreen = null; stopLiveWorkoutTicker(); renderLiftsTab(); });
-  $('#qwSearch').addEventListener('input', (e) => { quickWorkoutSearch = e.target.value; renderLiftsTab(); });
+    </div>` : '';
   $$('[data-qw-add]', panel).forEach((btn) => btn.addEventListener('click', () => quickWorkoutAddExercise(btn.dataset.qwAdd)));
   $$('[data-qw-repeat]', panel).forEach((btn) => btn.addEventListener('click', () => quickWorkoutRepeatDay(btn.dataset.qwRepeat)));
 }
@@ -10380,23 +10391,11 @@ function glossaryRecentAndStalledSectionsHtml() {
   `;
 }
 function renderExerciseGlossary(panel) {
-  const q = glossaryFilter.search.trim().toLowerCase();
   const mg = glossaryFilter.muscleGroup;
   const eq = glossaryFilter.equipment;
   const mt = glossaryFilter.type;
   const equipmentOptions = [...new Set(state.exercises.map((e) => e.equipment).filter(Boolean))].sort();
   const typeOptions = [...new Set(state.exercises.map((e) => e.movement_type).filter((t) => GLOSSARY_MOVEMENT_TYPE_LABELS[t]))];
-  const filtered = state.exercises.filter((e) => {
-    if (mg && e.muscle_group !== mg) return false;
-    if (eq && e.equipment !== eq) return false;
-    if (mt && e.movement_type !== mt) return false;
-    if (q) {
-      const nameMatch = e.name.toLowerCase().includes(q);
-      const aliasMatch = (e.aliases || []).some((a) => a.toLowerCase().includes(q));
-      if (!nameMatch && !aliasMatch) return false;
-    }
-    return true;
-  });
   panel.innerHTML = `
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
@@ -10419,6 +10418,47 @@ function renderExerciseGlossary(panel) {
         ${typeOptions.map((t) => `<button class="chip ${mt === t ? 'chip-active' : ''}" data-glossary-type="${t}">${GLOSSARY_MOVEMENT_TYPE_LABELS[t]}</button>`).join('')}
       </div>
     </div>
+    <div id="glossaryResultsArea"></div>
+  `;
+  renderGlossaryResultsArea(panel);
+  $('#closeGlossaryBtn').addEventListener('click', () => { showExerciseGlossary = false; renderLiftsTab(); });
+  // Patches only #glossaryResultsArea below, never rebuilds this <input> -
+  // a full renderExerciseGlossary() on every keystroke would destroy and
+  // recreate it, dropping focus (and characters) mid-typing.
+  $('#glossarySearch').addEventListener('input', (e) => { glossaryFilter.search = e.target.value; renderGlossaryResultsArea(panel); });
+  $$('[data-glossary-mg]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    glossaryFilter.muscleGroup = btn.dataset.glossaryMg;
+    renderExerciseGlossary(panel);
+  }));
+  $$('[data-glossary-eq]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    glossaryFilter.equipment = btn.dataset.glossaryEq;
+    renderExerciseGlossary(panel);
+  }));
+  $$('[data-glossary-type]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    glossaryFilter.type = btn.dataset.glossaryType;
+    renderExerciseGlossary(panel);
+  }));
+}
+
+function renderGlossaryResultsArea(panel) {
+  const q = glossaryFilter.search.trim().toLowerCase();
+  const mg = glossaryFilter.muscleGroup;
+  const eq = glossaryFilter.equipment;
+  const mt = glossaryFilter.type;
+  const filtered = state.exercises.filter((e) => {
+    if (mg && e.muscle_group !== mg) return false;
+    if (eq && e.equipment !== eq) return false;
+    if (mt && e.movement_type !== mt) return false;
+    if (q) {
+      const nameMatch = e.name.toLowerCase().includes(q);
+      const aliasMatch = (e.aliases || []).some((a) => a.toLowerCase().includes(q));
+      if (!nameMatch && !aliasMatch) return false;
+    }
+    return true;
+  });
+  const resultsEl = $('#glossaryResultsArea', panel);
+  if (!resultsEl) return;
+  resultsEl.innerHTML = `
     ${glossaryNoFiltersActive(mg, eq, mt, q) ? glossaryRecentAndStalledSectionsHtml() : ''}
     <div class="card">
       ${glossaryNoFiltersActive(mg, eq, mt, q) ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">A&ndash;Z</div>` : ''}
@@ -10444,26 +10484,12 @@ function renderExerciseGlossary(panel) {
         </div>`).join('')}
     </div>
   `;
-  $('#closeGlossaryBtn').addEventListener('click', () => { showExerciseGlossary = false; renderLiftsTab(); });
-  $('#glossarySearch').addEventListener('input', (e) => { glossaryFilter.search = e.target.value; renderExerciseGlossary(panel); });
-  $$('[data-glossary-mg]', panel).forEach((btn) => btn.addEventListener('click', () => {
-    glossaryFilter.muscleGroup = btn.dataset.glossaryMg;
-    renderExerciseGlossary(panel);
-  }));
-  $$('[data-glossary-eq]', panel).forEach((btn) => btn.addEventListener('click', () => {
-    glossaryFilter.equipment = btn.dataset.glossaryEq;
-    renderExerciseGlossary(panel);
-  }));
-  $$('[data-glossary-type]', panel).forEach((btn) => btn.addEventListener('click', () => {
-    glossaryFilter.type = btn.dataset.glossaryType;
-    renderExerciseGlossary(panel);
-  }));
   $$('[data-glossary-toggle]', panel).forEach((row) => row.addEventListener('click', () => {
     const name = row.dataset.glossaryToggle;
     const expanding = glossaryExpandedName !== name;
     glossaryExpandedName = expanding ? name : null;
     if (expanding) recordGlossaryView(name);
-    renderExerciseGlossary(panel);
+    renderGlossaryResultsArea(panel);
   }));
   $$('[data-glossary-jump]', panel).forEach((row) => row.addEventListener('click', () => {
     const name = row.dataset.glossaryJump;
@@ -10473,7 +10499,7 @@ function renderExerciseGlossary(panel) {
     liftDetailTab = 'history';
     renderLiftsTab();
   }));
-  wireCitationEvents(panel, () => renderExerciseGlossary(panel));
+  wireCitationEvents(panel, () => renderGlossaryResultsArea(panel));
 }
 
 // Feeds the Learning-category achievement — dedup, only writes when a
