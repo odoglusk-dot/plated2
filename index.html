@@ -201,8 +201,13 @@
   #initialLoadingScreen .display { font-size: 2rem; color: var(--accent); }
 
   /* ── Buttons / inputs ─────────────────────────────────────────── */
-  .btn { font-weight: 600; border-radius: 12px; padding: 0.65rem 1.1rem; border: 1px solid var(--border);
-    background: var(--surface-2); color: var(--text); cursor: pointer; transition: filter .15s, border-color .15s; font-size: 0.92rem; }
+  /* Mockup px values x1.4234 (real iPhone is 390px wide, the mockup's own
+     phone frame is 274px — every mockup px has to scale up by that ratio
+     to read at the same relative size on an actual screen; see the
+     fidelity-pass doc's "Design tokens" section). .btn: 12px radius,
+     9x14px padding, 12px/700 text -> 17/20/700. */
+  .btn { font-weight: 700; border-radius: 1.06rem; padding: 0.8rem 1.25rem; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); cursor: pointer; transition: filter .15s, border-color .15s; font-size: 1.06rem; }
   .btn:hover { border-color: var(--accent); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
@@ -220,7 +225,7 @@
   .btn-block { width: 100%; }
   .input, select, textarea {
     background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 10px; padding: 0.6rem 0.8rem; font-family: inherit; width: 100%; font-size: 0.92rem;
+    border-radius: 0.7rem; padding: 0.6rem 0.8rem; font-family: inherit; width: 100%; font-size: 0.92rem;
   }
   textarea { resize: vertical; min-height: 4.5rem; }
   label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.3rem; font-weight: 600; }
@@ -233,8 +238,17 @@
      two-icon-button pair to 240px+ and starves the sibling text column. */
   .btn-group { display: flex; align-items: center; gap: 0.4rem; flex: none; min-width: 0; }
 
-  .card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 6px 16px rgba(23,24,27,0.04); }
+  /* Card: 16px radius, 11x12px padding, mockup px x1.4234 -> 23/16/17. */
+  .card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 1.44rem; padding: 1rem 1.06rem; margin-bottom: 0.8rem; box-shadow: 0 6px 16px rgba(23,24,27,0.04); }
   .card h3 { margin: 0 0 0.75rem; font-size: 1.3rem; }
+  /* Krafft training screens only (everything rendered into #panel-lifts:
+     Today's Lift/quick workout/A2/overview, Plans hub, Block Builder,
+     Exercise Library/detail) - the mockup's plain h3 (card section labels
+     like "Your program", "Browse programs") is small bold Inter, not the
+     serif display font every h1-h3 gets elsewhere in this app. Scoped
+     here rather than changed globally, so nothing outside training is
+     affected. Mockup 15px/700, margin-bottom 4px, x1.4234 -> 21px/0.36rem. */
+  #panel-lifts h3 { font-family: var(--font-body); font-weight: 700; font-size: 1.33rem; margin: 0 0 0.36rem; }
   .muted { color: var(--text-dim); font-size: 0.85rem; }
   .toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: var(--text);
     border: 1px solid var(--text); color: var(--bg); padding: 0.7rem 1.2rem; border-radius: 10px; z-index: 999;
@@ -405,10 +419,10 @@
      bar/+ button) while open. */
   .tab-panel.as-sheet.active { position: fixed; inset: 0; z-index: 38; background: var(--bg);
     overflow-y: auto; margin: 0; max-width: none;
-    /* Extra bottom room (mockup's own .body reserves 70px) so the floating
-       rest-timer pill never overlaps the last bit of real content. */
+    /* Extra bottom room so the floating rest-timer pill (now 68px tall,
+       20px inset) never overlaps the last bit of real content. */
     padding: calc(56px + env(safe-area-inset-top, 0px)) calc(1.25rem + env(safe-area-inset-right, 0px))
-      calc(4.5rem + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px)); }
+      calc(6.5rem + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px)); }
   .screen-sheet-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 39; display: flex; align-items: center; gap: 0.6rem;
     padding: calc(0.7rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) 0.7rem calc(1rem + env(safe-area-inset-left, 0px));
     background: var(--nav-bg); border-bottom: 1px solid var(--border); }
@@ -417,7 +431,8 @@
   .screen-sheet-back svg { width: 18px; height: 18px; }
   .screen-sheet-title { font-family: var(--font-display); font-weight: 600; font-size: 1.1rem; color: var(--text); }
   .pagehead { margin-bottom: 1rem; }
-  .pagetitle { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; color: var(--text); }
+  /* Screen title: mockup 24px x1.4234 -> 34px. */
+  .pagetitle { font-family: var(--font-display); font-weight: 600; font-size: 2.14rem; color: var(--text); line-height: 1.1; }
   .profile-hero { text-align: center; padding: 0.5rem 0 1.25rem; }
   .profile-avatar-circle { width: 64px; height: 64px; border-radius: 50%; background: var(--surface-2);
     border: 2px solid var(--accent); margin: 0 auto 0.6rem; display: flex; align-items: center; justify-content: center;
@@ -785,11 +800,13 @@
      3-tab bar, never overlapping it. */
   /* Floating glass pill, same recipe as .bottom-nav/.plus-fab - the
      mockup's .rest is this exact treatment, not a full-width flat bar. */
-  .rest-timer-bar { position: fixed; left: calc(14px + env(safe-area-inset-left, 0px)); right: calc(14px + env(safe-area-inset-right, 0px));
-    bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 39; display: flex; align-items: center; gap: 0.6rem;
-    height: 48px; padding: 0 1rem; border-radius: 24px;
+  /* Mockup's glass pill is 48px tall with a fully-round 24px radius at its
+     274px-wide frame; x1.4234 for a real 390px-wide screen -> 68px/34px. */
+  .rest-timer-bar { position: fixed; left: calc(20px + env(safe-area-inset-left, 0px)); right: calc(20px + env(safe-area-inset-right, 0px));
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 39; display: flex; align-items: center; gap: 0.6rem;
+    height: 4.25rem; padding: 0 1.25rem; border-radius: 2.125rem;
     background: rgba(23,24,27,.86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-    color: #fff; font-weight: 600; font-size: 0.8rem; }
+    color: #fff; font-weight: 600; font-size: 1.06rem; }
   .rest-timer-bar .mono { color: #fff; }
   .rest-timer-bar .btn { background: transparent; border: none; color: var(--gold); padding: 0.3rem 0.4rem; }
   .rest-timer-bar button:first-of-type { margin-left: auto; }
@@ -861,11 +878,12 @@
   /* Workout overview's per-exercise status indicator (mockup's Done/
      Up-next/Later rings) - flex:none + an explicit min-width escapes
      .row's ">*" rule above, which would otherwise stretch this to 120px. */
-  .ring { width: 30px; height: 30px; min-width: 30px; border-radius: 50%; flex: none;
-    display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600; }
+  /* Mockup's ring is 30px at its 274px-wide frame; x1.4234 -> 43px. */
+  .ring { width: 2.69rem; height: 2.69rem; min-width: 2.69rem; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.84rem; font-weight: 600; }
   .ring-done { background: var(--success); color: #fff; }
   .ring-progress { background: conic-gradient(var(--gold) calc(var(--ring-pct, 0) * 1%), var(--surface-3) 0); color: var(--text); position: relative; }
-  .ring-progress::after { content: attr(data-t); position: absolute; inset: 3px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
+  .ring-progress::after { content: attr(data-t); position: absolute; inset: 0.27rem; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
   .ring-none { background: var(--surface-3); color: var(--text-dim); }
 
   /* ── Lists ────────────────────────────────────────────────────── */
@@ -879,10 +897,11 @@
   .log-row .name { font-family: var(--font-display); font-weight: 500; overflow-wrap: break-word; }
   .log-row .macros { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim); }
   .chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-  .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0.4rem 0.8rem;
-    cursor: pointer; font-size: 0.85rem; }
+  /* Chip: 10.5px/600 text, 5x9px padding, mockup px x1.4234 -> 15/600, 7x13px. */
+  .chip { background: #fff; border: 1px solid var(--border); border-radius: 999px; padding: 0.44rem 0.8rem;
+    cursor: pointer; font-size: 0.93rem; font-weight: 600; white-space: nowrap; }
   .chip:hover { border-color: var(--accent); }
-  .chip.chip-active { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
+  .chip.chip-active { background: var(--text); color: var(--bg); border-color: var(--text); }
   .pill-soft { display: inline-block; background: var(--accent-soft); color: var(--accent); border-radius: 999px;
     padding: 0.15rem 0.55rem; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; }
 
@@ -15214,8 +15233,8 @@ function renderPlansHub(panel) {
     </div>` : `<div class="card"><p class="muted" style="margin:0;">No program active. Browse one below, or keep using Start workout from Today without one — a program is never required.</p></div>`}
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
-        <h3 style="margin:0;">Browse programs</h3>
-        <button class="btn btn-sm btn-ghost" id="plansHubCloseBtn">Close</button>
+        <h3 style="margin:0;flex:none;min-width:0;">Browse programs</h3>
+        <button class="btn btn-sm btn-ghost" id="plansHubCloseBtn" style="flex:none;min-width:0;">Close</button>
       </div>
       <div class="chip-row" style="margin-top:0.5rem;">
         <button class="chip ${level === '' ? 'chip-active' : ''}" data-plans-level="">All</button>
