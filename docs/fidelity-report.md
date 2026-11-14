@@ -1,0 +1,26 @@
+# Krafft fidelity report
+
+Source of truth: `docs/krafft-training-redesign-full-mockup.html`.
+Live side-by-side comparisons: `docs/fidelity-report.html` (open in a browser).
+
+## Step 0: reference + app screenshots
+
+- `scripts/mockup-refs.js` extracts one reference PNG per phone from the mockup HTML, scaled to real iPhone size (390/274 = 1.4234x via CSS `zoom`). 25/25 phones found, matching the doc's section counts exactly (Today 2, Plans 6, Workout 6, + button 3, Finish 2, Library 6). Output: `docs/mockup-ref/`.
+- `scripts/seed-demo.js` provides fixture data (Upper/Lower 4-day block, today's day, the mockup's exact last-time numbers and macros) via Playwright route mocking rather than a real Supabase test account - see the comment at the top of that file for why; flag if real backend seeding is actually wanted instead.
+- `scripts/app-shots.js` drives the running app through the same 25 screens and screenshots each into `docs/app-shots/`, then builds `docs/fidelity-report.html`. 25/25 captured on this run (one intermediate step inside 1-2 failed on a pointer-event overlap with the rest-timer pill; the shot itself still landed on a usable, if not perfectly intended, state - noted inline).
+
+### What the baseline shows (first look, not yet a line-by-line checklist pass)
+
+Comparing the two screenshot sets directly, the dominant gap is **scale and density**, not color:
+
+1. **Type scale is too large throughout.** The mockup's screen/section titles ("Your program", "Browse programs") are compact (19-24px-equivalent, single line). The app's equivalent headings use the same font but render much larger, wrapping to two lines where the mockup fits one.
+2. **Chips are oversized.** Mockup chips are a dense 10.5px pill with 5x9px padding. The app's `.chip` class, while already pill-shaped, uses noticeably larger padding/font, so a filter row that should show "All / Beginner / Intermediate / Advanced" compactly takes much more vertical and horizontal space.
+3. **Card padding is too generous.** Mockup cards use 11x12px padding; the app's `.card` (already bumped to 16px radius in an earlier pass) still uses ~20px padding, closer to the app's pre-existing default than the mockup's tight spec.
+4. **A2 weight prefill gap (functional, not visual):** opening a freshly-added exercise's A2 screen shows an empty Weight field with no value, where the mockup shows it pre-filled from last session's weight (70). Current code (`resetExerciseDetailInput`) only prefills from *this live session's own* prior sets, not from exercise history - a real behavior gap to fix in the Section 3 pass, not just a style one.
+5. **Figure/muscle-map tile** renders correctly but noticeably smaller and lower-contrast than the mockup's 76x104 tile with brass-highlighted primary muscle.
+
+Shared components A-J (next step) will fix most of #1-3 and #5 at the component level, since nearly every screen reuses `.card`, `.chip`, and the figure tile. #4 is a logic fix inside the exercise-detail module, done as part of Section 3.
+
+## Status
+
+Step 0 complete and committed (`training-redesign`, not merged to `main` - these are docs/scripts only, no app behavior changed yet). Stopping here per the pass's own rule 6 for review before building shared components A-J.
