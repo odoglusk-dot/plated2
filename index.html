@@ -483,11 +483,16 @@
   .plus-log-field input::placeholder { color: var(--text-faint); }
   .plus-log-field button { background: none; border: none; padding: 0.2rem; cursor: pointer; color: var(--text-dim); display: flex; }
   .plus-log-field svg { width: 20px; height: 20px; }
-  .plus-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 0.9rem; }
+  /* Mockup: 2x2 grid (not a single row of 4), tile label 12.5px/600, icon
+     20px, last-used = 2px ink border + a "Last used" caption - not a
+     gold outline with no caption. Mockup px x1.4234: label ~1.11rem,
+     icon ~1.78rem. */
+  .plus-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; margin-top: 0.9rem; }
   .plus-tile { background: var(--bg); border: 1px solid var(--border); border-radius: 14px; text-align: center;
-    padding: 0.85rem 0.1rem; font-size: 0.75rem; font-weight: 500; color: var(--text); cursor: pointer; }
-  .plus-tile.last-used { outline: 2px solid var(--gold, #C7A15E); outline-offset: -1px; }
-  .plus-tile b { display: block; font-size: 1.4rem; margin-bottom: 0.2rem; font-weight: 400; }
+    padding: 0.85rem 0.1rem; font-size: 1.11rem; font-weight: 600; color: var(--text); cursor: pointer; }
+  .plus-tile.last-used { border: 2px solid var(--text); }
+  .plus-tile b { display: block; font-size: 1.78rem; margin-bottom: 0.2rem; font-weight: 400; }
+  .plus-tile-lastused-caption { display: block; font-size: 0.68rem; font-weight: 500; color: var(--text-dim); margin-top: 0.15rem; }
   .plus-confirm-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-top: 1px solid var(--divider); }
   .plus-confirm-row:first-of-type { border-top: none; }
 
@@ -3762,6 +3767,7 @@ function plusSheetHtml() {
   const tile = (key, label, icon) => `
     <button class="plus-tile ${last === key ? 'last-used' : ''}" data-plus-tile="${key}">
       <b>${icon}</b>${label}
+      ${last === key ? `<span class="plus-tile-lastused-caption">Last used</span>` : ''}
     </button>`;
   return `
     <div class="plus-sheet-handle"></div>
@@ -9969,9 +9975,9 @@ function quickWorkoutAddExercise(name) {
 // so a set logged here has the same autosave, rest timer and PR checks.
 function renderPlusLogSetPicker(panel) {
   panel.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-      <div class="display" style="font-size:1.1rem;">Log a set</div>
-      <button class="btn btn-sm btn-ghost" id="plsCloseBtn">Close</button>
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;flex-wrap:nowrap;">
+      <div class="display" style="font-size:1.69rem;flex:none;min-width:0;">Log a set</div>
+      <button class="chip" id="plsCloseBtn" style="flex:none;min-width:0;">Close</button>
     </div>
     <div class="card">
       <input class="input" id="plsSearch" placeholder="&#128269; Search exercises" value="${esc(plusLogSetSearch)}">
@@ -10080,7 +10086,7 @@ function renderPlusLogSetQuick(panel, idx) {
   panel.innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
       <button class="btn btn-sm btn-ghost" id="plsBackBtn">&#8249; Back</button>
-      <button class="btn-link" id="plsOpenFullBtn">Open full workout</button>
+      <button class="btn-link" id="plsOpenFullBtn" style="text-transform:none;text-decoration:underline;font-size:1rem;">Open full workout</button>
     </div>
     <div class="card">
       <div class="row" style="align-items:flex-start;gap:0.75rem;">
@@ -10257,8 +10263,14 @@ let exerciseDetailJustFinished = false; // shows the PR/estimated-max summary in
 
 function resetExerciseDetailInput(ex) {
   const lastSet = ex.setsLogged[ex.setsLogged.length - 1];
+  // Prefill order: this set's own prior weight, then this live session's
+  // starting weight, then (freshly added, nothing logged yet today) the
+  // most recent historical weight for this exercise - the mockup always
+  // shows the weight field prefilled from "last time", not blank.
+  let weight = lastSet?.weight ?? ex.weight;
+  if (weight == null) weight = lastTimeLabelFor(ex.name, false)?.weight ?? null;
   exerciseDetailInput = {
-    weight: lastSet ? String(toDisplayWeight(lastSet.weight ?? ex.weight ?? 0).value) : (ex.weight != null ? String(toDisplayWeight(ex.weight).value) : ''),
+    weight: weight != null ? String(toDisplayWeight(weight).value) : '',
     reps: '', distance: '', durationSeconds: '', timerRunning: false, timerStartedAt: null,
   };
   exerciseDetailCueExpanded = false;
