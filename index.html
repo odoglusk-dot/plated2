@@ -9988,10 +9988,11 @@ function exercisePickerResultsHtml(query, actionAttr, actionLabel = '+') {
 
 function renderQuickWorkoutStart(panel) {
   panel.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-      <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.8rem;">Quick workout &middot; ${esc(liveWorkoutElapsedLabel())}</div>
-      <button class="btn btn-sm btn-ghost" id="qwCancelBtn">Cancel</button>
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);min-width:0;">Quick workout &middot; ${esc(liveWorkoutElapsedLabel())}</div>
+      <span class="chip" id="qwCancelBtn" style="cursor:pointer;flex:none;min-width:0;">Cancel</span>
     </div>
+    <div class="pagetitle" style="margin:0.1rem 0 0.6rem;">Add your first exercise</div>
     <div class="card">
       <input class="input" id="qwSearch" placeholder="&#128269; Search exercises" value="${esc(quickWorkoutSearch)}">
       <div id="qwResultsArea" style="margin-top:0.6rem;"></div>
@@ -10012,19 +10013,17 @@ function renderQwSearchResults(panel) {
   if (resultsEl) resultsEl.innerHTML = q ? exercisePickerResultsHtml(q, 'data-qw-add') : '';
   const recentEl = $('#qwRecentArea', panel);
   if (recentEl) recentEl.innerHTML = !q ? `
-    <div class="card">
-      <h3 style="margin-top:0;">Repeat a recent workout</h3>
-      ${recentWorkoutDays().map((d) => `
-        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
-          <div><div>${esc(d.exercises[0])}${d.exercises.length > 1 ? ` + ${d.exercises.length - 1} more` : ''}</div><div class="muted small">${d.exercises.length} exercise${d.exercises.length === 1 ? '' : 's'} &middot; ${d.daysAgo} day${d.daysAgo === 1 ? '' : 's'} ago</div></div>
-          <button class="btn btn-sm" data-qw-repeat="${esc(d.date)}">Use</button>
-        </div>`).join('') || `<p class="muted small">No past workouts yet.</p>`}
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0;">Recent exercises</h3>
-      <div class="chip-row">
-        ${recentExerciseNames().map((n) => `<button class="chip" data-qw-add="${esc(n)}">${esc(n)}</button>`).join('') || `<p class="muted small">Nothing logged yet.</p>`}
-      </div>
+    <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin:0.6rem 0 0.4rem;">Repeat a recent workout</div>
+    ${recentWorkoutDays().map((d) => `
+      <div class="card" style="margin-bottom:0.6rem;">
+        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+          <div style="min-width:0;"><strong>${esc(d.exercises[0])}${d.exercises.length > 1 ? ` + ${d.exercises.length - 1} more` : ''}</strong><div class="muted small">${d.exercises.length} exercise${d.exercises.length === 1 ? '' : 's'} &middot; ${d.daysAgo} day${d.daysAgo === 1 ? '' : 's'} ago</div></div>
+          <button class="btn btn-sm" style="flex:none;min-width:0;background:var(--text);color:var(--bg);border-color:var(--text);" data-qw-repeat="${esc(d.date)}">Use</button>
+        </div>
+      </div>`).join('') || `<p class="muted small">No past workouts yet.</p>`}
+    <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin:0.6rem 0 0.4rem;">Recent exercises</div>
+    <div class="chip-row">
+      ${recentExerciseNames().map((n) => `<button class="chip" data-qw-add="${esc(n)}">${esc(n)}</button>`).join('') || `<p class="muted small">Nothing logged yet.</p>`}
     </div>` : '';
   $$('[data-qw-add]', panel).forEach((btn) => btn.addEventListener('click', () => quickWorkoutAddExercise(btn.dataset.qwAdd)));
   $$('[data-qw-repeat]', panel).forEach((btn) => btn.addEventListener('click', () => quickWorkoutRepeatDay(btn.dataset.qwRepeat)));
@@ -10261,40 +10260,47 @@ function renderWorkoutOverview(panel) {
   const later = notDone.slice(1);
 
   panel.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-      <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.8rem;">${esc(liveWorkoutSessionLabel())} &middot; ${esc(liveWorkoutElapsedLabel())}</div>
-      <button class="btn btn-sm" id="qwFinishBtn">Finish</button>
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);min-width:0;">${esc(liveWorkoutSessionLabel())} &middot; ${esc(liveWorkoutElapsedLabel())}</div>
+      <button class="btn btn-sm btn-primary" style="flex:none;min-width:0;" id="qwFinishBtn">Finish</button>
     </div>
-    <div class="card">
-      <h3 style="margin-top:0;">Today's workout</h3>
-      ${done.length ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">Done</div>` : ''}
-      ${done.map((ex) => `
-        <div class="row" style="align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;opacity:0.65;" data-wo-open="${esc(ex.name)}">
+    <div class="pagetitle" style="margin:0.1rem 0 0.5rem;">Today's workout</div>
+    <div style="height:0.4rem;background:var(--surface-3);border-radius:0.2rem;overflow:hidden;margin-bottom:0.8rem;">
+      <div style="width:${exercises.length ? Math.round((done.length / exercises.length) * 100) : 0}%;height:100%;background:var(--success);"></div>
+    </div>
+    ${done.length ? `<div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Done</div>` : ''}
+    ${done.map((ex) => `
+      <div class="card" style="margin-bottom:0.6rem;opacity:0.7;cursor:pointer;" data-wo-open="${esc(ex.name)}">
+        <div class="row" style="align-items:center;flex-wrap:nowrap;">
           ${exerciseRingHtml(ex)}
-          <div style="flex:1;min-width:0;">${esc(ex.name)}</div>
-          <span class="mono muted small" style="flex:none;min-width:0;">${esc(exerciseSetSummaryLabel(ex))}</span>
-        </div>`).join('')}
-      ${current ? `
-        <div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.3rem;">Up next</div>
-        <div class="row" style="align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+          <div style="flex:1;min-width:0;"><strong>${esc(ex.name)}</strong><div class="muted small">${esc(exerciseSetSummaryLabel(ex))}</div></div>
+        </div>
+      </div>`).join('')}
+    ${current ? `
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Up next</div>
+      <div class="card" style="margin-bottom:0.6rem;border:2px solid var(--text);">
+        <div class="row" style="align-items:center;flex-wrap:nowrap;">
           ${exerciseRingHtml(current)}
           <div style="flex:1;min-width:0;">
             <div><strong>${esc(current.name)}</strong></div>
             <div class="muted small">${goalLineForOverview(current)}</div>
           </div>
           <button class="btn btn-sm btn-primary" style="flex:none;min-width:0;" data-wo-open="${esc(current.name)}">Open</button>
-        </div>` : ''}
-      ${later.length ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.3rem;">Later</div>` : ''}
-      ${later.map((ex) => `
-        <div class="row" style="align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;" data-wo-open="${esc(ex.name)}">
+        </div>
+      </div>` : ''}
+    ${later.length ? `<div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Later</div>` : ''}
+    ${later.map((ex) => `
+      <div class="card" style="margin-bottom:0.6rem;cursor:pointer;" data-wo-open="${esc(ex.name)}">
+        <div class="row" style="align-items:center;flex-wrap:nowrap;">
           ${exerciseRingHtml(ex)}
           <div style="flex:1;min-width:0;">
             <div>${esc(ex.name)}</div>
             <div class="muted small">${ex.prescribedSets ? `${ex.setsLogged.length}/${ex.prescribedSets} sets` : `${ex.setsLogged.length} set${ex.setsLogged.length === 1 ? '' : 's'} logged`}${isExerciseStalled(ex.name) ? ` &middot; stalled 4+ sessions` : ''}</div>
           </div>
-        </div>`).join('')}
-      <button class="btn btn-sm btn-ghost" id="qwAddMoreBtn" style="margin-top:0.6rem;">+ Add exercise</button>
-    </div>
+        </div>
+      </div>`).join('')}
+    <button class="btn btn-sm btn-ghost" id="qwAddMoreBtn" style="width:100%;margin-bottom:0.6rem;">+ Add exercise</button>
+    <div class="banner">When you finish, you can save this as a workout to reuse. Optional.</div>
   `;
   $('#qwFinishBtn').addEventListener('click', finishLiveWorkout);
   $('#qwAddMoreBtn').addEventListener('click', () => { liveWorkoutScreen = 'start'; renderLiftsTab(); });
