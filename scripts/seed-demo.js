@@ -125,6 +125,7 @@ export const FAKE_PROFILE = {
   id: FAKE_USER.id, onboarding_completed_at: new Date().toISOString(),
   trial_offer_seen_at: new Date().toISOString(), payoff_coachmark_dismissed_at: new Date().toISOString(),
   active_training_block: ACTIVE_BLOCK, schedule_overrides_this_week: {},
+  ai_consent_at: new Date().toISOString(),
 };
 
 // Today mockup's macro numbers exactly: 128g/180g protein, 1880/2750
@@ -174,6 +175,22 @@ export async function installMocks(page, { subscriptionTier = 'pro' } = {}) {
   });
   // Functions (session analysis etc.) - not under test for this pass, keep harmless.
   await page.route('**/functions/v1/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) }));
+  // analyze-session: a realistic, schema-accurate stand-in for the real
+  // Claude call (see netlify/functions/analyze-session.js's SYSTEM_PROMPT
+  // shape) so Section 4's "Finish" screenshots show the actual rendered
+  // layout instead of the pre-generation empty state.
+  await page.route('**/.netlify/functions/analyze-session', (r) => r.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({
+      analysis: {
+        summary: 'Strongest bench session in a while - that extra rep at 145 is a real sign of progress. Keep the rest of the week light so it banks.',
+        callouts: [
+          { type: 'pr', text: 'Bench Press hit a new best at 145 lb.' },
+        ],
+        highlightExercise: null,
+      },
+      remaining: 1,
+    }),
+  }));
 }
 
 export async function gotoApp(page, baseUrl) {

@@ -138,9 +138,12 @@ async function run() {
       await page.click('#exLogSetBtn'); await page.waitForTimeout(300);
       await page.click('#exFinishExerciseBtn'); await page.waitForTimeout(300);
       await page.click('#exNextExerciseBtn'); await page.waitForTimeout(300);
-      await page.click('#qwFinishBtn'); await page.waitForTimeout(500);
+      // Pro + consented + baseline session history met: ending the workout
+      // auto-triggers generateSessionAnalysis() (index.html ~line 11066) -
+      // no separate "Generate Analysis" tap needed or offered.
+      await page.click('#qwFinishBtn'); await page.waitForTimeout(900);
     });
-    await shoot(page, '4-1-pro-headline-findings-next-session-targets.png', '4-1 Finish, Pro analysis (NOTE: analysis is AI-generated server-side; this mock has no analyze-session function response, so this is whatever the app shows with none generated yet)');
+    await shoot(page, '4-1-pro-headline-findings-next-session-targets.png', '4-1 Finish, Pro analysis (analyze-session mocked with a realistic response - see seed-demo.js)');
   }, { subscriptionTier: 'pro' });
   await withFreshPage(browser, async (page) => {
     await tryStep('start + finish a workout (free tier)', async () => {
