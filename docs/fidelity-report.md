@@ -23,4 +23,21 @@ Shared components A-J (next step) will fix most of #1-3 and #5 at the component 
 
 ## Status
 
-Step 0 complete and committed (`training-redesign`, not merged to `main` - these are docs/scripts only, no app behavior changed yet). Stopping here per the pass's own rule 6 for review before building shared components A-J.
+Per the user's "finish everything from this batch" instruction, rule 6's per-section stop-for-review was waived and every section was taken through to completion in one pass. Final state:
+
+- **Step 0** (reference/app screenshot infra): done.
+- **Shared components A-J**: done. Glass bar, set row, exercise header, stepper, progress ring, PR badge, banner, bottom sheet, week strip, and day dots all scaled to the mockup's own 390/274 ratio and reused across screens.
+- **Section 3b (+ button)**: done, including the A2/quick-log weight-prefill bug fix.
+- **Section 1 (Today)**: done.
+- **Section 2 (Plans)**: done - Plans hub dark hero card + week strip + day dots, program preview restructured into drill-in day cards with real catalog-derived muscle/equipment data, Block Builder's "Your version" now collapsed-first, change-days-per-week preview gained a real weekly-sets-per-muscle chart, reschedule menu restyled with a working "Swap with <next day>" action.
+- **Section 4 (Finish)**: done - Session Analysis restyled with stat tiles, icon-badge findings, and a real "Next session" targets card (computed client-side from logged data, never the AI response) on both tiers. Found and fixed a real crash in `exerciseGoalRepRangeFor` along the way (iterated `block.days`, a number, instead of `block.blockDays`).
+- **Section 3 (Workout)**: done - quick-workout picker and in-session overview restyled to the mockup's individual-card list convention; added the "save as workout, optional" teaser banner.
+- **Section 5 (Library)**: done - Exercise Glossary header flattened off its wrapping card to match the mockup.
+
+**Known, deliberately-not-attempted gaps** (flagged rather than half-built):
+- **Save as workout**: no naming/persisting-a-template flow exists; only the mockup's teaser banner text was added.
+- **Superset creation UI**: no way to group two exercises mid-session into a true superset; the 3-6 screenshot is a plain A2 screen, not a real superset.
+- **Finish screen's per-exercise trend chart** (`highlightExercise`) and nutrition chart render only when the AI response names them - not exercised by the current test fixture, unverified visually.
+- **Program preview's "8 weeks"/deload-week copy** from the mockup isn't represented - no `weeks`/deload-schedule field exists on `PROGRAM_TEMPLATES`.
+
+All work is committed and pushed to `training-redesign` (not yet merged to `main`).
