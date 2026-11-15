@@ -10648,6 +10648,128 @@ const CITATION_LIBRARY = {
     more: 'A systematic review and meta-analysis (Grgic, Schoenfeld, Orazem & Sabol) comparing sets taken to complete failure against sets stopped short of failure found no significant overall difference in muscle growth between the two approaches — one reason training to failure on every set isn\'t necessary to make progress.',
   },
 };
+
+// ══════════════════════════════════════════════════════════════════════
+// EVIDENCE_CONFIG — Krafft plan builder: GOALS + "WHY" evidence, Phase 4.
+// ══════════════════════════════════════════════════════════════════════
+// Separate from (not a replacement for) CITATION_LIBRARY above, which
+// backs the existing inline footnotes on the hypertrophy/frequency/
+// failure learning content. This is the goal-builder's own evidence
+// base, read by every "Why?" link's bottom sheet (sheet UI itself is
+// Phase 2+ work, blocked on the mockup — see docs/plan-builder-goals-
+// audit.md).
+//
+// Wording is transcribed verbatim from the product spec - do not
+// strengthen, round, or add numbers that aren't there. `verified: false`
+// on every citation is required by the spec: a human (Owen) checks each
+// one against the paper abstract before it ships as verified. Do NOT
+// flip any of these to true from this session - see
+// scripts/lint-evidence.js for the build-time check that enforces both
+// this and the content rules below.
+//
+// Content rules (same script enforces the banned-word list):
+// plain answer first, then "what this means for you", then sources.
+// Never "proven"/"guaranteed"/a promise of a specific result. Athletic
+// copy says "builds toward", never promises an outcome. `limited` always
+// displays as "Limited evidence". No percent or effect-size number
+// appears in plainAnswer/meansForYou - only inside citations[].finding.
+const EVIDENCE_CONFIG = {
+  weekly_volume: {
+    title: 'Why this many sets per week?',
+    plainAnswer: 'More weekly sets per muscle, up to a point, tends to build toward more muscle growth than fewer sets.',
+    meansForYou: 'The set ranges in this plan reflect that dose-response relationship — not a hard minimum or maximum, a reasonable range to work within.',
+    label: 'strong',
+    citations: [
+      { authors: 'Schoenfeld, Ogborn, Krieger', year: '2016', journal: 'Journal of Sports Sciences', finding: 'Meta-analysis; graded dose-response — each added weekly set per muscle linked to a small extra gain (about 0.37%).', verified: false },
+    ],
+    usedFor: ['size:volume'],
+  },
+  load_rep_range_size: {
+    title: 'Why this rep range for size?',
+    plainAnswer: 'Muscle growth comes out similar across a wide range of rep counts and loads, as long as sets are taken close to effort failure.',
+    meansForYou: 'That\'s why the rep range here is a suggestion rather than a strict rule — picking a weight you can control for a hard set in this range matters more than hitting an exact rep number.',
+    label: 'strong',
+    citations: [
+      { authors: 'Schoenfeld, Grgic, Ogborn, Krieger', year: '2017', journal: 'Journal of Strength and Conditioning Research', finding: '21 studies; sets taken to failure produced similar muscle growth from low and high loads.', verified: false },
+      { authors: 'Schoenfeld, Grgic, Van Every, Plotkin', year: '2021', journal: 'Sports (Basel) 9(2):32', finding: 'Growth was similar across a wide range of loads (minimum about 30% of 1RM) when sets are hard; an 8-12 rep range was not clearly superior to other ranges.', verified: false },
+    ],
+    usedFor: ['size:reps'],
+  },
+  load_strength: {
+    title: 'Why heavier weight for strength?',
+    plainAnswer: 'Heavier loads build toward greater gains in maximal lifting strength than lighter loads do, even when both build similar muscle size.',
+    meansForYou: 'That\'s why strength-focused training here leans on lower reps and heavier weight rather than the higher-rep ranges used for the size goal.',
+    label: 'strong',
+    citations: [
+      { authors: 'Schoenfeld, Grgic, Ogborn, Krieger', year: '2017', journal: 'Journal of Strength and Conditioning Research', finding: 'Heavier loads produced greater 1RM gains than lighter loads; isometric strength gains were similar between load groups.', verified: false },
+      { authors: 'Schoenfeld, Grgic, Van Every, Plotkin', year: '2021', journal: 'Sports (Basel) 9(2):32', finding: 'The strength advantage of heavier loads mostly shows up on the specific exercises trained.', verified: false },
+    ],
+    usedFor: ['strength:reps'],
+  },
+  rest_between_sets: {
+    title: 'Why longer rest for strength?',
+    plainAnswer: 'Longer rest between sets builds toward better strength and muscle outcomes than very short rest, in resistance-trained lifters.',
+    meansForYou: 'That\'s why strength-focused sessions here use longer rest periods than a size-focused session would.',
+    label: 'moderate',
+    labelNote: 'one study',
+    citations: [
+      { authors: 'Schoenfeld et al.', year: '2016', journal: 'Journal of Strength and Conditioning Research', finding: '"Longer Interset Rest Periods Enhance Muscle Strength and Hypertrophy in Resistance-Trained Men" — compared 3-minute and 1-minute rest periods.', verified: false },
+    ],
+    usedFor: ['strength:rest'],
+  },
+  strength_to_sprint: {
+    title: 'Why heavy lower-body lifts for athletic performance?',
+    plainAnswer: 'Getting stronger in the squat pattern builds toward faster sprinting.',
+    meansForYou: 'That\'s part of why the athletic goal\'s power block includes heavy lower-body lifting, not just jumps and sprints on their own.',
+    label: 'moderate',
+    citations: [
+      { authors: 'Seitz, Reyes, Tran, de Villarreal, Haff', year: '2014', journal: 'Sports Medicine 44(12):1693-1702', finding: '15 studies, 510 subjects; squat strength change correlated with sprint change (r = -0.77); average sprint improvement 3.11%.', verified: false },
+    ],
+    usedFor: ['athletic:heavy_lower_body_lifts'],
+  },
+  jumps_to_sprint_jump: {
+    title: 'Why jump training for athletic performance?',
+    plainAnswer: 'Plyometric (jump) training builds toward faster sprinting and higher jumps in athletes like these.',
+    meansForYou: 'That\'s why the athletic goal\'s power block leads with jump work before heavier lifting.',
+    label: 'moderate',
+    labelNote: 'in athletes like these - the sample is one sport',
+    citations: [
+      { authors: 'Ramirez-Campillo et al.', year: '2021', journal: 'Frontiers in Physiology 12:636140', finding: '18 studies, 746 volleyball athletes; plyometrics improved sprint (effect size 0.70) and jump height (effect size 0.56 to 0.84).', verified: false },
+    ],
+    usedFor: ['athletic:jump_block'],
+  },
+  concurrent_training: {
+    title: 'Why keep cardio apart from heavy leg days?',
+    plainAnswer: 'Aerobic work can blunt strength and size gains when it\'s combined too closely with resistance training.',
+    meansForYou: 'That\'s why this plan keeps cardio intervals apart from your heaviest leg training days rather than stacking them together.',
+    label: 'moderate',
+    citations: [
+      { authors: 'Wilson et al.', year: '2012', journal: 'Journal of Strength and Conditioning Research', finding: 'Meta-analysis on interference between aerobic and resistance training.', verified: false },
+    ],
+    usedFor: ['conditioning:general'],
+  },
+  carries_functional: {
+    title: 'Why carries and functional work?',
+    plainAnswer: 'Based on coaching practice more than trials.',
+    meansForYou: 'We include it because it trains trunk, grip and single-leg strength in ways that carry over to daily life.',
+    label: 'limited',
+    citations: [],
+    usedFor: ['functional:general'],
+  },
+  power_first_full_rest: {
+    title: 'Why power work first, with full rest?',
+    plainAnswer: 'A coaching principle: tired muscles move slower, so power work comes first and gets full rest.',
+    meansForYou: 'We don\'t cite a single study for this.',
+    label: 'limited',
+    citations: [],
+    usedFor: ['athletic:session_structure'],
+  },
+};
+// Rows with no study behind them must read as a Limited note, not sit
+// silently alongside cited ones - enforced by scripts/lint-evidence.js
+// (every entry needs label + plainAnswer + meansForYou; `limited` entries
+// are allowed an empty citations[], everything else is not).
+const EVIDENCE_BANNED_WORDS = ['proven', 'guarantee', 'guaranteed', 'will make you', 'will build', 'will get you'];
 // Session-only footnote state (dismissed/expanded), keyed per rendered
 // instance (e.g. "hypertrophy:Bench Press") so dismissing one exercise's
 // citation doesn't hide it everywhere else. Resets on reload — this is a
@@ -12879,6 +13001,127 @@ const BLOCK_SCHEME = {
 // which BLOCK_SCHEME entry sets its sets/reps.
 const PHASE_POOL = { hypertrophy: 'hypertrophy', strength: 'strength', deload: 'hypertrophy', maintenance: 'hypertrophy', peak: 'strength', taper: 'strength' };
 const BLOCK_WEEK_STRIP = ['Base', '+Sets', '+Sets', 'Deload'];
+
+// ══════════════════════════════════════════════════════════════════════
+// GOALS_CONFIG — Krafft plan builder: GOALS + "WHY" evidence, Phase 1.
+// ══════════════════════════════════════════════════════════════════════
+// Single source of truth for every goal-driven number in the plan
+// builder. The generator AND the on-screen "Why this plan" card must
+// both read from this object — no rep/rest/volume/progression number for
+// a goal belongs anywhere else. See docs/plan-builder-goals-audit.md for
+// why this sits alongside (not inside) BLOCK_SCHEME: BLOCK_SCHEME is the
+// existing Block Builder's own sets/reps table, keyed by the *old*
+// 2-option focus (hypertrophy/strength) plus 4 Plan-only phase types;
+// GOALS_CONFIG is the *new*, 6-goal table this batch adds. Rewiring
+// generateBlock()/blockExerciseEntry()/the rest timer/double progression
+// to actually read from this config, instead of their current hardcoded
+// values, is Phase 2+ work and has not happened yet — this file only
+// defines the numbers.
+//
+// `restSeconds`/`repsInReserve` are {min,max} in the table's own units
+// (seconds, reps) or null where the spec's table gives no number for
+// that goal — left null rather than invented. `legacyFocusMap` is the
+// read-time compatibility shim: existing active_training_block rows have
+// no `goal` field at all (additive/nullable per the Phase 0 audit), so
+// any read site falls back to legacyFocusMap[block.focus] ?? 'general'.
+const GOALS_CONFIG = {
+  size: {
+    name: 'Build Size',
+    promise: 'Grow muscle with moderate reps and higher total volume.',
+    repsMain: '6-15',
+    repsAccessory: '6-15',
+    restSeconds: { min: 90, max: 150 }, // 1.5-2.5 min
+    setsPerMusclePerWeek: { min: 10, max: 20 },
+    repsInReserve: { min: 1, max: 3 },
+    progression: 'reps_then_weight',
+    sessionStructure: 'standard_split',
+    exerciseSelection: { includeTags: [], avoidTags: [] },
+    emphasis: { type: 'muscle', maxSelections: 2, extraSetsPerWeek: 4 },
+    evidenceIds: ['weekly_volume', 'load_rep_range_size'],
+  },
+  strength: {
+    name: 'Build Strength',
+    promise: 'Build maximal strength on compound lifts with lower reps, heavier loads.',
+    repsMain: '3-6',
+    repsAccessory: '6-10',
+    restSeconds: { min: 180, max: 300 }, // 3-5 min
+    setsPerMusclePerWeek: null, // spec: "fewer lifts, more sets on squat, bench, deadlift, row, press" - a structural rule, not a flat per-muscle range
+    repsInReserve: null, // not given a number in the spec's table
+    progression: 'add_weight_when_all_reps_done',
+    sessionStructure: 'main_lifts_focus',
+    exerciseSelection: { includeTags: ['compound'], avoidTags: [] },
+    emphasis: { type: 'muscle', maxSelections: 2, extraSetsPerWeek: 4 },
+    evidenceIds: ['load_strength', 'rest_between_sets'],
+  },
+  athletic: {
+    name: 'Athletic Performance',
+    promise: 'Builds toward power and speed through lifting, jumps, and short sprints.',
+    repsMain: '1-5', // main lifts
+    repsJump: '3-6', // per jump set
+    sprintStyle: 'short',
+    restSeconds: { min: 120, max: 240 }, // full recovery, 2-4 min, on power work only
+    setsPerMusclePerWeek: null,
+    repsInReserve: null,
+    progression: 'quality_first_stop_on_dropoff', // stop the set/day when speed or jump height drops
+    sessionStructure: 'power_first_then_strength_trunk_singleleg',
+    exerciseSelection: { includeTags: ['power', 'plyo'], avoidTags: [] },
+    emphasis: { type: 'body_area', maxSelections: 2, options: ['legs_speed', 'upper_body', 'trunk'] },
+    evidenceIds: ['strength_to_sprint', 'jumps_to_sprint_jump', 'power_first_full_rest'],
+  },
+  functional: {
+    name: 'Functional Fitness',
+    promise: 'Builds real-world strength through carries, step-ups, lunges, and core work.',
+    repsMain: '6-12',
+    carryStyle: 'distance_or_time',
+    restSeconds: { min: 60, max: 120 }, // 1-2 min
+    setsPerMusclePerWeek: null,
+    repsInReserve: null,
+    progression: 'harder_variation_then_load_or_time',
+    sessionStructure: 'carries_stepups_lunges_rows_presses_core',
+    exerciseSelection: { includeTags: ['carry', 'unilateral', 'trunk'], avoidTags: [] },
+    emphasis: { type: 'none' }, // spec: "everything else stays at maintenance volume"
+    evidenceIds: ['carries_functional'],
+  },
+  conditioning: {
+    name: 'Conditioning',
+    promise: 'Combines lifting with intervals for work capacity, kept apart from heavy leg days.',
+    repsMain: null, // circuits by time or reps, not a flat rep range
+    circuitStyle: 'time_or_reps',
+    restSeconds: { min: 30, max: 60 },
+    setsPerMusclePerWeek: null,
+    repsInReserve: null,
+    progression: 'more_total_work_or_pace',
+    sessionStructure: 'lifting_2to3_days_plus_intervals_apart_from_heavy_legs',
+    exerciseSelection: { includeTags: [], avoidTags: [] },
+    emphasis: { type: 'none' },
+    evidenceIds: ['concurrent_training'],
+  },
+  general: {
+    name: 'General Fitness',
+    promise: 'Balanced full-body training across push, pull, legs, and core every week.',
+    repsMain: '8-12',
+    repsAccessory: '8-12',
+    restSeconds: { min: 60, max: 120 }, // 1-2 min
+    setsPerMusclePerWeek: null,
+    repsInReserve: null,
+    progression: 'reps_then_weight',
+    sessionStructure: 'full_body_balance',
+    exerciseSelection: { includeTags: [], avoidTags: [] },
+    emphasis: { type: 'none' },
+    evidenceIds: [],
+  },
+};
+// Existing active_training_block rows predate `goal` entirely (additive/
+// nullable field - see the Phase 0 audit's point 4). hypertrophy behaved
+// like today's `size` (moderate reps, volume-first); everything else
+// (strength included, since it already IS one of the 6 keys) needs no
+// remapping - `focus` and `goal` share the same key there.
+const LEGACY_FOCUS_TO_GOAL = { hypertrophy: 'size' };
+function goalForBlock(block) {
+  if (!block) return null;
+  if (block.goal && GOALS_CONFIG[block.goal]) return block.goal;
+  return LEGACY_FOCUS_TO_GOAL[block.focus] || 'general';
+}
 
 function blockSplitTemplate(days) {
   if (days <= 3) return [
