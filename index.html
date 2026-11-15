@@ -10758,28 +10758,24 @@ function renderExerciseGlossary(panel) {
   const equipmentOptions = [...new Set(state.exercises.map((e) => e.equipment).filter(Boolean))].sort();
   const typeOptions = [...new Set(state.exercises.map((e) => e.movement_type).filter((t) => GLOSSARY_MOVEMENT_TYPE_LABELS[t]))];
   panel.innerHTML = `
-    <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <h3 style="margin:0;">Exercise Glossary</h3>
-        <button class="btn btn-sm btn-ghost" id="closeGlossaryBtn" style="flex:none;">✕ Close</button>
-      </div>
-      <div class="field" style="margin-top:0.75rem;">
-        <input class="input" id="glossarySearch" placeholder="Search exercises…" value="${esc(glossaryFilter.search)}">
-      </div>
-      <div class="chip-row">
-        <button class="chip ${mg === '' ? 'chip-active' : ''}" data-glossary-mg="">All</button>
-        ${MUSCLE_GROUPS.map((g) => `<button class="chip ${mg === g ? 'chip-active' : ''}" data-glossary-mg="${g}">${g}</button>`).join('')}
-      </div>
-      <div class="chip-row" style="margin-top:0.4rem;">
-        <button class="chip ${eq === '' ? 'chip-active' : ''}" data-glossary-eq="">All equipment</button>
-        ${equipmentOptions.map((e) => `<button class="chip ${eq === e ? 'chip-active' : ''}" data-glossary-eq="${esc(e)}">${esc(e)}</button>`).join('')}
-      </div>
-      <div class="chip-row" style="margin-top:0.4rem;">
-        <button class="chip ${mt === '' ? 'chip-active' : ''}" data-glossary-type="">All types</button>
-        ${typeOptions.map((t) => `<button class="chip ${mt === t ? 'chip-active' : ''}" data-glossary-type="${t}">${GLOSSARY_MOVEMENT_TYPE_LABELS[t]}</button>`).join('')}
-      </div>
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+      <div class="pagetitle" style="margin:0;">Exercises</div>
+      <span class="chip" id="closeGlossaryBtn" style="cursor:pointer;flex:none;min-width:0;">&#10005; Close</span>
     </div>
-    <div id="glossaryResultsArea"></div>
+    <input class="input" id="glossarySearch" placeholder="Search ${state.exercises.length} exercises" value="${esc(glossaryFilter.search)}" style="margin:0.6rem 0;">
+    <div class="chip-row">
+      <button class="chip ${mg === '' ? 'chip-active' : ''}" data-glossary-mg="">All</button>
+      ${MUSCLE_GROUPS.map((g) => `<button class="chip ${mg === g ? 'chip-active' : ''}" data-glossary-mg="${g}">${g}</button>`).join('')}
+    </div>
+    <div class="chip-row" style="margin-top:0.4rem;">
+      <button class="chip ${eq === '' ? 'chip-active' : ''}" data-glossary-eq="">All equipment</button>
+      ${equipmentOptions.map((e) => `<button class="chip ${eq === e ? 'chip-active' : ''}" data-glossary-eq="${esc(e)}">${esc(e)}</button>`).join('')}
+    </div>
+    <div class="chip-row" style="margin-top:0.4rem;">
+      <button class="chip ${mt === '' ? 'chip-active' : ''}" data-glossary-type="">All types</button>
+      ${typeOptions.map((t) => `<button class="chip ${mt === t ? 'chip-active' : ''}" data-glossary-type="${t}">${GLOSSARY_MOVEMENT_TYPE_LABELS[t]}</button>`).join('')}
+    </div>
+    <div id="glossaryResultsArea" style="margin-top:0.6rem;"></div>
   `;
   renderGlossaryResultsArea(panel);
   $('#closeGlossaryBtn').addEventListener('click', () => { showExerciseGlossary = false; renderLiftsTab(); });
