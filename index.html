@@ -891,6 +891,26 @@
   .ring-progress::after { content: attr(data-t); position: absolute; inset: 0.27rem; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
   .ring-none { background: var(--surface-3); color: var(--text-dim); }
 
+  /* Week strip (component I): 7 cells, mockup 9.5px mono, radius 9px,
+     gap 5px, x1.4234. Today = ink fill; done = ok-green fill. */
+  .week-strip { display: flex; gap: 0.44rem; }
+  .week-strip > div { flex: 1; text-align: center; font-family: var(--font-mono); font-size: 0.84rem; font-weight: 500;
+    padding: 0.4rem 0; border-radius: 0.8rem; background: #fff; border: 1px solid var(--border); color: var(--text-dim); }
+  .week-strip > div.wk-today { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .week-strip > div.wk-done { background: #E3EDE6; color: var(--success); border-color: #CFE0D4; }
+
+  /* Day dots (component J): rotation-position indicator on a program's
+     dark hero card. Mockup 18x5px, radius 3px, x1.4234. */
+  .day-dots { display: flex; gap: 0.28rem; }
+  .day-dots i { width: 1.6rem; height: 0.44rem; border-radius: 0.27rem; background: #DAD5C8; display: block; font-style: normal; }
+  .day-dots i.dd-done { background: var(--accent); }
+  .day-dots i.dd-next { background: var(--gold); }
+
+  /* Dark hero card (used for the active-program summary) - mockup
+     linear-gradient(160deg,#25272C,#17181B), radius 18px x1.4234 -> 26px. */
+  .dark-hero-card { background: linear-gradient(160deg, #25272C, #17181B); color: #fff; border-radius: 1.6rem; padding: 1rem 1.06rem; margin-bottom: 0.8rem; }
+  .dark-hero-card .muted { color: #B9B6AD; }
+
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
   .log-row:last-child { border-bottom: none; }
@@ -4911,6 +4931,51 @@ function homeWidgetHtml(key, ctx) {
 // card, not a second copy of that breakdown.
 let todaysLiftChangeMenuOpen = false;
 
+// Shared by Today's Lift card and the Plans hub's active-program card -
+// same "jump into the live workout, program never required" behavior
+// wherever a "Start"/"Continue" button for today's lift appears.
+// Week strip (component I): this calendar week, Mon-Sun, which days have
+// a logged lift and which is today.
+function weekStripHtml() {
+  const todayStr = localDateStr();
+  const base = new Date(`${todayStr}T00:00:00`);
+  const monday = new Date(base);
+  monday.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+  const loggedDates = new Set(state.lifts.map((l) => l.date));
+  const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  return `<div class="week-strip">${labels.map((lbl, i) => {
+    const cellDate = new Date(monday);
+    cellDate.setDate(monday.getDate() + i);
+    const cellStr = localDateStr(cellDate);
+    const isToday = cellStr === todayStr;
+    const isDone = loggedDates.has(cellStr);
+    const cls = isToday ? 'wk-today' : (isDone ? 'wk-done' : '');
+    return `<div class="${cls}">${lbl}${isDone ? ' &#10003;' : ''}</div>`;
+  }).join('')}</div>`;
+}
+
+// Day dots (component J): position within the block's rotation - days
+// before today's index read as completed rounds, today's index as next.
+function dayDotsHtml(block, todaysDayIndex) {
+  if (!block?.blockDays?.length || todaysDayIndex == null) return '';
+  return `<div class="day-dots">${block.blockDays.map((_, i) => {
+    const cls = i < todaysDayIndex ? 'dd-done' : (i === todaysDayIndex ? 'dd-next' : '');
+    return `<i class="${cls}"></i>`;
+  }).join('')}</div>`;
+}
+
+function startOrContinueWorkoutFromCard() {
+  showPlanBuilder = false;
+  showBlockBuilder = false;
+  showExerciseGlossary = false;
+  showPlansHub = false;
+  liftsSelectedExercise = null;
+  liveWorkoutScreen = (liveWorkoutSession && liveWorkoutSession.date === localDateStr() && liveWorkoutSession.exercises?.length) ? 'overview' : 'start';
+  startLiveWorkoutTicker();
+  renderLiftsTab();
+  setActiveTab('lifts');
+}
+
 function todaysLiftSummaryHtml() {
   const ctx = computeTodaysLiftCtx();
   const activeBlock = state.profile?.active_training_block;
@@ -4944,6 +5009,9 @@ function todaysLiftSummaryHtml() {
   const dayMuscleChips = label === 'Start' && dayExercises?.length
     ? [...new Set(dayExercises.map((e) => e.muscle).filter(Boolean))].slice(0, 3)
     : [];
+  const tomorrowIdxForSwap = activeBlock ? effectiveBlockDayIndex(activeBlock, subtractDays(localDateStr(), -1), overrides) : null;
+  const tomorrowDayLabel = tomorrowIdxForSwap != null ? activeBlock.blockDays[tomorrowIdxForSwap]?.label : null;
+  const changeRow = (action, text) => `<div class="row" style="justify-content:space-between;align-items:center;padding:0.6rem 0;cursor:pointer;border-top:1px solid var(--border);" data-today-change="${action}"><span>${esc(text)}</span><span class="muted">&rsaquo;</span></div>`;
   return `
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
@@ -4952,11 +5020,12 @@ function todaysLiftSummaryHtml() {
       </div>
       ${dayMuscleChips.length ? `<div class="chip-row" style="margin-top:0.5rem;">${dayMuscleChips.map((m) => `<span class="chip" style="cursor:default;">${esc(m.charAt(0).toUpperCase() + m.slice(1))}</span>`).join('')}</div>` : ''}
       ${todaysLiftChangeMenuOpen ? `
-        <div style="margin-top:0.5rem;border-top:1px solid var(--border);padding-top:0.5rem;">
-          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;" data-today-change="move_tomorrow">Move to tomorrow</button>
-          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;margin-top:0.3rem;" data-today-change="shorten">Shorten (mark as shortened)</button>
-          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;margin-top:0.3rem;" data-today-change="skip">Skip this workout</button>
-          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;margin-top:0.3rem;" id="todaysLiftChangeCancelBtn">Cancel</button>
+        <div style="margin-top:0.3rem;">
+          ${changeRow('move_tomorrow', 'Move to tomorrow')}
+          ${tomorrowDayLabel ? changeRow('swap_tomorrow', `Swap with ${tomorrowDayLabel}`) : ''}
+          ${changeRow('shorten', 'Shorten (mark as shortened)')}
+          <div style="border-top:1px solid var(--border);"><span class="small" style="color:var(--danger);cursor:pointer;display:block;padding:0.6rem 0;" data-today-change="skip">Skip this workout</span></div>
+          <button class="btn btn-sm btn-ghost" style="width:100%;margin-top:0.3rem;" id="todaysLiftChangeCancelBtn">Cancel</button>
         </div>
       ` : `
       <div class="row" style="justify-content:${canReschedule ? 'space-between' : (!hasPlanned && ctx.empty ? 'space-between' : 'flex-end')};align-items:center;border-top:none;padding-top:0.5rem;">
@@ -5822,21 +5891,7 @@ function renderDashboard() {
   if (mealsPrevToggle) mealsPrevToggle.addEventListener('click', () => { mealsPreviousDaysExpanded = !mealsPreviousDaysExpanded; renderDashboard(); });
 
   const liftCardBtn = $('#todaysLiftCardBtn', panel);
-  if (liftCardBtn) liftCardBtn.addEventListener('click', () => {
-    showPlanBuilder = false;
-    showBlockBuilder = false;
-    showExerciseGlossary = false;
-    liftsSelectedExercise = null;
-    // A live workout in progress (or already started today) goes straight
-    // back to its overview; otherwise into the quick-workout picker. A
-    // program is never required for either path. (liveWorkoutSession is
-    // already resumed from localStorage at app boot — see wlsResume() in
-    // bootstrapApp — so this just checks the in-memory state, not storage again.)
-    liveWorkoutScreen = (liveWorkoutSession && liveWorkoutSession.date === localDateStr() && liveWorkoutSession.exercises?.length) ? 'overview' : 'start';
-    startLiveWorkoutTicker();
-    renderLiftsTab();
-    setActiveTab('lifts');
-  });
+  if (liftCardBtn) liftCardBtn.addEventListener('click', startOrContinueWorkoutFromCard);
   const programsLink = $('#todaysLiftProgramsLink', panel);
   if (programsLink) programsLink.addEventListener('click', () => {
     showPlansHub = true;
@@ -9616,8 +9671,8 @@ function computeDoubleProgressionGoal(exerciseName, repRangeString) {
 // degrades gracefully (plain "match last time") when it doesn't.
 function exerciseGoalRepRangeFor(exerciseName) {
   const block = state.profile?.active_training_block;
-  if (!block?.days) return null;
-  for (const day of block.days) {
+  if (!block?.blockDays) return null;
+  for (const day of block.blockDays) {
     const match = (day.exercises || []).find((e) => e.name === exerciseName);
     if (match) return match.reps;
   }
@@ -9933,10 +9988,11 @@ function exercisePickerResultsHtml(query, actionAttr, actionLabel = '+') {
 
 function renderQuickWorkoutStart(panel) {
   panel.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-      <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.8rem;">Quick workout &middot; ${esc(liveWorkoutElapsedLabel())}</div>
-      <button class="btn btn-sm btn-ghost" id="qwCancelBtn">Cancel</button>
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);min-width:0;">Quick workout &middot; ${esc(liveWorkoutElapsedLabel())}</div>
+      <span class="chip" id="qwCancelBtn" style="cursor:pointer;flex:none;min-width:0;">Cancel</span>
     </div>
+    <div class="pagetitle" style="margin:0.1rem 0 0.6rem;">Add your first exercise</div>
     <div class="card">
       <input class="input" id="qwSearch" placeholder="&#128269; Search exercises" value="${esc(quickWorkoutSearch)}">
       <div id="qwResultsArea" style="margin-top:0.6rem;"></div>
@@ -9957,19 +10013,17 @@ function renderQwSearchResults(panel) {
   if (resultsEl) resultsEl.innerHTML = q ? exercisePickerResultsHtml(q, 'data-qw-add') : '';
   const recentEl = $('#qwRecentArea', panel);
   if (recentEl) recentEl.innerHTML = !q ? `
-    <div class="card">
-      <h3 style="margin-top:0;">Repeat a recent workout</h3>
-      ${recentWorkoutDays().map((d) => `
-        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
-          <div><div>${esc(d.exercises[0])}${d.exercises.length > 1 ? ` + ${d.exercises.length - 1} more` : ''}</div><div class="muted small">${d.exercises.length} exercise${d.exercises.length === 1 ? '' : 's'} &middot; ${d.daysAgo} day${d.daysAgo === 1 ? '' : 's'} ago</div></div>
-          <button class="btn btn-sm" data-qw-repeat="${esc(d.date)}">Use</button>
-        </div>`).join('') || `<p class="muted small">No past workouts yet.</p>`}
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0;">Recent exercises</h3>
-      <div class="chip-row">
-        ${recentExerciseNames().map((n) => `<button class="chip" data-qw-add="${esc(n)}">${esc(n)}</button>`).join('') || `<p class="muted small">Nothing logged yet.</p>`}
-      </div>
+    <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin:0.6rem 0 0.4rem;">Repeat a recent workout</div>
+    ${recentWorkoutDays().map((d) => `
+      <div class="card" style="margin-bottom:0.6rem;">
+        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+          <div style="min-width:0;"><strong>${esc(d.exercises[0])}${d.exercises.length > 1 ? ` + ${d.exercises.length - 1} more` : ''}</strong><div class="muted small">${d.exercises.length} exercise${d.exercises.length === 1 ? '' : 's'} &middot; ${d.daysAgo} day${d.daysAgo === 1 ? '' : 's'} ago</div></div>
+          <button class="btn btn-sm" style="flex:none;min-width:0;background:var(--text);color:var(--bg);border-color:var(--text);" data-qw-repeat="${esc(d.date)}">Use</button>
+        </div>
+      </div>`).join('') || `<p class="muted small">No past workouts yet.</p>`}
+    <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin:0.6rem 0 0.4rem;">Recent exercises</div>
+    <div class="chip-row">
+      ${recentExerciseNames().map((n) => `<button class="chip" data-qw-add="${esc(n)}">${esc(n)}</button>`).join('') || `<p class="muted small">Nothing logged yet.</p>`}
     </div>` : '';
   $$('[data-qw-add]', panel).forEach((btn) => btn.addEventListener('click', () => quickWorkoutAddExercise(btn.dataset.qwAdd)));
   $$('[data-qw-repeat]', panel).forEach((btn) => btn.addEventListener('click', () => quickWorkoutRepeatDay(btn.dataset.qwRepeat)));
@@ -10206,40 +10260,47 @@ function renderWorkoutOverview(panel) {
   const later = notDone.slice(1);
 
   panel.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-      <div class="display" style="text-transform:uppercase;color:var(--accent);font-size:0.8rem;">${esc(liveWorkoutSessionLabel())} &middot; ${esc(liveWorkoutElapsedLabel())}</div>
-      <button class="btn btn-sm" id="qwFinishBtn">Finish</button>
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);min-width:0;">${esc(liveWorkoutSessionLabel())} &middot; ${esc(liveWorkoutElapsedLabel())}</div>
+      <button class="btn btn-sm btn-primary" style="flex:none;min-width:0;" id="qwFinishBtn">Finish</button>
     </div>
-    <div class="card">
-      <h3 style="margin-top:0;">Today's workout</h3>
-      ${done.length ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">Done</div>` : ''}
-      ${done.map((ex) => `
-        <div class="row" style="align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;opacity:0.65;" data-wo-open="${esc(ex.name)}">
+    <div class="pagetitle" style="margin:0.1rem 0 0.5rem;">Today's workout</div>
+    <div style="height:0.4rem;background:var(--surface-3);border-radius:0.2rem;overflow:hidden;margin-bottom:0.8rem;">
+      <div style="width:${exercises.length ? Math.round((done.length / exercises.length) * 100) : 0}%;height:100%;background:var(--success);"></div>
+    </div>
+    ${done.length ? `<div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Done</div>` : ''}
+    ${done.map((ex) => `
+      <div class="card" style="margin-bottom:0.6rem;opacity:0.7;cursor:pointer;" data-wo-open="${esc(ex.name)}">
+        <div class="row" style="align-items:center;flex-wrap:nowrap;">
           ${exerciseRingHtml(ex)}
-          <div style="flex:1;min-width:0;">${esc(ex.name)}</div>
-          <span class="mono muted small" style="flex:none;min-width:0;">${esc(exerciseSetSummaryLabel(ex))}</span>
-        </div>`).join('')}
-      ${current ? `
-        <div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.3rem;">Up next</div>
-        <div class="row" style="align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+          <div style="flex:1;min-width:0;"><strong>${esc(ex.name)}</strong><div class="muted small">${esc(exerciseSetSummaryLabel(ex))}</div></div>
+        </div>
+      </div>`).join('')}
+    ${current ? `
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Up next</div>
+      <div class="card" style="margin-bottom:0.6rem;border:2px solid var(--text);">
+        <div class="row" style="align-items:center;flex-wrap:nowrap;">
           ${exerciseRingHtml(current)}
           <div style="flex:1;min-width:0;">
             <div><strong>${esc(current.name)}</strong></div>
             <div class="muted small">${goalLineForOverview(current)}</div>
           </div>
           <button class="btn btn-sm btn-primary" style="flex:none;min-width:0;" data-wo-open="${esc(current.name)}">Open</button>
-        </div>` : ''}
-      ${later.length ? `<div class="muted small" style="text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.3rem;">Later</div>` : ''}
-      ${later.map((ex) => `
-        <div class="row" style="align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;" data-wo-open="${esc(ex.name)}">
+        </div>
+      </div>` : ''}
+    ${later.length ? `<div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Later</div>` : ''}
+    ${later.map((ex) => `
+      <div class="card" style="margin-bottom:0.6rem;cursor:pointer;" data-wo-open="${esc(ex.name)}">
+        <div class="row" style="align-items:center;flex-wrap:nowrap;">
           ${exerciseRingHtml(ex)}
           <div style="flex:1;min-width:0;">
             <div>${esc(ex.name)}</div>
             <div class="muted small">${ex.prescribedSets ? `${ex.setsLogged.length}/${ex.prescribedSets} sets` : `${ex.setsLogged.length} set${ex.setsLogged.length === 1 ? '' : 's'} logged`}${isExerciseStalled(ex.name) ? ` &middot; stalled 4+ sessions` : ''}</div>
           </div>
-        </div>`).join('')}
-      <button class="btn btn-sm btn-ghost" id="qwAddMoreBtn" style="margin-top:0.6rem;">+ Add exercise</button>
-    </div>
+        </div>
+      </div>`).join('')}
+    <button class="btn btn-sm btn-ghost" id="qwAddMoreBtn" style="width:100%;margin-bottom:0.6rem;">+ Add exercise</button>
+    <div class="banner">When you finish, you can save this as a workout to reuse. Optional.</div>
   `;
   $('#qwFinishBtn').addEventListener('click', finishLiveWorkout);
   $('#qwAddMoreBtn').addEventListener('click', () => { liveWorkoutScreen = 'start'; renderLiftsTab(); });
@@ -10697,28 +10758,24 @@ function renderExerciseGlossary(panel) {
   const equipmentOptions = [...new Set(state.exercises.map((e) => e.equipment).filter(Boolean))].sort();
   const typeOptions = [...new Set(state.exercises.map((e) => e.movement_type).filter((t) => GLOSSARY_MOVEMENT_TYPE_LABELS[t]))];
   panel.innerHTML = `
-    <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <h3 style="margin:0;">Exercise Glossary</h3>
-        <button class="btn btn-sm btn-ghost" id="closeGlossaryBtn" style="flex:none;">✕ Close</button>
-      </div>
-      <div class="field" style="margin-top:0.75rem;">
-        <input class="input" id="glossarySearch" placeholder="Search exercises…" value="${esc(glossaryFilter.search)}">
-      </div>
-      <div class="chip-row">
-        <button class="chip ${mg === '' ? 'chip-active' : ''}" data-glossary-mg="">All</button>
-        ${MUSCLE_GROUPS.map((g) => `<button class="chip ${mg === g ? 'chip-active' : ''}" data-glossary-mg="${g}">${g}</button>`).join('')}
-      </div>
-      <div class="chip-row" style="margin-top:0.4rem;">
-        <button class="chip ${eq === '' ? 'chip-active' : ''}" data-glossary-eq="">All equipment</button>
-        ${equipmentOptions.map((e) => `<button class="chip ${eq === e ? 'chip-active' : ''}" data-glossary-eq="${esc(e)}">${esc(e)}</button>`).join('')}
-      </div>
-      <div class="chip-row" style="margin-top:0.4rem;">
-        <button class="chip ${mt === '' ? 'chip-active' : ''}" data-glossary-type="">All types</button>
-        ${typeOptions.map((t) => `<button class="chip ${mt === t ? 'chip-active' : ''}" data-glossary-type="${t}">${GLOSSARY_MOVEMENT_TYPE_LABELS[t]}</button>`).join('')}
-      </div>
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+      <div class="pagetitle" style="margin:0;">Exercises</div>
+      <span class="chip" id="closeGlossaryBtn" style="cursor:pointer;flex:none;min-width:0;">&#10005; Close</span>
     </div>
-    <div id="glossaryResultsArea"></div>
+    <input class="input" id="glossarySearch" placeholder="Search ${state.exercises.length} exercises" value="${esc(glossaryFilter.search)}" style="margin:0.6rem 0;">
+    <div class="chip-row">
+      <button class="chip ${mg === '' ? 'chip-active' : ''}" data-glossary-mg="">All</button>
+      ${MUSCLE_GROUPS.map((g) => `<button class="chip ${mg === g ? 'chip-active' : ''}" data-glossary-mg="${g}">${g}</button>`).join('')}
+    </div>
+    <div class="chip-row" style="margin-top:0.4rem;">
+      <button class="chip ${eq === '' ? 'chip-active' : ''}" data-glossary-eq="">All equipment</button>
+      ${equipmentOptions.map((e) => `<button class="chip ${eq === e ? 'chip-active' : ''}" data-glossary-eq="${esc(e)}">${esc(e)}</button>`).join('')}
+    </div>
+    <div class="chip-row" style="margin-top:0.4rem;">
+      <button class="chip ${mt === '' ? 'chip-active' : ''}" data-glossary-type="">All types</button>
+      ${typeOptions.map((t) => `<button class="chip ${mt === t ? 'chip-active' : ''}" data-glossary-type="${t}">${GLOSSARY_MOVEMENT_TYPE_LABELS[t]}</button>`).join('')}
+    </div>
+    <div id="glossaryResultsArea" style="margin-top:0.6rem;"></div>
   `;
   renderGlossaryResultsArea(panel);
   $('#closeGlossaryBtn').addEventListener('click', () => { showExerciseGlossary = false; renderLiftsTab(); });
@@ -11306,47 +11363,117 @@ async function generateSessionAnalysis() {
 }
 
 function sessionCalloutIcon(type) {
-  return { pr: '🏆', plateau: '⚠️', strong: '💪', weak: '📉', nutrition: '🍽️' }[type] || '💡';
+  // Icon-in-a-circle badge per callout type, matching the mockup's
+  // up-arrow/!/-> convention: {glyph, background, color}.
+  return {
+    pr: { glyph: '&#8593;', bg: '#E3EDE6', color: 'var(--success)' },
+    strong: { glyph: '&#8593;', bg: '#E3EDE6', color: 'var(--success)' },
+    plateau: { glyph: '!', bg: '#FBE6DD', color: 'var(--danger)' },
+    weak: { glyph: '!', bg: '#FBE6DD', color: 'var(--danger)' },
+    nutrition: { glyph: '&#8594;', bg: 'var(--surface-3)', color: 'var(--text-dim)' },
+  }[type] || { glyph: '&#8594;', bg: 'var(--surface-3)', color: 'var(--text-dim)' };
+}
+
+// Mono day/time line + headline + volume/PR stat tiles - computed
+// client-side from real logged data (never from the AI response), and
+// shown above every branch below regardless of tier/AI state, matching
+// the mockup's Finish screen on both Pro and Free.
+function sessionStatsHeaderHtml(ctx, headline) {
+  const prNames = Object.keys(ctx.currentPRs).filter((name) => {
+    const cur = ctx.currentPRs[name];
+    const prior = ctx.priorPRs[name];
+    return ctx.byExercise[name]?.some((l) => l.weight === cur.weight) && (!prior || cur.weight > prior.weight);
+  });
+  return `
+    <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">${esc(todaysFocusLabel())}${ctx.elapsedLabel ? ` &middot; ${esc(ctx.elapsedLabel)}` : ''}</div>
+    <div class="display" style="font-size:1.69rem;margin:0.2rem 0 0.7rem;">${esc(headline)}</div>
+    <div class="row" style="gap:0.6rem;margin-bottom:0.8rem;">
+      <div class="card" style="flex:1;text-align:center;margin-bottom:0;">
+        <div class="display" style="font-size:1.9rem;">${Math.round(ctx.totalVolume).toLocaleString()}</div>
+        <div class="muted small">${weightUnitLabel()} total volume</div>
+      </div>
+      <div class="card" style="flex:1;text-align:center;margin-bottom:0;">
+        <div class="display" style="font-size:1.9rem;color:var(--success);">${prNames.length} PR${prNames.length === 1 ? '' : 's'}</div>
+        ${prNames.length ? `<div class="muted small">${esc(prNames.join(', '))}</div>` : ''}
+      </div>
+    </div>`;
+}
+function sessionSetsCompletedCardHtml(ctx) {
+  const block = state.profile?.active_training_block;
+  const overrides = pruneScheduleOverrides(state.profile?.schedule_overrides_this_week);
+  const dayIdx = block ? effectiveBlockDayIndex(block, localDateStr(), overrides) : null;
+  const plannedSets = dayIdx != null ? block.blockDays[dayIdx].exercises.reduce((sum, e) => sum + (e.sets || 0), 0) : null;
+  return `<div class="card">
+    <h3 style="margin-top:0;">Sets completed</h3>
+    <p class="muted" style="margin:0;">${ctx.workingSets} set${ctx.workingSets === 1 ? '' : 's'}${plannedSets ? ` of ${plannedSets}` : ''}${plannedSets && ctx.workingSets >= plannedSets ? ' &middot; all planned sets done' : ''}</p>
+  </div>`;
 }
 
 function sessionAnalysisHtml() {
   const analysis = state.workoutSession?.analysis;
+  const ctx = computeTodaysLiftCtx();
+  if (ctx.empty) return '';
   // Item 5's soft cap: the fine-print note sits alongside whichever
   // analysis was last generated today — it never replaces or hides it.
   const cappedNoteHtml = `<p class="muted small" style="margin-top:0.6rem;margin-bottom:0;">Capped at 2 analyses per day — resets tomorrow.</p>`;
   if (analysis) {
     const hasNutritionCallout = (analysis.callouts || []).some((c) => c.type === 'nutrition');
+    // "Next session" targets are computed client-side from real logged data
+    // (double progression - the same math behind the "Goal:" line on the
+    // exercise screen), never from the AI response.
+    const nextSessionTargets = Object.keys(ctx.byExercise).map((name) => {
+      const goal = computeDoubleProgressionGoal(name, exerciseGoalRepRangeFor(name));
+      return goal ? { name, ...goal } : null;
+    }).filter(Boolean);
     return `
+      ${sessionStatsHeaderHtml(ctx, analysis.summary)}
+      ${(analysis.callouts || []).length ? `
       <div class="card">
-        <h3>Session Analysis</h3>
-        <p>${esc(analysis.summary)}</p>
-        ${(analysis.callouts || []).length ? `
-        <div class="session-callouts">
-          ${analysis.callouts.map((c) => `<div class="session-callout">${sessionCalloutIcon(c.type)} ${esc(c.text)}</div>`).join('')}
-        </div>` : ''}
+        ${analysis.callouts.map((c, i) => {
+          const badge = sessionCalloutIcon(c.type);
+          return `<div class="row" style="align-items:flex-start;gap:0.6rem;${i > 0 ? 'margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid var(--border);' : ''}">
+            <span style="flex:none;min-width:0;width:1.9rem;height:1.9rem;border-radius:50%;background:${badge.bg};color:${badge.color};display:flex;align-items:center;justify-content:center;font-weight:700;">${badge.glyph}</span>
+            <span style="min-width:0;">${esc(c.text)}</span>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+      ${nextSessionTargets.length ? `<div class="card">
+        <h3 style="margin-top:0;">Next session</h3>
+        ${nextSessionTargets.map((t) => `<div class="row mono small" style="justify-content:space-between;padding:0.3rem 0;"><span>${esc(t.name)}</span><span>${toDisplayWeight(t.weight).value} &times; ${t.reps}</span></div>`).join('')}
+      </div>` : ''}
+      <div class="card">
         ${analysisCapped ? cappedNoteHtml : ''}
-        <p class="muted small" style="margin-top:0.6rem;margin-bottom:0;">For tracking and education, not medical advice.</p>
+        <p class="muted small" style="margin:0;">For tracking and education, not medical advice.</p>
       </div>
       ${analysis.highlightExercise ? `<div class="card"><h3>${esc(analysis.highlightExercise)} Trend</h3><canvas id="sessionTrendChart" height="220"></canvas></div>` : ''}
       ${hasNutritionCallout ? `<div class="card"><h3>Protein, Last 7 Days</h3><canvas id="sessionNutritionChart" height="180"></canvas></div>` : ''}
     `;
   }
+  const headline = 'Workout saved.';
   if (analysisCapped) {
-    return `<div class="card"><h3>Session Analysis</h3><p class="muted">No analysis generated for this session.</p>${cappedNoteHtml}</div>`;
+    return `${sessionStatsHeaderHtml(ctx, headline)}${sessionSetsCompletedCardHtml(ctx)}<div class="card"><h3 style="margin-top:0;">Session Analysis</h3><p class="muted">No analysis generated for this session.</p>${cappedNoteHtml}</div>`;
   }
   if (analysisLoading) {
-    return `<div class="card"><h3>Session Analysis</h3><p class="muted"><span class="spinner spinner-sm"></span> Analyzing your session…</p></div>`;
+    return `${sessionStatsHeaderHtml(ctx, headline)}${sessionSetsCompletedCardHtml(ctx)}<div class="card"><h3 style="margin-top:0;">Session Analysis</h3><p class="muted"><span class="spinner spinner-sm"></span> Analyzing your session…</p></div>`;
   }
   if (analysisError) {
-    return `<div class="card"><h3>Session Analysis</h3><p class="muted" style="color:var(--danger);">${esc(analysisError)}</p><button class="btn btn-sm" id="retryAnalysisBtn">Try again</button></div>`;
+    return `${sessionStatsHeaderHtml(ctx, headline)}${sessionSetsCompletedCardHtml(ctx)}<div class="card"><h3 style="margin-top:0;">Session Analysis</h3><p class="muted" style="color:var(--danger);">${esc(analysisError)}</p><button class="btn btn-sm" id="retryAnalysisBtn">Try again</button></div>`;
   }
   if (!sessionHistoryBaselineMet()) {
-    return `<div class="card"><h3>Session Analysis</h3><p class="muted">Analysis unlocks after a few more sessions, once there's enough history to compare against.</p></div>`;
+    return `${sessionStatsHeaderHtml(ctx, headline)}${sessionSetsCompletedCardHtml(ctx)}<div class="card"><h3 style="margin-top:0;">Session Analysis</h3><p class="muted">Analysis unlocks after a few more sessions, once there's enough history to compare against.</p></div>`;
   }
   if (!hasAccess(state.subscription)) {
-    return `<div class="card"><h3>Session Analysis</h3><p class="muted">Unlock AI-written session analysis — comparing today against your recent history, with PR and plateau callouts — on the paid tier.</p>${upgradePriceLineHtml()}<button class="btn btn-primary" id="unlockAnalysisBtn">Upgrade — Unlock AI Features</button></div>`;
+    return `${sessionStatsHeaderHtml(ctx, headline)}${sessionSetsCompletedCardHtml(ctx)}<div class="banner">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:0.6rem;">
+        <div style="min-width:0;">
+          <strong>Want advice for next session?</strong>
+          <p style="margin:0.2rem 0 0;">Targets, trends and weak spots, with Pro.</p>
+        </div>
+        <button class="btn btn-sm" id="unlockAnalysisBtn" style="flex:none;min-width:0;background:var(--text);color:var(--bg);border-color:var(--text);">Try Pro</button>
+      </div>
+    </div>`;
   }
-  return `<div class="card"><h3>Session Analysis</h3><button class="btn btn-primary" id="generateAnalysisBtn">Generate Analysis</button></div>`;
+  return `${sessionStatsHeaderHtml(ctx, headline)}${sessionSetsCompletedCardHtml(ctx)}<div class="card"><h3 style="margin-top:0;">Session Analysis</h3><button class="btn btn-primary" id="generateAnalysisBtn">Generate Analysis</button></div>`;
 }
 
 function wireSessionAnalysisEvents(panel) {
@@ -12474,6 +12601,12 @@ async function applyScheduleChange(action) {
     overrides[tomorrow] = { action: 'moved_in', dayIndex: todayIdx };
   } else if (action === 'shorten') {
     overrides[today] = { ...(overrides[today] || {}), shortened: true };
+  } else if (action === 'swap_tomorrow') {
+    const todayIdx = effectiveBlockDayIndex(block, today, overrides);
+    const tomorrowIdx = effectiveBlockDayIndex(block, tomorrow, overrides);
+    if (todayIdx == null || tomorrowIdx == null) return;
+    overrides[today] = { action: 'moved_in', dayIndex: tomorrowIdx };
+    overrides[tomorrow] = { action: 'moved_in', dayIndex: todayIdx };
   }
   const { error } = await supabase.from('profiles').update({ schedule_overrides_this_week: overrides }).eq('id', state.user.id);
   if (error) { toast('Could not change today’s schedule: ' + error.message); return; }
@@ -14605,6 +14738,7 @@ function programTemplateToBlock(template) {
 let showPlansHub = false;
 let plansHubFilterLevel = '';
 let plansHubPreviewId = null; // a PROGRAM_TEMPLATES id, or null when showing the hub list
+let programPreviewExpandedDay = null; // index into template.schedule, or null - reset each time a template preview opens
 let plansHubChangeDaysTargetId = null; // 5d: a candidate template id being previewed as a day-count change
 
 let showBlockBuilder = false;
@@ -14615,7 +14749,7 @@ let blockBuilderDays = 4;
 let blockBuilderEquipment = [];
 let blockBuilderAvoid = [];
 let blockBuilderPreview = null;
-let blockBuilderExpandedDayIndex = 0;
+let blockBuilderExpandedDayIndex = -1;
 let blockBuilderViewingActive = false;
 let blockBuilderStarting = false;
 // Manual per-instance overrides UI state (substitute/add/remove exercise,
@@ -14635,7 +14769,7 @@ function resetBlockBuilderState() {
   blockBuilderEquipment = [];
   blockBuilderAvoid = [];
   blockBuilderPreview = null;
-  blockBuilderExpandedDayIndex = 0;
+  blockBuilderExpandedDayIndex = -1;
   blockBuilderViewingActive = false;
   blockSwapPickerFor = null;
   blockExerciseRemoveConfirm = null;
@@ -14797,7 +14931,7 @@ function wireBlockBuilderSummaryEvents(panel) {
   const viewBtn = $('#blockBuilderViewBtn', panel);
   if (viewBtn) viewBtn.addEventListener('click', () => {
     blockBuilderPreview = state.profile.active_training_block;
-    blockBuilderExpandedDayIndex = 0;
+    blockBuilderExpandedDayIndex = -1;
     blockBuilderViewingActive = true;
     blockBuilderStep = 3;
     showBlockBuilder = true;
@@ -14940,9 +15074,12 @@ function blockPickerResultsHtml(candidates) {
 function blockDayCardHtml(day, index, isExpanded) {
   if (!isExpanded) {
     return `<div class="card" data-block-day-toggle="${index}" style="cursor:pointer;margin-bottom:0.6rem;">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <strong>${esc(day.label)}</strong>
-        <span class="muted small">${day.exercises.length} exercise${day.exercises.length === 1 ? '' : 's'}</span>
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+        <div style="min-width:0;">
+          <strong>${esc(day.label)}</strong>
+          <p class="muted small" style="margin:0.1rem 0 0;">${day.exercises.length} exercise${day.exercises.length === 1 ? '' : 's'}</p>
+        </div>
+        <span class="chip" style="flex:none;min-width:0;cursor:pointer;">Edit</span>
       </div>
     </div>`;
   }
@@ -15120,8 +15257,9 @@ function blockBuilderStep3Html() {
   const focusOpt = BLOCK_FOCUS_OPTIONS.find((o) => o.key === block.focus);
   return `<div class="card">
     ${isProgram ? `
-      <h3>${esc(block.sourceProgramName)} &middot; Your version${block.deloadActive ? ' &middot; Deload week' : ''}</h3>
-      <p class="muted small" style="margin-top:-0.5rem;">Based on the ${esc(block.sourceProgramName)} program. The original template is untouched — this is your own editable copy.${block.deloadActive ? ' Sets below are reduced to about 60% for this deload week; End deload restores your normal sets exactly as they were.' : ''}</p>
+      <div class="display" style="font-size:1.5rem;">${esc(block.sourceProgramName)}${block.deloadActive ? ' &middot; Deload week' : ''}</div>
+      <p class="muted small" style="margin:0.1rem 0 0.6rem;">Your version &middot; based on the ${esc(block.sourceProgramName)} program</p>
+      <div class="banner">You're editing your own copy. The original stays safe, and you can reset any time.${block.deloadActive ? ' Sets below are reduced to about 60% for this deload week; End deload restores your normal sets exactly as they were.' : ''}</div>
       <div class="chip-row" style="margin-top:0.5rem;">
         <span class="mono muted small">${block.days} days/week</span>
       </div>
@@ -15198,7 +15336,7 @@ function wireBlockBuilderStep3(panel) {
     if (error) { toast('Could not reset: ' + error.message); return; }
     state.profile = { ...state.profile, active_training_block: fresh };
     blockBuilderPreview = fresh;
-    blockBuilderExpandedDayIndex = 0;
+    blockBuilderExpandedDayIndex = -1;
     toast('Reset to the original program.');
     renderLiftsTab();
   });
@@ -15251,12 +15389,22 @@ function renderPlansHub(panel) {
     ? [...new Set(PROGRAM_TEMPLATES.filter((p) => p.id !== active.sourceProgramId).map((p) => p.days))].sort((a, b) => a - b)
     : [];
 
+  const activeOverrides = active ? pruneScheduleOverrides(state.profile?.schedule_overrides_this_week) : null;
+  const activeTodaysDayIndex = active ? effectiveBlockDayIndex(active, localDateStr(), activeOverrides) : null;
+  const activeTodaysDay = activeTodaysDayIndex != null ? active.blockDays[activeTodaysDayIndex] : null;
+  const activeCtx = active ? computeTodaysLiftCtx() : null;
+  const activeStartLabel = activeCtx && !activeCtx.empty && !activeCtx.ended ? 'Continue' : (activeCtx && !activeCtx.empty && activeCtx.ended ? 'View' : 'Start workout');
   panel.innerHTML = `
-    ${active ? `<div class="card">
-      <h3 style="margin-top:0;">Your program</h3>
-      <p style="margin:0;">${esc(active.sourceProgramName || active.focus)}</p>
-      <p class="muted small" style="margin:0.2rem 0 0;">${active.days} day${active.days === 1 ? '' : 's'}/week &middot; ${active.blockDays.length} day${active.blockDays.length === 1 ? '' : 's'} in rotation</p>
-      <button class="btn btn-sm" id="plansHubViewActiveBtn" style="margin-top:0.6rem;">View / customize</button>
+    ${active ? `<div class="dark-hero-card">
+      <div class="muted mono" style="font-size:0.84rem;text-transform:uppercase;letter-spacing:0.08em;">${esc(active.sourceProgramName || active.focus)}${active.blockDays.length ? ` &middot; day ${(activeTodaysDayIndex ?? 0) + 1} of ${active.blockDays.length}` : ''}</div>
+      ${activeTodaysDay ? `<div class="display" style="font-size:1.69rem;margin:0.3rem 0 0.1rem;color:#fff;">${esc(activeTodaysDay.label)}</div>
+        <div class="muted small">${activeTodaysDay.exercises.length} exercise${activeTodaysDay.exercises.length === 1 ? '' : 's'} &middot; about ${Math.round(activeTodaysDay.exercises.length * 9)} min</div>` : ''}
+      ${dayDotsHtml(active, activeTodaysDayIndex)}
+      <button class="btn btn-gold" id="plansHubStartBtn" style="margin-top:0.6rem;">${esc(activeStartLabel)}</button>
+    </div>
+    <div class="card" style="padding:0.6rem 1.06rem;">${weekStripHtml()}</div>
+    <div class="card">
+      <button class="btn btn-sm" id="plansHubViewActiveBtn">View / customize</button>
       ${active.sourceProgramId ? `
         <div class="chip-row" style="margin-top:0.6rem;">
           <span class="muted small">Change days/week:</span>
@@ -15289,12 +15437,14 @@ function renderPlansHub(panel) {
   if (viewActiveBtn) viewActiveBtn.addEventListener('click', () => {
     showPlansHub = false;
     blockBuilderPreview = state.profile.active_training_block;
-    blockBuilderExpandedDayIndex = 0;
+    blockBuilderExpandedDayIndex = -1;
     blockBuilderViewingActive = true;
     blockBuilderStep = 3;
     showBlockBuilder = true;
     renderLiftsTab();
   });
+  const startBtn = $('#plansHubStartBtn', panel);
+  if (startBtn) startBtn.addEventListener('click', () => { showPlansHub = false; startOrContinueWorkoutFromCard(); });
   $$('[data-plans-change-days]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const targetDays = Number(btn.dataset.plansChangeDays);
     // Prefer a candidate matching the current program's goal, else the
@@ -15309,6 +15459,7 @@ function renderPlansHub(panel) {
   }));
   $$('[data-plans-open]', panel).forEach((row) => row.addEventListener('click', () => {
     plansHubPreviewId = row.dataset.plansOpen;
+    programPreviewExpandedDay = null;
     renderLiftsTab();
   }));
 }
@@ -15332,21 +15483,42 @@ function renderChangeDaysPreview(panel) {
   const dropped = [...oldExerciseNames].filter((n) => !newExerciseNames.has(n));
   const added = [...newExerciseNames].filter((n) => !oldExerciseNames.has(n));
 
+  // Weekly sets per body region for the incoming program, from real
+  // exercise-catalog data (not invented numbers) - mirrors the mockup's
+  // "Weekly sets after" bars.
+  const setsByRegion = {};
+  target.schedule.forEach((day) => day.exercises.forEach((ex) => {
+    const region = exerciseDefFor(ex.name)?.body_region || DEFAULT_BODY_REGION[ex.name];
+    if (!region) return;
+    const label = BODY_REGION_LABELS[region] || region;
+    setsByRegion[label] = (setsByRegion[label] || 0) + ex.sets;
+  }));
+  const maxSets = Math.max(1, ...Object.values(setsByRegion));
+
   panel.innerHTML = `
+    <div class="display" style="font-size:1.69rem;margin-bottom:0.2rem;">${active.days} days &rarr; ${target.days} days</div>
     <div class="card">
-      <h3 style="margin-top:0;">${active.days} days &rarr; ${target.days} days</h3>
-      <p class="muted small">Switching from <strong>${esc(active.sourceProgramName || active.focus)}</strong> to <strong>${esc(target.name)}</strong>. Your current version is replaced by a fresh copy of the new program — nothing is merged exercise-by-exercise, since the two programs don't share a day structure.</p>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0;">What will change</h3>
-      <div class="row" style="justify-content:space-between;"><span class="muted small">Days</span><span class="mono small">${esc(oldLabels.join(', '))}</span></div>
-      <div class="row" style="justify-content:space-between;margin-top:0.3rem;"><span class="muted small">&rarr;</span><span class="mono small">${esc(newLabels.join(', '))}</span></div>
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">What will change</div>
+      <p class="small" style="margin:0.4rem 0 0;">Switching from <strong>${esc(active.sourceProgramName || active.focus)}</strong> to <strong>${esc(target.name)}</strong>. Your current version is replaced by a fresh copy of the new program — nothing is merged exercise-by-exercise, since the two programs don't share a day structure.</p>
+      <div class="row" style="justify-content:space-between;margin-top:0.6rem;"><span class="muted small">Days</span><span class="mono small" style="text-align:right;">${esc(oldLabels.join(', '))}</span></div>
+      <div class="row" style="justify-content:space-between;margin-top:0.3rem;"><span class="muted small">&rarr;</span><span class="mono small" style="text-align:right;">${esc(newLabels.join(', '))}</span></div>
       <div style="margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.6rem;">
         <p class="muted small" style="margin:0;">${kept.length} exercise${kept.length === 1 ? '' : 's'} carry over, ${added.length} new, ${dropped.length} dropped.</p>
         ${dropped.length ? `<p class="muted small" style="margin:0.3rem 0 0;">Dropped: ${esc(dropped.join(', '))}</p>` : ''}
         ${added.length ? `<p class="muted small" style="margin:0.3rem 0 0;">Added: ${esc(added.join(', '))}</p>` : ''}
       </div>
     </div>
+    ${Object.keys(setsByRegion).length ? `<div class="card">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.5rem;">Weekly sets after</div>
+      ${Object.entries(setsByRegion).sort((a, b) => b[1] - a[1]).map(([label, sets]) => `
+        <div class="row" style="align-items:center;gap:0.6rem;margin-bottom:0.4rem;">
+          <span class="small" style="flex:none;min-width:4.5rem;">${esc(label)}</span>
+          <div style="flex:1;height:0.57rem;background:var(--surface-3);border-radius:0.3rem;overflow:hidden;">
+            <div style="width:${Math.round((sets / maxSets) * 100)}%;height:100%;background:var(--success);"></div>
+          </div>
+          <span class="mono small" style="flex:none;min-width:0;">${sets}</span>
+        </div>`).join('')}
+    </div>` : ''}
     <div class="row" style="gap:0.5rem;">
       <button class="btn" id="changeDaysCancelBtn" style="flex:1;">Cancel</button>
       <button class="btn btn-primary" id="changeDaysApplyBtn" style="flex:1;">Apply</button>
@@ -15362,17 +15534,33 @@ function renderChangeDaysPreview(panel) {
 function renderProgramPreview(panel, templateId) {
   const template = PROGRAM_TEMPLATES.find((p) => p.id === templateId);
   if (!template) { plansHubPreviewId = null; renderPlansHub(panel); return; }
+  const allExerciseNames = [...new Set(template.schedule.flatMap((d) => d.exercises.map((e) => e.name)))];
+  const equipmentChips = [...new Set(allExerciseNames.map((n) => exerciseDefFor(n)?.equipment).filter(Boolean))];
+  const dayMuscles = (day) => [...new Set(day.exercises.map((e) => {
+    const region = exerciseDefFor(e.name)?.body_region || DEFAULT_BODY_REGION[e.name];
+    return region ? (BODY_REGION_LABELS[region] || region) : null;
+  }).filter(Boolean))];
   panel.innerHTML = `
-    <button class="btn btn-sm btn-ghost" id="programPreviewBackBtn">&#8249; Programs</button>
+    <button class="btn-link" id="programPreviewBackBtn" style="text-transform:none;text-decoration:underline;">&#8249; Programs</button>
+    <div class="pagetitle" style="margin:0.2rem 0 0.1rem;">${esc(template.name)}</div>
+    <p class="muted" style="margin:0 0 0.8rem;">${template.days} days &middot; ${esc(template.level)} &middot; ${esc(template.goal)}</p>
     <div class="card">
-      <h3 style="margin-top:0;">${esc(template.name)}</h3>
-      <p class="muted small" style="margin:0;">${template.days} days/week &middot; ${esc(template.level)} &middot; ${esc(template.goal)}</p>
-      <p style="margin-top:0.5rem;">${esc(template.description)}</p>
+      <p style="margin:0;">${esc(template.description)}</p>
+      ${equipmentChips.length ? `<div class="chip-row" style="margin-top:0.6rem;">${equipmentChips.map((eq) => `<span class="chip" style="cursor:default;">${esc(eq)}</span>`).join('')}</div>` : ''}
     </div>
-    ${template.schedule.map((day) => `
-      <div class="card">
-        <h3 style="margin-top:0;">${esc(day.label)}</h3>
-        ${day.exercises.map((ex) => `<div class="row" style="justify-content:space-between;padding:0.3rem 0;"><span>${esc(ex.name)}</span><span class="mono muted small">${ex.sets} &times; ${esc(ex.reps)}</span></div>`).join('')}
+    ${template.schedule.map((day, i) => `
+      <div class="card" data-program-preview-day="${i}" style="cursor:pointer;">
+        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+          <div style="min-width:0;">
+            <h3 style="margin:0;">${esc(day.label)}</h3>
+            <p class="muted small" style="margin:0.1rem 0 0;">${esc(dayMuscles(day).map((m, i) => i === 0 ? m : m.toLowerCase()).join(', ') || 'Full body')} &middot; ${day.exercises.length} ex</p>
+          </div>
+          <span class="muted" style="flex:none;min-width:0;">${programPreviewExpandedDay === i ? '&#8963;' : '&rsaquo;'}</span>
+        </div>
+        ${programPreviewExpandedDay === i ? `
+          <div style="margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.6rem;">
+            ${day.exercises.map((ex) => `<div class="row" style="justify-content:space-between;padding:0.3rem 0;"><span>${esc(ex.name)}</span><span class="mono muted small">${ex.sets} &times; ${esc(ex.reps)}</span></div>`).join('')}
+          </div>` : ''}
       </div>`).join('')}
     <div class="row" style="gap:0.5rem;">
       <button class="btn" id="programPreviewCustomizeBtn" style="flex:1;">Customize</button>
@@ -15382,6 +15570,11 @@ function renderProgramPreview(panel, templateId) {
   $('#programPreviewBackBtn').addEventListener('click', () => { plansHubPreviewId = null; renderLiftsTab(); });
   $('#programPreviewCustomizeBtn').addEventListener('click', () => startProgramTemplate(template, true));
   $('#programPreviewStartBtn').addEventListener('click', () => startProgramTemplate(template, false));
+  $$('[data-program-preview-day]', panel).forEach((card) => card.addEventListener('click', () => {
+    const i = Number(card.dataset.programPreviewDay);
+    programPreviewExpandedDay = programPreviewExpandedDay === i ? null : i;
+    renderLiftsTab();
+  }));
 }
 
 // "A program is always copied before it's edited, so the original is
@@ -15398,7 +15591,7 @@ async function startProgramTemplate(template, goToEditor) {
   showPlansHub = false;
   if (goToEditor) {
     blockBuilderPreview = block;
-    blockBuilderExpandedDayIndex = 0;
+    blockBuilderExpandedDayIndex = -1;
     blockBuilderViewingActive = true;
     blockBuilderStep = 3;
     showBlockBuilder = true;
