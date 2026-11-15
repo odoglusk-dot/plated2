@@ -4913,6 +4913,7 @@ function todaysLiftSummaryHtml() {
   const restToday = !!activeBlock && todaysDayIndex == null; // explicitly skipped/moved away this week — never mutates the block itself
   const hasPlanned = !!((activeBlock && !restToday) || state.plan);
   const todaysEntry = overrides[localDateStr()];
+  const dayExercises = activeBlock && todaysDayIndex != null ? activeBlock.blockDays[todaysDayIndex]?.exercises : null;
   let label, sub;
   if (!ctx.empty && !ctx.ended) {
     label = 'Continue';
@@ -4926,17 +4927,24 @@ function todaysLiftSummaryHtml() {
   } else if (hasPlanned) {
     label = 'Start';
     sub = todaysFocusLabel() + (todaysEntry?.shortened ? ' · Shortened' : '');
+    // Mockup's Today's Lift card names the exercise count and an estimated
+    // length alongside the day label - this used to just show the label.
+    if (dayExercises?.length) sub += ` · ${dayExercises.length} exercise${dayExercises.length === 1 ? '' : 's'} · about ${Math.round(dayExercises.length * 9)} min`;
   } else {
     label = 'Choose a workout';
     sub = 'Nothing planned for today';
   }
   const canReschedule = ctx.empty && hasPlanned && !!activeBlock;
+  const dayMuscleChips = label === 'Start' && dayExercises?.length
+    ? [...new Set(dayExercises.map((e) => e.muscle).filter(Boolean))].slice(0, 3)
+    : [];
   return `
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
         <h3 style="margin:0;">Today's Lift</h3>
         <span class="muted small">${esc(sub)}</span>
       </div>
+      ${dayMuscleChips.length ? `<div class="chip-row" style="margin-top:0.5rem;">${dayMuscleChips.map((m) => `<span class="chip" style="cursor:default;">${esc(m.charAt(0).toUpperCase() + m.slice(1))}</span>`).join('')}</div>` : ''}
       ${todaysLiftChangeMenuOpen ? `
         <div style="margin-top:0.5rem;border-top:1px solid var(--border);padding-top:0.5rem;">
           <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;" data-today-change="move_tomorrow">Move to tomorrow</button>
@@ -5745,7 +5753,10 @@ function renderDashboard() {
   const editingHere = editingScreenKey === 'nutrition_home';
 
   const panel = $('#panel-dashboard');
+  const todayHeaderDate = new Date(`${today}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '');
   panel.innerHTML = `
+    <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.1rem;">${esc(todayHeaderDate)}</div>
+    <div class="pagetitle" style="margin:0 0 0.6rem;">Today</div>
     ${achievementUnlockBannerHtml()}
     ${showSpikeWarning ? `
     <div class="card pr-banner">
