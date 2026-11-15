@@ -891,6 +891,26 @@
   .ring-progress::after { content: attr(data-t); position: absolute; inset: 0.27rem; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
   .ring-none { background: var(--surface-3); color: var(--text-dim); }
 
+  /* Week strip (component I): 7 cells, mockup 9.5px mono, radius 9px,
+     gap 5px, x1.4234. Today = ink fill; done = ok-green fill. */
+  .week-strip { display: flex; gap: 0.44rem; }
+  .week-strip > div { flex: 1; text-align: center; font-family: var(--font-mono); font-size: 0.84rem; font-weight: 500;
+    padding: 0.4rem 0; border-radius: 0.8rem; background: #fff; border: 1px solid var(--border); color: var(--text-dim); }
+  .week-strip > div.wk-today { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .week-strip > div.wk-done { background: #E3EDE6; color: var(--success); border-color: #CFE0D4; }
+
+  /* Day dots (component J): rotation-position indicator on a program's
+     dark hero card. Mockup 18x5px, radius 3px, x1.4234. */
+  .day-dots { display: flex; gap: 0.28rem; }
+  .day-dots i { width: 1.6rem; height: 0.44rem; border-radius: 0.27rem; background: #DAD5C8; display: block; font-style: normal; }
+  .day-dots i.dd-done { background: var(--accent); }
+  .day-dots i.dd-next { background: var(--gold); }
+
+  /* Dark hero card (used for the active-program summary) - mockup
+     linear-gradient(160deg,#25272C,#17181B), radius 18px x1.4234 -> 26px. */
+  .dark-hero-card { background: linear-gradient(160deg, #25272C, #17181B); color: #fff; border-radius: 1.6rem; padding: 1rem 1.06rem; margin-bottom: 0.8rem; }
+  .dark-hero-card .muted { color: #B9B6AD; }
+
   /* ── Lists ────────────────────────────────────────────────────── */
   .log-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 0.75rem; }
   .log-row:last-child { border-bottom: none; }
@@ -4911,6 +4931,51 @@ function homeWidgetHtml(key, ctx) {
 // card, not a second copy of that breakdown.
 let todaysLiftChangeMenuOpen = false;
 
+// Shared by Today's Lift card and the Plans hub's active-program card -
+// same "jump into the live workout, program never required" behavior
+// wherever a "Start"/"Continue" button for today's lift appears.
+// Week strip (component I): this calendar week, Mon-Sun, which days have
+// a logged lift and which is today.
+function weekStripHtml() {
+  const todayStr = localDateStr();
+  const base = new Date(`${todayStr}T00:00:00`);
+  const monday = new Date(base);
+  monday.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+  const loggedDates = new Set(state.lifts.map((l) => l.date));
+  const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  return `<div class="week-strip">${labels.map((lbl, i) => {
+    const cellDate = new Date(monday);
+    cellDate.setDate(monday.getDate() + i);
+    const cellStr = localDateStr(cellDate);
+    const isToday = cellStr === todayStr;
+    const isDone = loggedDates.has(cellStr);
+    const cls = isToday ? 'wk-today' : (isDone ? 'wk-done' : '');
+    return `<div class="${cls}">${lbl}${isDone ? ' &#10003;' : ''}</div>`;
+  }).join('')}</div>`;
+}
+
+// Day dots (component J): position within the block's rotation - days
+// before today's index read as completed rounds, today's index as next.
+function dayDotsHtml(block, todaysDayIndex) {
+  if (!block?.blockDays?.length || todaysDayIndex == null) return '';
+  return `<div class="day-dots">${block.blockDays.map((_, i) => {
+    const cls = i < todaysDayIndex ? 'dd-done' : (i === todaysDayIndex ? 'dd-next' : '');
+    return `<i class="${cls}"></i>`;
+  }).join('')}</div>`;
+}
+
+function startOrContinueWorkoutFromCard() {
+  showPlanBuilder = false;
+  showBlockBuilder = false;
+  showExerciseGlossary = false;
+  showPlansHub = false;
+  liftsSelectedExercise = null;
+  liveWorkoutScreen = (liveWorkoutSession && liveWorkoutSession.date === localDateStr() && liveWorkoutSession.exercises?.length) ? 'overview' : 'start';
+  startLiveWorkoutTicker();
+  renderLiftsTab();
+  setActiveTab('lifts');
+}
+
 function todaysLiftSummaryHtml() {
   const ctx = computeTodaysLiftCtx();
   const activeBlock = state.profile?.active_training_block;
@@ -5822,21 +5887,7 @@ function renderDashboard() {
   if (mealsPrevToggle) mealsPrevToggle.addEventListener('click', () => { mealsPreviousDaysExpanded = !mealsPreviousDaysExpanded; renderDashboard(); });
 
   const liftCardBtn = $('#todaysLiftCardBtn', panel);
-  if (liftCardBtn) liftCardBtn.addEventListener('click', () => {
-    showPlanBuilder = false;
-    showBlockBuilder = false;
-    showExerciseGlossary = false;
-    liftsSelectedExercise = null;
-    // A live workout in progress (or already started today) goes straight
-    // back to its overview; otherwise into the quick-workout picker. A
-    // program is never required for either path. (liveWorkoutSession is
-    // already resumed from localStorage at app boot — see wlsResume() in
-    // bootstrapApp — so this just checks the in-memory state, not storage again.)
-    liveWorkoutScreen = (liveWorkoutSession && liveWorkoutSession.date === localDateStr() && liveWorkoutSession.exercises?.length) ? 'overview' : 'start';
-    startLiveWorkoutTicker();
-    renderLiftsTab();
-    setActiveTab('lifts');
-  });
+  if (liftCardBtn) liftCardBtn.addEventListener('click', startOrContinueWorkoutFromCard);
   const programsLink = $('#todaysLiftProgramsLink', panel);
   if (programsLink) programsLink.addEventListener('click', () => {
     showPlansHub = true;
@@ -14605,6 +14656,7 @@ function programTemplateToBlock(template) {
 let showPlansHub = false;
 let plansHubFilterLevel = '';
 let plansHubPreviewId = null; // a PROGRAM_TEMPLATES id, or null when showing the hub list
+let programPreviewExpandedDay = null; // index into template.schedule, or null - reset each time a template preview opens
 let plansHubChangeDaysTargetId = null; // 5d: a candidate template id being previewed as a day-count change
 
 let showBlockBuilder = false;
@@ -15251,12 +15303,22 @@ function renderPlansHub(panel) {
     ? [...new Set(PROGRAM_TEMPLATES.filter((p) => p.id !== active.sourceProgramId).map((p) => p.days))].sort((a, b) => a - b)
     : [];
 
+  const activeOverrides = active ? pruneScheduleOverrides(state.profile?.schedule_overrides_this_week) : null;
+  const activeTodaysDayIndex = active ? effectiveBlockDayIndex(active, localDateStr(), activeOverrides) : null;
+  const activeTodaysDay = activeTodaysDayIndex != null ? active.blockDays[activeTodaysDayIndex] : null;
+  const activeCtx = active ? computeTodaysLiftCtx() : null;
+  const activeStartLabel = activeCtx && !activeCtx.empty && !activeCtx.ended ? 'Continue' : (activeCtx && !activeCtx.empty && activeCtx.ended ? 'View' : 'Start workout');
   panel.innerHTML = `
-    ${active ? `<div class="card">
-      <h3 style="margin-top:0;">Your program</h3>
-      <p style="margin:0;">${esc(active.sourceProgramName || active.focus)}</p>
-      <p class="muted small" style="margin:0.2rem 0 0;">${active.days} day${active.days === 1 ? '' : 's'}/week &middot; ${active.blockDays.length} day${active.blockDays.length === 1 ? '' : 's'} in rotation</p>
-      <button class="btn btn-sm" id="plansHubViewActiveBtn" style="margin-top:0.6rem;">View / customize</button>
+    ${active ? `<div class="dark-hero-card">
+      <div class="muted mono" style="font-size:0.84rem;text-transform:uppercase;letter-spacing:0.08em;">${esc(active.sourceProgramName || active.focus)}${active.blockDays.length ? ` &middot; day ${(activeTodaysDayIndex ?? 0) + 1} of ${active.blockDays.length}` : ''}</div>
+      ${activeTodaysDay ? `<div class="display" style="font-size:1.69rem;margin:0.3rem 0 0.1rem;color:#fff;">${esc(activeTodaysDay.label)}</div>
+        <div class="muted small">${activeTodaysDay.exercises.length} exercise${activeTodaysDay.exercises.length === 1 ? '' : 's'} &middot; about ${Math.round(activeTodaysDay.exercises.length * 9)} min</div>` : ''}
+      ${dayDotsHtml(active, activeTodaysDayIndex)}
+      <button class="btn btn-gold" id="plansHubStartBtn" style="margin-top:0.6rem;">${esc(activeStartLabel)}</button>
+    </div>
+    <div class="card" style="padding:0.6rem 1.06rem;">${weekStripHtml()}</div>
+    <div class="card">
+      <button class="btn btn-sm" id="plansHubViewActiveBtn">View / customize</button>
       ${active.sourceProgramId ? `
         <div class="chip-row" style="margin-top:0.6rem;">
           <span class="muted small">Change days/week:</span>
@@ -15295,6 +15357,8 @@ function renderPlansHub(panel) {
     showBlockBuilder = true;
     renderLiftsTab();
   });
+  const startBtn = $('#plansHubStartBtn', panel);
+  if (startBtn) startBtn.addEventListener('click', () => { showPlansHub = false; startOrContinueWorkoutFromCard(); });
   $$('[data-plans-change-days]', panel).forEach((btn) => btn.addEventListener('click', () => {
     const targetDays = Number(btn.dataset.plansChangeDays);
     // Prefer a candidate matching the current program's goal, else the
@@ -15309,6 +15373,7 @@ function renderPlansHub(panel) {
   }));
   $$('[data-plans-open]', panel).forEach((row) => row.addEventListener('click', () => {
     plansHubPreviewId = row.dataset.plansOpen;
+    programPreviewExpandedDay = null;
     renderLiftsTab();
   }));
 }
@@ -15362,17 +15427,33 @@ function renderChangeDaysPreview(panel) {
 function renderProgramPreview(panel, templateId) {
   const template = PROGRAM_TEMPLATES.find((p) => p.id === templateId);
   if (!template) { plansHubPreviewId = null; renderPlansHub(panel); return; }
+  const allExerciseNames = [...new Set(template.schedule.flatMap((d) => d.exercises.map((e) => e.name)))];
+  const equipmentChips = [...new Set(allExerciseNames.map((n) => exerciseDefFor(n)?.equipment).filter(Boolean))];
+  const dayMuscles = (day) => [...new Set(day.exercises.map((e) => {
+    const region = exerciseDefFor(e.name)?.body_region || DEFAULT_BODY_REGION[e.name];
+    return region ? (BODY_REGION_LABELS[region] || region) : null;
+  }).filter(Boolean))];
   panel.innerHTML = `
-    <button class="btn btn-sm btn-ghost" id="programPreviewBackBtn">&#8249; Programs</button>
+    <button class="btn-link" id="programPreviewBackBtn" style="text-transform:none;text-decoration:underline;">&#8249; Programs</button>
+    <div class="pagetitle" style="margin:0.2rem 0 0.1rem;">${esc(template.name)}</div>
+    <p class="muted" style="margin:0 0 0.8rem;">${template.days} days &middot; ${esc(template.level)} &middot; ${esc(template.goal)}</p>
     <div class="card">
-      <h3 style="margin-top:0;">${esc(template.name)}</h3>
-      <p class="muted small" style="margin:0;">${template.days} days/week &middot; ${esc(template.level)} &middot; ${esc(template.goal)}</p>
-      <p style="margin-top:0.5rem;">${esc(template.description)}</p>
+      <p style="margin:0;">${esc(template.description)}</p>
+      ${equipmentChips.length ? `<div class="chip-row" style="margin-top:0.6rem;">${equipmentChips.map((eq) => `<span class="chip" style="cursor:default;">${esc(eq)}</span>`).join('')}</div>` : ''}
     </div>
-    ${template.schedule.map((day) => `
-      <div class="card">
-        <h3 style="margin-top:0;">${esc(day.label)}</h3>
-        ${day.exercises.map((ex) => `<div class="row" style="justify-content:space-between;padding:0.3rem 0;"><span>${esc(ex.name)}</span><span class="mono muted small">${ex.sets} &times; ${esc(ex.reps)}</span></div>`).join('')}
+    ${template.schedule.map((day, i) => `
+      <div class="card" data-program-preview-day="${i}" style="cursor:pointer;">
+        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+          <div style="min-width:0;">
+            <h3 style="margin:0;">${esc(day.label)}</h3>
+            <p class="muted small" style="margin:0.1rem 0 0;">${esc(dayMuscles(day).map((m, i) => i === 0 ? m : m.toLowerCase()).join(', ') || 'Full body')} &middot; ${day.exercises.length} ex</p>
+          </div>
+          <span class="muted" style="flex:none;min-width:0;">${programPreviewExpandedDay === i ? '&#8963;' : '&rsaquo;'}</span>
+        </div>
+        ${programPreviewExpandedDay === i ? `
+          <div style="margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.6rem;">
+            ${day.exercises.map((ex) => `<div class="row" style="justify-content:space-between;padding:0.3rem 0;"><span>${esc(ex.name)}</span><span class="mono muted small">${ex.sets} &times; ${esc(ex.reps)}</span></div>`).join('')}
+          </div>` : ''}
       </div>`).join('')}
     <div class="row" style="gap:0.5rem;">
       <button class="btn" id="programPreviewCustomizeBtn" style="flex:1;">Customize</button>
@@ -15382,6 +15463,11 @@ function renderProgramPreview(panel, templateId) {
   $('#programPreviewBackBtn').addEventListener('click', () => { plansHubPreviewId = null; renderLiftsTab(); });
   $('#programPreviewCustomizeBtn').addEventListener('click', () => startProgramTemplate(template, true));
   $('#programPreviewStartBtn').addEventListener('click', () => startProgramTemplate(template, false));
+  $$('[data-program-preview-day]', panel).forEach((card) => card.addEventListener('click', () => {
+    const i = Number(card.dataset.programPreviewDay);
+    programPreviewExpandedDay = programPreviewExpandedDay === i ? null : i;
+    renderLiftsTab();
+  }));
 }
 
 // "A program is always copied before it's edited, so the original is
