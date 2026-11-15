@@ -5009,6 +5009,9 @@ function todaysLiftSummaryHtml() {
   const dayMuscleChips = label === 'Start' && dayExercises?.length
     ? [...new Set(dayExercises.map((e) => e.muscle).filter(Boolean))].slice(0, 3)
     : [];
+  const tomorrowIdxForSwap = activeBlock ? effectiveBlockDayIndex(activeBlock, subtractDays(localDateStr(), -1), overrides) : null;
+  const tomorrowDayLabel = tomorrowIdxForSwap != null ? activeBlock.blockDays[tomorrowIdxForSwap]?.label : null;
+  const changeRow = (action, text) => `<div class="row" style="justify-content:space-between;align-items:center;padding:0.6rem 0;cursor:pointer;border-top:1px solid var(--border);" data-today-change="${action}"><span>${esc(text)}</span><span class="muted">&rsaquo;</span></div>`;
   return `
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
@@ -5017,11 +5020,12 @@ function todaysLiftSummaryHtml() {
       </div>
       ${dayMuscleChips.length ? `<div class="chip-row" style="margin-top:0.5rem;">${dayMuscleChips.map((m) => `<span class="chip" style="cursor:default;">${esc(m.charAt(0).toUpperCase() + m.slice(1))}</span>`).join('')}</div>` : ''}
       ${todaysLiftChangeMenuOpen ? `
-        <div style="margin-top:0.5rem;border-top:1px solid var(--border);padding-top:0.5rem;">
-          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;" data-today-change="move_tomorrow">Move to tomorrow</button>
-          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;margin-top:0.3rem;" data-today-change="shorten">Shorten (mark as shortened)</button>
-          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;margin-top:0.3rem;" data-today-change="skip">Skip this workout</button>
-          <button class="btn btn-sm btn-ghost" style="width:100%;text-align:left;margin-top:0.3rem;" id="todaysLiftChangeCancelBtn">Cancel</button>
+        <div style="margin-top:0.3rem;">
+          ${changeRow('move_tomorrow', 'Move to tomorrow')}
+          ${tomorrowDayLabel ? changeRow('swap_tomorrow', `Swap with ${tomorrowDayLabel}`) : ''}
+          ${changeRow('shorten', 'Shorten (mark as shortened)')}
+          <div style="border-top:1px solid var(--border);"><span class="small" style="color:var(--danger);cursor:pointer;display:block;padding:0.6rem 0;" data-today-change="skip">Skip this workout</span></div>
+          <button class="btn btn-sm btn-ghost" style="width:100%;margin-top:0.3rem;" id="todaysLiftChangeCancelBtn">Cancel</button>
         </div>
       ` : `
       <div class="row" style="justify-content:${canReschedule ? 'space-between' : (!hasPlanned && ctx.empty ? 'space-between' : 'flex-end')};align-items:center;border-top:none;padding-top:0.5rem;">
@@ -12525,6 +12529,12 @@ async function applyScheduleChange(action) {
     overrides[tomorrow] = { action: 'moved_in', dayIndex: todayIdx };
   } else if (action === 'shorten') {
     overrides[today] = { ...(overrides[today] || {}), shortened: true };
+  } else if (action === 'swap_tomorrow') {
+    const todayIdx = effectiveBlockDayIndex(block, today, overrides);
+    const tomorrowIdx = effectiveBlockDayIndex(block, tomorrow, overrides);
+    if (todayIdx == null || tomorrowIdx == null) return;
+    overrides[today] = { action: 'moved_in', dayIndex: tomorrowIdx };
+    overrides[tomorrow] = { action: 'moved_in', dayIndex: todayIdx };
   }
   const { error } = await supabase.from('profiles').update({ schedule_overrides_this_week: overrides }).eq('id', state.user.id);
   if (error) { toast('Could not change today’s schedule: ' + error.message); return; }
@@ -14667,7 +14677,7 @@ let blockBuilderDays = 4;
 let blockBuilderEquipment = [];
 let blockBuilderAvoid = [];
 let blockBuilderPreview = null;
-let blockBuilderExpandedDayIndex = 0;
+let blockBuilderExpandedDayIndex = -1;
 let blockBuilderViewingActive = false;
 let blockBuilderStarting = false;
 // Manual per-instance overrides UI state (substitute/add/remove exercise,
@@ -14687,7 +14697,7 @@ function resetBlockBuilderState() {
   blockBuilderEquipment = [];
   blockBuilderAvoid = [];
   blockBuilderPreview = null;
-  blockBuilderExpandedDayIndex = 0;
+  blockBuilderExpandedDayIndex = -1;
   blockBuilderViewingActive = false;
   blockSwapPickerFor = null;
   blockExerciseRemoveConfirm = null;
@@ -14849,7 +14859,7 @@ function wireBlockBuilderSummaryEvents(panel) {
   const viewBtn = $('#blockBuilderViewBtn', panel);
   if (viewBtn) viewBtn.addEventListener('click', () => {
     blockBuilderPreview = state.profile.active_training_block;
-    blockBuilderExpandedDayIndex = 0;
+    blockBuilderExpandedDayIndex = -1;
     blockBuilderViewingActive = true;
     blockBuilderStep = 3;
     showBlockBuilder = true;
@@ -14992,9 +15002,12 @@ function blockPickerResultsHtml(candidates) {
 function blockDayCardHtml(day, index, isExpanded) {
   if (!isExpanded) {
     return `<div class="card" data-block-day-toggle="${index}" style="cursor:pointer;margin-bottom:0.6rem;">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <strong>${esc(day.label)}</strong>
-        <span class="muted small">${day.exercises.length} exercise${day.exercises.length === 1 ? '' : 's'}</span>
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:nowrap;">
+        <div style="min-width:0;">
+          <strong>${esc(day.label)}</strong>
+          <p class="muted small" style="margin:0.1rem 0 0;">${day.exercises.length} exercise${day.exercises.length === 1 ? '' : 's'}</p>
+        </div>
+        <span class="chip" style="flex:none;min-width:0;cursor:pointer;">Edit</span>
       </div>
     </div>`;
   }
@@ -15172,8 +15185,9 @@ function blockBuilderStep3Html() {
   const focusOpt = BLOCK_FOCUS_OPTIONS.find((o) => o.key === block.focus);
   return `<div class="card">
     ${isProgram ? `
-      <h3>${esc(block.sourceProgramName)} &middot; Your version${block.deloadActive ? ' &middot; Deload week' : ''}</h3>
-      <p class="muted small" style="margin-top:-0.5rem;">Based on the ${esc(block.sourceProgramName)} program. The original template is untouched — this is your own editable copy.${block.deloadActive ? ' Sets below are reduced to about 60% for this deload week; End deload restores your normal sets exactly as they were.' : ''}</p>
+      <div class="display" style="font-size:1.5rem;">${esc(block.sourceProgramName)}${block.deloadActive ? ' &middot; Deload week' : ''}</div>
+      <p class="muted small" style="margin:0.1rem 0 0.6rem;">Your version &middot; based on the ${esc(block.sourceProgramName)} program</p>
+      <div class="banner">You're editing your own copy. The original stays safe, and you can reset any time.${block.deloadActive ? ' Sets below are reduced to about 60% for this deload week; End deload restores your normal sets exactly as they were.' : ''}</div>
       <div class="chip-row" style="margin-top:0.5rem;">
         <span class="mono muted small">${block.days} days/week</span>
       </div>
@@ -15250,7 +15264,7 @@ function wireBlockBuilderStep3(panel) {
     if (error) { toast('Could not reset: ' + error.message); return; }
     state.profile = { ...state.profile, active_training_block: fresh };
     blockBuilderPreview = fresh;
-    blockBuilderExpandedDayIndex = 0;
+    blockBuilderExpandedDayIndex = -1;
     toast('Reset to the original program.');
     renderLiftsTab();
   });
@@ -15351,7 +15365,7 @@ function renderPlansHub(panel) {
   if (viewActiveBtn) viewActiveBtn.addEventListener('click', () => {
     showPlansHub = false;
     blockBuilderPreview = state.profile.active_training_block;
-    blockBuilderExpandedDayIndex = 0;
+    blockBuilderExpandedDayIndex = -1;
     blockBuilderViewingActive = true;
     blockBuilderStep = 3;
     showBlockBuilder = true;
@@ -15397,21 +15411,42 @@ function renderChangeDaysPreview(panel) {
   const dropped = [...oldExerciseNames].filter((n) => !newExerciseNames.has(n));
   const added = [...newExerciseNames].filter((n) => !oldExerciseNames.has(n));
 
+  // Weekly sets per body region for the incoming program, from real
+  // exercise-catalog data (not invented numbers) - mirrors the mockup's
+  // "Weekly sets after" bars.
+  const setsByRegion = {};
+  target.schedule.forEach((day) => day.exercises.forEach((ex) => {
+    const region = exerciseDefFor(ex.name)?.body_region || DEFAULT_BODY_REGION[ex.name];
+    if (!region) return;
+    const label = BODY_REGION_LABELS[region] || region;
+    setsByRegion[label] = (setsByRegion[label] || 0) + ex.sets;
+  }));
+  const maxSets = Math.max(1, ...Object.values(setsByRegion));
+
   panel.innerHTML = `
+    <div class="display" style="font-size:1.69rem;margin-bottom:0.2rem;">${active.days} days &rarr; ${target.days} days</div>
     <div class="card">
-      <h3 style="margin-top:0;">${active.days} days &rarr; ${target.days} days</h3>
-      <p class="muted small">Switching from <strong>${esc(active.sourceProgramName || active.focus)}</strong> to <strong>${esc(target.name)}</strong>. Your current version is replaced by a fresh copy of the new program — nothing is merged exercise-by-exercise, since the two programs don't share a day structure.</p>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0;">What will change</h3>
-      <div class="row" style="justify-content:space-between;"><span class="muted small">Days</span><span class="mono small">${esc(oldLabels.join(', '))}</span></div>
-      <div class="row" style="justify-content:space-between;margin-top:0.3rem;"><span class="muted small">&rarr;</span><span class="mono small">${esc(newLabels.join(', '))}</span></div>
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">What will change</div>
+      <p class="small" style="margin:0.4rem 0 0;">Switching from <strong>${esc(active.sourceProgramName || active.focus)}</strong> to <strong>${esc(target.name)}</strong>. Your current version is replaced by a fresh copy of the new program — nothing is merged exercise-by-exercise, since the two programs don't share a day structure.</p>
+      <div class="row" style="justify-content:space-between;margin-top:0.6rem;"><span class="muted small">Days</span><span class="mono small" style="text-align:right;">${esc(oldLabels.join(', '))}</span></div>
+      <div class="row" style="justify-content:space-between;margin-top:0.3rem;"><span class="muted small">&rarr;</span><span class="mono small" style="text-align:right;">${esc(newLabels.join(', '))}</span></div>
       <div style="margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.6rem;">
         <p class="muted small" style="margin:0;">${kept.length} exercise${kept.length === 1 ? '' : 's'} carry over, ${added.length} new, ${dropped.length} dropped.</p>
         ${dropped.length ? `<p class="muted small" style="margin:0.3rem 0 0;">Dropped: ${esc(dropped.join(', '))}</p>` : ''}
         ${added.length ? `<p class="muted small" style="margin:0.3rem 0 0;">Added: ${esc(added.join(', '))}</p>` : ''}
       </div>
     </div>
+    ${Object.keys(setsByRegion).length ? `<div class="card">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.5rem;">Weekly sets after</div>
+      ${Object.entries(setsByRegion).sort((a, b) => b[1] - a[1]).map(([label, sets]) => `
+        <div class="row" style="align-items:center;gap:0.6rem;margin-bottom:0.4rem;">
+          <span class="small" style="flex:none;min-width:4.5rem;">${esc(label)}</span>
+          <div style="flex:1;height:0.57rem;background:var(--surface-3);border-radius:0.3rem;overflow:hidden;">
+            <div style="width:${Math.round((sets / maxSets) * 100)}%;height:100%;background:var(--success);"></div>
+          </div>
+          <span class="mono small" style="flex:none;min-width:0;">${sets}</span>
+        </div>`).join('')}
+    </div>` : ''}
     <div class="row" style="gap:0.5rem;">
       <button class="btn" id="changeDaysCancelBtn" style="flex:1;">Cancel</button>
       <button class="btn btn-primary" id="changeDaysApplyBtn" style="flex:1;">Apply</button>
@@ -15484,7 +15519,7 @@ async function startProgramTemplate(template, goToEditor) {
   showPlansHub = false;
   if (goToEditor) {
     blockBuilderPreview = block;
-    blockBuilderExpandedDayIndex = 0;
+    blockBuilderExpandedDayIndex = -1;
     blockBuilderViewingActive = true;
     blockBuilderStep = 3;
     showBlockBuilder = true;
