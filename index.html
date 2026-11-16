@@ -9978,12 +9978,24 @@ function exercisePickerResultsHtml(query, actionAttr, actionLabel = '+') {
   const q = query.trim().toLowerCase();
   if (!q) return '';
   const results = state.exercises.filter((e) => e.name.toLowerCase().includes(q) || (e.aliases || []).some((a) => a.toLowerCase().includes(q))).slice(0, 20);
-  if (!results.length) return `<p class="muted small">No exercises match.</p>`;
-  return results.map((e) => `
+  const rows = results.map((e) => `
     <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
       <span>${esc(e.name)}</span>
       <button class="btn btn-sm" ${actionAttr}="${esc(e.name)}">${actionLabel}</button>
     </div>`).join('');
+  // Not every exercise someone logs lives in the catalog - lifts.exercise
+  // is plain text, not a foreign key (see reset-schema.sql), and the
+  // manual Log-a-Lift form already supports typing a brand new name. This
+  // offers the same escape hatch here instead of dead-ending on "no
+  // matches" when the catalog just doesn't have what they're after.
+  const exactMatch = results.some((e) => e.name.toLowerCase() === q);
+  const addCustomRow = exactMatch ? '' : `
+    <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;${rows ? 'border-top:1px solid var(--border);margin-top:0.2rem;' : ''}">
+      <span class="muted small">Not in the library? Log it anyway.</span>
+      <button class="btn btn-sm btn-ghost" ${actionAttr}="${esc(query.trim())}">Add &ldquo;${esc(query.trim())}&rdquo;</button>
+    </div>`;
+  if (!rows && !addCustomRow) return `<p class="muted small">No exercises match.</p>`;
+  return rows + addCustomRow;
 }
 
 function renderQuickWorkoutStart(panel) {
@@ -10080,9 +10092,13 @@ function renderPlsResults(panel) {
 
   if (q) {
     const results = state.exercises.filter((e) => e.name.toLowerCase().includes(q) || (e.aliases || []).some((a) => a.toLowerCase().includes(q))).slice(0, 20);
-    resultsEl.innerHTML = results.length
-      ? results.map((e) => plsExerciseRowHtml(e.name, inWorkoutNames.has(e.name) ? "In today's workout" : (e.equipment || ''), inWorkoutNames.has(e.name))).join('')
-      : `<p class="muted small">No exercises match.</p>`;
+    const rows = results.map((e) => plsExerciseRowHtml(e.name, inWorkoutNames.has(e.name) ? "In today's workout" : (e.equipment || ''), inWorkoutNames.has(e.name))).join('');
+    // Same escape hatch as the Quick Workout picker (exercisePickerResultsHtml)
+    // - lifts.exercise is plain text, not a foreign key, so logging a name
+    // the catalog doesn't have is already fully supported end to end.
+    const exactMatch = results.some((e) => e.name.toLowerCase() === q);
+    const addCustomRow = exactMatch ? '' : plsExerciseRowHtml(plusLogSetSearch.trim(), 'Not in the library — log it anyway', false);
+    resultsEl.innerHTML = (rows + addCustomRow) || `<p class="muted small">No exercises match.</p>`;
   } else {
     const recentNames = recentExerciseNames(6).filter((n) => !inWorkoutNames.has(n));
     resultsEl.innerHTML = `
