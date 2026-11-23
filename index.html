@@ -10210,6 +10210,11 @@ function renderPlusLogSetQuick(panel, idx) {
       </div>` : `<div class="muted small" style="margin-top:0.6rem;">This exercise type isn't supported in the quick-log view yet &mdash; use "Open full workout" above to log it.</div>`}
 
       ${ex.setsLogged.length ? exerciseSetsTableHtml(ex, def, true) : ''}
+
+      <div class="row" style="justify-content:flex-end;margin-top:0.6rem;">
+        <button class="btn btn-sm btn-ghost" id="plsTodayToggleBtn">Today's lifts ${exerciseDetailTodayExpanded ? '▲' : '▼'}</button>
+      </div>
+      ${exerciseDetailTodayExpanded ? `<div style="margin-top:0.2rem;">${todaysOtherLiftsHtml(ex.name)}</div>` : ''}
     </div>
 
     ${rest > 0 ? `
@@ -10221,6 +10226,7 @@ function renderPlusLogSetQuick(panel, idx) {
   `;
 
   $('#plsBackBtn').addEventListener('click', () => { plusLogSetMode = 'pick'; plusLogSetSearch = ''; renderLiftsTab(); });
+  $('#plsTodayToggleBtn').addEventListener('click', () => { exerciseDetailTodayExpanded = !exerciseDetailTodayExpanded; renderLiftsTab(); });
   $('#plsOpenFullBtn').addEventListener('click', () => {
     plusLogSetMode = null;
     liveWorkoutScreen = idx;
@@ -10353,6 +10359,7 @@ async function finishLiveWorkout() {
 // ── Exercise detail screen (A2) ──────────────────────────────────────────
 let exerciseDetailInput = { weight: '', reps: '', distance: '', durationSeconds: '', timerRunning: false, timerStartedAt: null };
 let exerciseDetailCueExpanded = false;
+let exerciseDetailTodayExpanded = false; // "Today's lifts" disclosure - what else got logged today, shown without leaving this exercise
 let exerciseDetailJustFinished = false; // shows the PR/estimated-max summary in place of the sets table right after the last set
 
 function resetExerciseDetailInput(ex) {
@@ -10368,7 +10375,34 @@ function resetExerciseDetailInput(ex) {
     reps: '', distance: '', durationSeconds: '', timerRunning: false, timerStartedAt: null,
   };
   exerciseDetailCueExpanded = false;
+  exerciseDetailTodayExpanded = false;
   exerciseDetailJustFinished = false;
+}
+
+// Today's lifts other than the one currently being logged - pulled from
+// state.lifts (every lift logged today, regardless of entry point: live
+// session, quick-log, or the manual Log-a-Lift form), not just the live
+// session's in-memory exercise list, so this reads the same whether
+// today's other sets were logged here or elsewhere. Reuses
+// computeTodaysLiftCtx()'s grouping (same source as the Today tab and
+// Finish screen) rather than re-deriving it.
+function todaysOtherLiftsHtml(excludeName) {
+  const ctx = computeTodaysLiftCtx();
+  const names = ctx.empty ? [] : Object.keys(ctx.byExercise).filter((n) => n !== excludeName);
+  if (!names.length) return `<p class="muted small" style="margin:0;">Nothing else logged today yet.</p>`;
+  return names.map((name) => {
+    const sets = ctx.byExercise[name];
+    const last = sets[sets.length - 1];
+    const trackingType = exerciseDefFor(name)?.tracking || 'weight_reps';
+    const repsPerSet = last.reps_per_set && last.reps_per_set.length ? last.reps_per_set : [last.reps];
+    const summary = trackingType === 'time' ? `${repsPerSet[repsPerSet.length - 1]}s`
+      : trackingType === 'bodyweight_reps' ? repsPerSet.join(', ')
+      : `${toDisplayWeight(last.weight).value} ${weightUnitLabel()} &times; ${repsPerSet.join(', ')}`;
+    return `<div class="row" style="justify-content:space-between;align-items:baseline;padding:0.3rem 0;border-bottom:1px solid var(--border);">
+      <span>${esc(name)}</span>
+      <span class="mono muted small">${sets.length} set${sets.length === 1 ? '' : 's'} &middot; ${summary}</span>
+    </div>`;
+  }).join('');
 }
 
 function lastTimeLabelFor(name, excludeToday) {
@@ -10426,9 +10460,11 @@ function renderExerciseDetailScreen(panel, idx) {
         <button class="btn-link" id="exFinishExerciseBtn">${ex.setsLogged.length > 0 ? 'Finish exercise' : 'Skip exercise'} &rarr;</button>
       </div>` : ''}
 
-      <div class="row" style="justify-content:space-between;align-items:center;margin-top:0.75rem;">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-top:0.75rem;gap:0.5rem;">
+        <button class="btn btn-sm btn-ghost" id="exTodayToggleBtn">Today's lifts ${exerciseDetailTodayExpanded ? '▲' : '▼'}</button>
         <button class="btn btn-sm btn-ghost" id="exCueToggleBtn">Cue ${exerciseDetailCueExpanded ? '▲' : '▼'}</button>
       </div>
+      ${exerciseDetailTodayExpanded ? `<div style="margin-top:0.4rem;">${todaysOtherLiftsHtml(ex.name)}</div>` : ''}
       ${exerciseDetailCueExpanded && def ? `
         <ul class="cue-list">
           <li><strong>Setup:</strong> ${esc(def.cue_setup)}</li>
@@ -10447,6 +10483,7 @@ function renderExerciseDetailScreen(panel, idx) {
   `;
 
   $('#exOverviewBackBtn').addEventListener('click', () => { liveWorkoutScreen = 'overview'; renderLiftsTab(); });
+  $('#exTodayToggleBtn').addEventListener('click', () => { exerciseDetailTodayExpanded = !exerciseDetailTodayExpanded; renderLiftsTab(); });
   const lastCopyEl = $('#exLastTimeCopy', panel);
   if (lastCopyEl) lastCopyEl.addEventListener('click', () => {
     exerciseDetailInput.weight = String(toDisplayWeight(Number(lastCopyEl.dataset.exLastWeight)).value);
