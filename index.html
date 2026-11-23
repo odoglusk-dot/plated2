@@ -10226,7 +10226,8 @@ function renderPlusLogSetQuick(panel, idx) {
   `;
 
   $('#plsBackBtn').addEventListener('click', () => { plusLogSetMode = 'pick'; plusLogSetSearch = ''; renderLiftsTab(); });
-  $('#plsTodayToggleBtn').addEventListener('click', () => { exerciseDetailTodayExpanded = !exerciseDetailTodayExpanded; renderLiftsTab(); });
+  $('#plsTodayToggleBtn').addEventListener('click', () => { exerciseDetailTodayExpanded = !exerciseDetailTodayExpanded; todaysLiftsRemoveConfirm = null; renderLiftsTab(); });
+  wireTodaysOtherLiftsEvents(panel);
   $('#plsOpenFullBtn').addEventListener('click', () => {
     plusLogSetMode = null;
     liveWorkoutScreen = idx;
@@ -10376,6 +10377,7 @@ function resetExerciseDetailInput(ex) {
   };
   exerciseDetailCueExpanded = false;
   exerciseDetailTodayExpanded = false;
+  todaysLiftsRemoveConfirm = null;
   exerciseDetailJustFinished = false;
 }
 
@@ -10386,6 +10388,8 @@ function resetExerciseDetailInput(ex) {
 // today's other sets were logged here or elsewhere. Reuses
 // computeTodaysLiftCtx()'s grouping (same source as the Today tab and
 // Finish screen) rather than re-deriving it.
+let todaysLiftsRemoveConfirm = null; // exercise name pending a remove confirm, or null
+let todaysLiftsRemoving = false;
 function todaysOtherLiftsHtml(excludeName) {
   const ctx = computeTodaysLiftCtx();
   const names = ctx.empty ? [] : Object.keys(ctx.byExercise).filter((n) => n !== excludeName);
@@ -10398,11 +10402,70 @@ function todaysOtherLiftsHtml(excludeName) {
     const summary = trackingType === 'time' ? `${repsPerSet[repsPerSet.length - 1]}s`
       : trackingType === 'bodyweight_reps' ? repsPerSet.join(', ')
       : `${toDisplayWeight(last.weight).value} ${weightUnitLabel()} &times; ${repsPerSet.join(', ')}`;
-    return `<div class="row" style="justify-content:space-between;align-items:baseline;padding:0.3rem 0;border-bottom:1px solid var(--border);">
-      <span>${esc(name)}</span>
-      <span class="mono muted small">${sets.length} set${sets.length === 1 ? '' : 's'} &middot; ${summary}</span>
+    if (todaysLiftsRemoveConfirm === name) {
+      return `<div style="padding:0.4rem 0;border-bottom:1px solid var(--border);">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <span class="muted small">Remove ${esc(name)} from today?</span>
+          <div class="row" style="gap:0.4rem;">
+            <button class="btn btn-sm" data-today-lift-confirm-remove="${esc(name)}" style="background:var(--danger);color:#FFFFFF;" ${todaysLiftsRemoving ? 'disabled' : ''}>${todaysLiftsRemoving ? 'Removing…' : 'Yes, remove'}</button>
+            <button class="btn btn-sm btn-ghost" data-today-lift-cancel-remove="1">No</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `<div class="row" style="justify-content:space-between;align-items:baseline;padding:0.3rem 0;border-bottom:1px solid var(--border);gap:0.5rem;">
+      <span style="min-width:0;">${esc(name)}</span>
+      <span class="mono muted small" style="flex:none;min-width:0;">${sets.length} set${sets.length === 1 ? '' : 's'} &middot; ${summary}</span>
+      <button class="btn-link" data-today-lift-remove="${esc(name)}" style="flex:none;min-width:0;color:var(--danger);text-transform:none;font-size:0.85rem;">Remove</button>
     </div>`;
   }).join('');
+}
+
+// Deletes every one of today's lift rows for this exercise (there's
+// normally just one - the lifts table holds one row per exercise per
+// day - but handles more defensively). Mirrors wireTodaysLiftEditEvents'
+// existing delete pattern (lhe_confirmDelete) rather than inventing a new
+// one: same supabase.from('lifts').delete() call, same loadLifts()+
+// renderAll() refresh afterward.
+async function removeTodaysExerciseLifts(name) {
+  const today = localDateStr();
+  const rows = state.lifts.filter((l) => l.exercise === name && l.date === today);
+  if (!rows.length) { todaysLiftsRemoveConfirm = null; renderLiftsTab(); return; }
+  todaysLiftsRemoving = true;
+  renderLiftsTab();
+  for (const row of rows) {
+    if (row.pendingSync && row.clientId) {
+      savePendingLiftSyncs(loadPendingLiftSyncs().filter((p) => p.clientId !== row.clientId));
+      continue;
+    }
+    const { error } = await supabase.from('lifts').delete().eq('id', row.id);
+    if (error) { toast('Could not remove: ' + error.message); todaysLiftsRemoving = false; renderLiftsTab(); return; }
+  }
+  // The live session's in-memory copy (if this exercise was also logged
+  // earlier in the same session) would otherwise still show it as done
+  // and hold a liftRowId that no longer exists.
+  if (liveWorkoutSession) {
+    liveWorkoutSession.exercises.forEach((e) => {
+      if (e.name === name) { e.done = false; e.setsLogged = []; e.liftRowId = null; e.weight = null; }
+    });
+    wlsSave(liveWorkoutSession);
+  }
+  todaysLiftsRemoving = false;
+  todaysLiftsRemoveConfirm = null;
+  toast(`Removed ${name} from today.`);
+  await loadLifts();
+  renderAll();
+}
+function wireTodaysOtherLiftsEvents(panel) {
+  $$('[data-today-lift-remove]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    todaysLiftsRemoveConfirm = btn.dataset.todayLiftRemove;
+    renderLiftsTab();
+  }));
+  $$('[data-today-lift-cancel-remove]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    todaysLiftsRemoveConfirm = null;
+    renderLiftsTab();
+  }));
+  $$('[data-today-lift-confirm-remove]', panel).forEach((btn) => btn.addEventListener('click', () => removeTodaysExerciseLifts(btn.dataset.todayLiftConfirmRemove)));
 }
 
 function lastTimeLabelFor(name, excludeToday) {
@@ -10483,7 +10546,8 @@ function renderExerciseDetailScreen(panel, idx) {
   `;
 
   $('#exOverviewBackBtn').addEventListener('click', () => { liveWorkoutScreen = 'overview'; renderLiftsTab(); });
-  $('#exTodayToggleBtn').addEventListener('click', () => { exerciseDetailTodayExpanded = !exerciseDetailTodayExpanded; renderLiftsTab(); });
+  $('#exTodayToggleBtn').addEventListener('click', () => { exerciseDetailTodayExpanded = !exerciseDetailTodayExpanded; todaysLiftsRemoveConfirm = null; renderLiftsTab(); });
+  wireTodaysOtherLiftsEvents(panel);
   const lastCopyEl = $('#exLastTimeCopy', panel);
   if (lastCopyEl) lastCopyEl.addEventListener('click', () => {
     exerciseDetailInput.weight = String(toDisplayWeight(Number(lastCopyEl.dataset.exLastWeight)).value);

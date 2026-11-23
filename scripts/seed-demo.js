@@ -167,6 +167,11 @@ export async function installMocks(page, { subscriptionTier = 'pro' } = {}) {
         if (idMatch) { const row = liftsTable.find((l) => String(l.id) === idMatch[1]); if (row) Object.assign(row, JSON.parse(req.postData() || '{}')); }
         return json([]);
       }
+      if (method === 'DELETE') {
+        const idMatch = u.match(/id=eq\.(\d+)/);
+        if (idMatch) liftsTable = liftsTable.filter((l) => String(l.id) !== idMatch[1]);
+        return json([]);
+      }
       return json(liftsTable);
     }
     if (u.includes('/food_logs')) return json(FAKE_FOOD_LOGS_TODAY);
