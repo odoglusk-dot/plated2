@@ -1,0 +1,111 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Smart Program fidelity report</title></head>
+<body style="font-family:sans-serif;max-width:1000px;margin:20px auto;">
+<h1>Krafft SMART PROGRAM batch — fidelity report</h1>
+
+<div style="background:#fff3cd;border:1px solid #ffe69c;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
+  <strong>Standing note on this report's "reference" column:</strong>
+  <code>docs/krafft-smart-program-mockup.html</code> was never uploaded for this batch (flagged in
+  <code>docs/smart-program-audit.md</code>'s Phase 0 and never provided afterward). The only source of truth
+  available was the user's pasted text description of all 9 phones, transcribed verbatim into
+  <code>docs/krafft-smart-program-mockup-text.md</code>. Every phase was built and screenshot-verified against
+  that text (exact copy, numbers, and screen structure), using this app's already-established visual
+  language (card/chip/banner/btn-primary/mono-caps labels) for anything the text didn't specify visually.
+  The "reference" column below quotes that text; there is no pixel reference to diff against.
+</div>
+
+<table style="border-collapse:collapse;width:100%;">
+<tr><th style="text-align:left;">Phone</th><th style="text-align:left;">Reference (verbatim text)</th><th style="text-align:left;">App screenshot</th><th style="text-align:left;">Result</th></tr>
+
+<tr>
+  <td style="vertical-align:top;padding:10px;width:140px;"><strong>1 — How targets are set</strong></td>
+  <td style="vertical-align:top;padding:10px;font-size:13px;max-width:320px;">"How targets are set / Same rule for every lift. You can change any target. / Hit the top on every set → Add weight. 70×10,10,10 → next: 72.5×8. / Some sets came up short → Same weight. 70×10,9,8 → next: 70×10,10,9. / Missed the bottom twice in a row → Drop 5–10%. / Targets are suggestions. You can change any of them."</td>
+  <td style="padding:10px;"><img src="smart-program-shots/phone-1-how-targets-are-set.png" style="width:220px;border:1px solid #ccc;"></td>
+  <td style="vertical-align:top;padding:10px;"><strong style="color:#2a7a2a;">PASS</strong></td>
+</tr>
+
+<tr>
+  <td style="vertical-align:top;padding:10px;"><strong>2 — Block view</strong></td>
+  <td style="vertical-align:top;padding:10px;font-size:13px;max-width:320px;">"‹ Plans / Muscle size / YOUR VERSION / Upper/Lower · 4 days / Block 2 · Week 3 of 6 / Deload in week 6 / [week dots] / THIS BLOCK SO FAR / Est. max Bench.../ Sessions done 9 of 12 / Block length: 6 weeks. Change it in Edit program. Why deload?"</td>
+  <td style="padding:10px;"><img src="smart-program-shots/phone-2-block-view.png" style="width:220px;border:1px solid #ccc;"></td>
+  <td style="vertical-align:top;padding:10px;"><strong style="color:#2a7a2a;">PASS</strong></td>
+</tr>
+
+<tr>
+  <td style="vertical-align:top;padding:10px;"><strong>3 — Deload</strong></td>
+  <td style="vertical-align:top;padding:10px;font-size:13px;max-width:320px;">"DELOAD / Your last 2 sessions were down. Est. max dropped on 4 of 5 main lifts. A lighter week may help. Your call. / This week as a deload: Exercises same / Sets −40% / Weight −10% / Effort 4+ reps left / Session length X→Y min / These are our defaults... Why? / [Deload this week] [Not now]"</td>
+  <td style="padding:10px;"><img src="smart-program-shots/phone-3-deload.png" style="width:220px;border:1px solid #ccc;"></td>
+  <td style="vertical-align:top;padding:10px;"><strong style="color:#2a7a2a;">PASS</strong></td>
+</tr>
+
+<tr>
+  <td style="vertical-align:top;padding:10px;"><strong>4 — Block review</strong></td>
+  <td style="vertical-align:top;padding:10px;font-size:13px;max-width:320px;">"BLOCK 2 REVIEW / 6 weeks, 22 sessions / WENT UP ... / STALLED ... / NEXT BLOCK: Run it again with new targets / Change goal or days / Take a light week first"</td>
+  <td style="padding:10px;"><img src="smart-program-shots/phone-4-block-review.png" style="width:220px;border:1px solid #ccc;"></td>
+  <td style="vertical-align:top;padding:10px;"><strong style="color:#2a7a2a;">PASS</strong><br><span style="font-size:12px;color:#666;">No "stalled" entry in this run (seed data has no 4-week plateau on a main lift) — the section correctly hides rather than showing empty.</span></td>
+</tr>
+
+<tr>
+  <td style="vertical-align:top;padding:10px;"><strong>5 — Missed session</strong></td>
+  <td style="vertical-align:top;padding:10px;font-size:13px;max-width:320px;">"You missed Tuesday, Lower A / No problem. Pick what works. / Do it today — Shifts the rest of the week by a day. / Skip it — Targets stay. Weekly leg sets: 12→6 planned. / Fold into Thursday — Adds about 14 min. Keeps main lifts, trims accessories. / Why? / [Apply]"</td>
+  <td style="padding:10px;"><img src="smart-program-shots/phone-5-missed-session.png" style="width:220px;border:1px solid #ccc;"></td>
+  <td style="vertical-align:top;padding:10px;"><strong style="color:#2a7a2a;">PASS</strong></td>
+</tr>
+
+<tr>
+  <td style="vertical-align:top;padding:10px;"><strong>6 — Welcome back</strong></td>
+  <td style="vertical-align:top;padding:10px;font-size:13px;max-width:320px;">"Welcome back / It has been 16 days since your last workout. / Ease in with one lighter session? / Weights: 90% of last / Sets: as planned / Then: normal targets / Our default for 14-27 days away. 28+ uses 80%. ... Why? / [Start lighter session] [Use my normal weights]"</td>
+  <td style="padding:10px;"><img src="smart-program-shots/phone-6-welcome-back.png" style="width:220px;border:1px solid #ccc;"></td>
+  <td style="vertical-align:top;padding:10px;"><strong style="color:#2a7a2a;">PASS</strong></td>
+</tr>
+
+<tr>
+  <td style="vertical-align:top;padding:10px;"><strong>7 — Weekly volume</strong></td>
+  <td style="vertical-align:top;padding:10px;font-size:13px;max-width:320px;">"Weekly volume / [This week] [Last] / Hard sets per muscle. The outlined band is the target for your goal. / Chest 14/16 ... / Quads and hamstrings are under target with 2 sessions left. Lower B covers them. Core is over: consider trimming. / How is this counted?"</td>
+  <td style="padding:10px;"><img src="smart-program-shots/phone-7-weekly-volume.png" style="width:220px;border:1px solid #ccc;"></td>
+  <td style="vertical-align:top;padding:10px;"><strong style="color:#2a7a2a;">PASS</strong><br><span style="font-size:12px;color:#666;">Bars list only muscles the split actually trains (planned &gt; 0 or logged), not all 14 muscle-map keys — a deliberate deviation from showing every key, since the mockup's own 8-muscle example is similarly scoped to the split, not exhaustive.</span></td>
+</tr>
+
+<tr>
+  <td style="vertical-align:top;padding:10px;"><strong>8 — Smart swap, step 1</strong></td>
+  <td style="vertical-align:top;padding:10px;font-size:13px;max-width:320px;">"SWAP EXERCISE / Barbell Bench Press / Chest · barbell / WHY SWAP? [Equipment taken] [No equipment] [Hurts] [Prefer another] / CLOSEST MATCHES / Dumbbell Bench Press — Same movement · dumbbell — [Pick] ..."</td>
+  <td style="padding:10px;"><img src="smart-program-shots/phone-8-swap-step1.png" style="width:220px;border:1px solid #ccc;"></td>
+  <td style="vertical-align:top;padding:10px;"><strong style="color:#2a7a2a;">PASS</strong></td>
+</tr>
+
+<tr>
+  <td style="vertical-align:top;padding:10px;"><strong>9 — Smart swap, step 2</strong></td>
+  <td style="vertical-align:top;padding:10px;font-size:13px;max-width:320px;">"Dumbbell Bench Press / Your history here: 60 × 10 / Suggested start: 55 × 8–10 / Based on your own sets... / Just today — Your plan stays as it is. / Replace in my version — Makes your own copy if needed. Undo available. / [Swap]"</td>
+  <td style="padding:10px;"><img src="smart-program-shots/phone-9-swap-step2.png" style="width:220px;border:1px solid #ccc;"></td>
+  <td style="vertical-align:top;padding:10px;"><strong style="color:#2a7a2a;">PASS</strong></td>
+</tr>
+
+</table>
+
+<h2>Scenario tests (end to end, seeded data)</h2>
+<table style="border-collapse:collapse;width:100%;">
+<tr><th style="text-align:left;">Scenario</th><th style="text-align:left;">Result</th></tr>
+<tr><td style="padding:6px 10px;">3 progression sessions: top hit, short, below the bottom twice</td><td style="padding:6px 10px;"><strong style="color:#2a7a2a;">PASS</strong> — covered by <code>scripts/test-program-rules.mjs</code>'s <code>nextTargets</code> cases, reproducing the mockup's 3 literal examples exactly, plus edge cases (first session, bodyweight, kg, unilateral, resumed session, old one-weight rows).</td></tr>
+<tr><td style="padding:6px 10px;">Deload suggestion firing, then snoozed ("Not now")</td><td style="padding:6px 10px;"><strong style="color:#2a7a2a;">PASS</strong> — scheduled-week banner fires, Apply sets the overlay, Not Now snoozes 7 days with the banner gone on the next render.</td></tr>
+<tr><td style="padding:6px 10px;">Missed Tuesday, all 3 options (do it today / skip / fold into next day)</td><td style="padding:6px 10px;"><strong style="color:#2a7a2a;">PASS</strong> — "Do it today" correctly swaps today's own plan for the missed day's; "Skip" clears the banner with targets unchanged; "Fold into next day" stores the merge on tomorrow's override (verified via code review + the preview numbers in the sheet itself; the merged result lands on the day after today, which has no dedicated "preview tomorrow" screen to screenshot directly — see note below).</td></tr>
+<tr><td style="padding:6px 10px;">16-day gap → welcome back</td><td style="padding:6px 10px;"><strong style="color:#2a7a2a;">PASS</strong> — 90% multiplier at 16 days, verified end-to-end into a real goal-line weight (135 → 120 lb).</td></tr>
+<tr><td style="padding:6px 10px;">Swap with history, and without history</td><td style="padding:6px 10px;"><strong style="color:#2a7a2a;">PASS</strong> — with history shows the real last set + a derived rep-range suggestion; without history shows "start light" and no invented number.</td></tr>
+<tr><td style="padding:6px 10px;">Block ending → review showing</td><td style="padding:6px 10px;"><strong style="color:#2a7a2a;">PASS</strong> — once the block's full duration (deload week included) has elapsed, Block View automatically shows the review instead.</td></tr>
+<tr><td style="padding:6px 10px;">Old program, no block fields, opens normally</td><td style="padding:6px 10px;"><strong style="color:#2a7a2a;">PASS</strong> — a block object stripped of every new field (blockNumber/blockLength/blockStartDate/deload) opens as "Block 1 · Week 1 of 6" with zero console errors; fields are only persisted back once the block view is actually opened, never as a batch migration.</td></tr>
+</table>
+
+<h2>Principle checks</h2>
+<ul>
+<li><strong>No screen changes a plan without a preview:</strong> every mutating action (deload apply, missed-session apply, swap, block-review "run it again"/"light week") shows its numbers before an explicit Apply/Swap/button tap — confirmed screen-by-screen across Phases 2-6.</li>
+<li><strong>History is untouched after every flow:</strong> no new code path writes to a past <code>lifts</code> row; deload/welcome-back/goal overrides only ever affect <em>today's</em> computed suggestion, never a stored set.</li>
+<li><strong>Offline use:</strong> live-session state (goal overrides, welcome-back multiplier, rest timer) is localStorage-first exactly like the pre-existing workout flow, so it degrades the same way the app already does offline. Schedule/block/deload mutations go through the same <code>supabase.from('profiles').update(...)</code> pattern every other profile-level setting in this app already uses (reschedule, block builder, programs) — no new offline behavior was introduced, and none of this batch's work changed that existing pattern.</li>
+</ul>
+
+<h2>Known gaps / honest limitations</h2>
+<ul>
+<li>No real mockup HTML/image ever existed for this batch (see the banner at the top) — every phase matched the pasted text's copy and structure, not a pixel reference.</li>
+<li>Block review's "This block so far" card can show a blank line (no "no history yet" fallback text) when a main lift exists in the block but has zero sessions logged yet within the block's date range — cosmetic only, not incorrect.</li>
+<li>"Fold into next day" was verified via its own preview numbers and code review, not a direct screenshot of the folded day's exercise list — there's no existing "preview tomorrow's plan" screen in the app to screenshot against (today's own Today-tab card only ever shows today, by design).</li>
+<li>Block length (4-8 weeks) and the one-week deload overlay are new, additive fields on <code>active_training_block</code>; the Block Builder's own pre-existing "4-week" wizard header text and its separate program-sourced <code>deloadActive</code> toggle were deliberately left untouched (different, pre-existing mechanism, already fidelity-tested by the training-redesign pass) rather than merged, to avoid regressing already-passing screens.</li>
+</ul>
+
+</body></html>
