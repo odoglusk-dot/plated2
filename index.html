@@ -10488,6 +10488,7 @@ function renderLiftsTab() {
   if (showHowTargetsPage) return renderHowTargetsPage(panel);
   if (showDeloadScreen) return renderDeloadScreen(panel);
   if (showBlockView) return renderBlockView(panel);
+  if (showSmartSwap) return smartSwapStep === 2 ? renderSmartSwapStep2(panel) : renderSmartSwapStep1(panel);
   updateScreenSheetTitle();
   if (plusLogSetMode === 'pick') return renderPlusLogSetPicker(panel);
   if (plusLogSetMode === 'quick') return renderPlusLogSetQuick(panel, plusLogSetExerciseIdx);
@@ -10910,6 +10911,7 @@ function renderWorkoutOverview(panel) {
             <div><strong>${esc(current.name)}</strong></div>
             <div class="muted small">${goalLineForOverview(current)}</div>
           </div>
+          <button class="btn-link" style="flex:none;min-width:0;margin-right:0.5rem;" data-wo-swap="${esc(current.name)}">Swap</button>
           <button class="btn btn-sm btn-primary" style="flex:none;min-width:0;" data-wo-open="${esc(current.name)}">Open</button>
         </div>
       </div>` : ''}
@@ -10922,6 +10924,7 @@ function renderWorkoutOverview(panel) {
             <div>${esc(ex.name)}</div>
             <div class="muted small">${ex.prescribedSets ? `${ex.setsLogged.length}/${ex.prescribedSets} sets` : `${ex.setsLogged.length} set${ex.setsLogged.length === 1 ? '' : 's'} logged`}${isExerciseStalled(ex.name) ? ` &middot; stalled 4+ sessions` : ''}</div>
           </div>
+          <button class="btn-link" style="flex:none;min-width:0;" data-wo-swap="${esc(ex.name)}">Swap</button>
         </div>
       </div>`).join('')}
     <button class="btn btn-sm btn-ghost" id="qwAddMoreBtn" style="width:100%;margin-bottom:0.6rem;">+ Add exercise</button>
@@ -10932,6 +10935,10 @@ function renderWorkoutOverview(panel) {
   $$('[data-wo-open]', panel).forEach((row) => row.addEventListener('click', () => {
     const idx = session.exercises.findIndex((e) => e.name === row.dataset.woOpen);
     if (idx !== -1) { liveWorkoutScreen = idx; resetExerciseDetailInput(session.exercises[idx]); renderLiftsTab(); }
+  }));
+  $$('[data-wo-swap]', panel).forEach((btn) => btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openSmartSwap(btn.dataset.woSwap);
   }));
 }
 
@@ -11121,7 +11128,8 @@ function renderExerciseDetailScreen(panel, idx) {
       </div>`).join('')}
 
       ${!exerciseDetailJustFinished ? `
-      <div class="row" style="justify-content:flex-end;margin-top:0.4rem;">
+      <div class="row" style="justify-content:space-between;margin-top:0.4rem;">
+        <button class="btn-link" id="exSwapBtn">Swap exercise</button>
         <button class="btn-link" id="exFinishExerciseBtn">${ex.setsLogged.length > 0 ? 'Finish exercise' : 'Skip exercise'} &rarr;</button>
       </div>` : ''}
 
@@ -11176,6 +11184,8 @@ function renderExerciseDetailScreen(panel, idx) {
   if (logBtn) logBtn.addEventListener('click', () => logCurrentSet(idx));
   const finishBtn = $('#exFinishExerciseBtn', panel);
   if (finishBtn) finishBtn.addEventListener('click', () => finishCurrentExercise(idx));
+  const swapBtn = $('#exSwapBtn', panel);
+  if (swapBtn) swapBtn.addEventListener('click', () => openSmartSwap(ex.name));
   const nextBtn = $('#exNextExerciseBtn', panel);
   if (nextBtn) nextBtn.addEventListener('click', () => goToNextExercise(idx));
 }
@@ -15907,6 +15917,15 @@ let blockBuilderStarting = false;
 let showBlockView = false;
 let showDeloadScreen = false; // true while the deload suggestion screen (phone 3) is open
 let blockLengthEditing = false; // inline "Change it in Edit program" chip row open on the block view
+
+// Smart Program batch, Phase 6 (phones 8-9) - smart swap, reached from
+// the exercise detail screen and the live-workout overview row.
+let showSmartSwap = false;
+let smartSwapStep = 1; // 1 (reason + ranked matches) | 2 (start weight + scope)
+let smartSwapExerciseName = null; // the exercise being swapped out
+let smartSwapReason = null; // one of SWAP_REASONS' keys, or null
+let smartSwapPickedName = null; // the candidate chosen in step 1
+let smartSwapScope = null; // 'just_today' | 'replace_version' | null
 // Manual per-instance overrides UI state (substitute/add/remove exercise,
 // edit sets/reps) — a one-off adjustment to the current plan, never the
 // rule engine. Keyed by "dayIndex:exerciseIndex" so each lives independent
@@ -16384,6 +16403,169 @@ function renderBlockReview(panel, block) {
     toast('This week set to a light week.');
     renderLiftsTab();
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Smart swap (SMART PROGRAM batch, Phase 6, phones 8-9). Reached from
+// the exercise detail screen and the live-workout overview row - the
+// Block Builder day editor already has its own substitute mechanism
+// (blockSwapPickerFor above), a separate, future-only program edit this
+// batch leaves as-is. rankSwaps()/suggestSwapStartWeight() are Phase 1's
+// pure engine functions; everything here is just the UI + the two
+// "apply" paths (just today / replace in my version).
+// ══════════════════════════════════════════════════════════════════
+const SWAP_REASONS = [
+  { key: 'equipment_taken', label: 'Equipment taken' },
+  { key: 'no_equipment', label: 'No equipment' },
+  { key: 'hurts', label: 'Hurts' },
+  { key: 'prefer_another', label: 'Prefer another' },
+];
+
+function openSmartSwap(exerciseName) {
+  showSmartSwap = true;
+  smartSwapStep = 1;
+  smartSwapExerciseName = exerciseName;
+  smartSwapReason = null;
+  smartSwapPickedName = null;
+  smartSwapScope = null;
+  renderLiftsTab();
+}
+function closeSmartSwap() {
+  showSmartSwap = false;
+  smartSwapExerciseName = null;
+  renderLiftsTab();
+}
+
+function renderSmartSwapStep1(panel) {
+  const def = exerciseDefFor(smartSwapExerciseName);
+  if (!def) { closeSmartSwap(); return; }
+  const block = state.profile?.active_training_block;
+  const inWorkoutNames = new Set((liveWorkoutSession?.exercises || []).filter((e) => !e.done).map((e) => e.name));
+  const triedNames = new Set(state.lifts.map((l) => l.exercise));
+  // "No equipment" filters by the user's equipment setting - the same
+  // active_training_block.equipment list the Block Builder itself uses;
+  // an empty list there means "any equipment" (no restriction), so there
+  // is nothing meaningful to filter by in that case.
+  const userEquipment = smartSwapReason === 'no_equipment' && block?.equipment?.length ? block.equipment : null;
+  const candidates = rankSwaps(def, state.exercises, { inWorkoutNames, triedNames, userEquipment }).slice(0, 6);
+
+  panel.innerHTML = `
+    <button class="btn-link" id="swapBackBtn" style="text-transform:none;text-decoration:underline;">&#8249; Back</button>
+    <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin:0.3rem 0 0.1rem;">Swap exercise</div>
+    <div class="pagetitle" style="font-size:1.69rem;margin:0 0 0.1rem;">${esc(def.name)}</div>
+    <p class="muted small" style="margin:0 0 0.6rem;">${esc(MUSCLE_MAP_KEY_LABELS[def.muscle_map_key] || def.muscle_group || '')}${def.equipment ? ` &middot; ${esc(def.equipment.toLowerCase())}` : ''}</p>
+    <div class="card">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Why swap?</div>
+      <div class="chip-row">${SWAP_REASONS.map((r) => `<button class="chip ${smartSwapReason === r.key ? 'chip-active' : ''}" data-swap-reason="${r.key}">${esc(r.label)}</button>`).join('')}</div>
+      ${smartSwapReason === 'hurts' ? `<p class="muted small" style="margin-top:0.5rem;">Pick something that feels fine. If pain is sharp or does not go away, stop and check with a professional.</p>` : ''}
+    </div>
+    <div class="card">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Closest matches</div>
+      ${candidates.length ? candidates.map((c) => `
+        <div class="row" style="justify-content:space-between;align-items:center;padding:0.5rem 0;border-top:1px solid var(--border);">
+          <div><strong>${esc(c.name)}</strong><div class="muted small">${c.movement_type === def.movement_type ? 'Same movement' : 'Similar'} &middot; ${esc((c.equipment || '').toLowerCase())}</div></div>
+          <button class="btn btn-sm" data-swap-pick="${esc(c.name)}">Pick</button>
+        </div>`).join('') : `<p class="muted small" style="margin:0;">No close matches${userEquipment ? ' with your available equipment' : ''}.</p>`}
+    </div>
+  `;
+  $('#swapBackBtn').addEventListener('click', closeSmartSwap);
+  $$('[data-swap-reason]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    smartSwapReason = smartSwapReason === btn.dataset.swapReason ? null : btn.dataset.swapReason;
+    renderLiftsTab();
+  }));
+  $$('[data-swap-pick]', panel).forEach((btn) => btn.addEventListener('click', () => {
+    smartSwapPickedName = btn.dataset.swapPick;
+    smartSwapStep = 2;
+    smartSwapScope = null;
+    renderLiftsTab();
+  }));
+}
+
+function renderSmartSwapStep2(panel) {
+  const newDef = exerciseDefFor(smartSwapPickedName);
+  if (!newDef) { smartSwapStep = 1; renderLiftsTab(); return; }
+  const ownHistoryOnNew = state.lifts.filter((l) => l.exercise === smartSwapPickedName).sort((a, b) => a.date.localeCompare(b.date));
+  const ownHistoryOnOld = state.lifts.filter((l) => l.exercise === smartSwapExerciseName).sort((a, b) => a.date.localeCompare(b.date));
+  const suggestion = suggestSwapStartWeight(ownHistoryOnNew, ownHistoryOnOld);
+  const lastOnNew = ownHistoryOnNew[ownHistoryOnNew.length - 1];
+  const block = state.profile?.active_training_block;
+  const isInBlock = !!block?.blockDays?.some((d) => d.exercises.some((e) => e.name === smartSwapExerciseName));
+
+  panel.innerHTML = `
+    <button class="btn-link" id="swapBackBtn" style="text-transform:none;text-decoration:underline;">&#8249; Back</button>
+    <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin:0.3rem 0 0.1rem;">Swap exercise</div>
+    <div class="pagetitle" style="font-size:1.69rem;margin:0 0 0.4rem;">${esc(newDef.name)}</div>
+    <div class="card">
+      ${lastOnNew ? `<p style="margin:0 0 0.3rem;">Your history here: ${toDisplayWeight(lastOnNew.weight).value} &times; ${lastOnNew.reps_per_set?.length ? lastOnNew.reps_per_set[lastOnNew.reps_per_set.length - 1] : lastOnNew.reps}</p>` : ''}
+      <p style="margin:0;"><strong>Suggested start:</strong> ${suggestion.weight != null ? `${toDisplayWeight(suggestion.weight).value} &times; ${Math.min(...suggestion.reps)}&ndash;${Math.max(...suggestion.reps)}` : 'start light'}</p>
+      <p class="muted small" style="margin:0.4rem 0 0;">Based on your own sets. If you have no history on it, we suggest starting light instead of guessing.</p>
+    </div>
+    <div class="card">
+      <label class="row" style="justify-content:flex-start;align-items:flex-start;gap:0.5rem;padding:0.4rem 0;cursor:pointer;">
+        <input type="radio" name="swapScope" data-swap-scope="just_today" ${smartSwapScope === 'just_today' ? 'checked' : ''} style="margin-top:0.2rem;">
+        <span><strong>Just today</strong><br><span class="muted small">Your plan stays as it is.</span></span>
+      </label>
+      ${isInBlock ? `
+      <label class="row" style="justify-content:flex-start;align-items:flex-start;gap:0.5rem;padding:0.4rem 0;border-top:1px solid var(--border);cursor:pointer;">
+        <input type="radio" name="swapScope" data-swap-scope="replace_version" ${smartSwapScope === 'replace_version' ? 'checked' : ''} style="margin-top:0.2rem;">
+        <span><strong>Replace in my version</strong><br><span class="muted small">Makes your own copy if needed. Undo available.</span></span>
+      </label>` : ''}
+    </div>
+    <button class="btn btn-primary" id="swapApplyBtn" style="width:100%;" ${smartSwapScope ? '' : 'disabled'}>Swap</button>
+  `;
+  $('#swapBackBtn').addEventListener('click', () => { smartSwapStep = 1; renderLiftsTab(); });
+  $$('[data-swap-scope]', panel).forEach((input) => input.addEventListener('change', () => { smartSwapScope = input.dataset.swapScope; renderLiftsTab(); }));
+  const applyBtn = $('#swapApplyBtn', panel);
+  if (applyBtn) applyBtn.addEventListener('click', applySmartSwap);
+}
+
+// "Just today" only touches the live session (today's workout); "Replace
+// in my version" only touches active_training_block.blockDays. Neither
+// ever rewrites a past lifts row - progression history stays attached to
+// the exercise name itself, not whatever slot it filled (principle 2 and
+// this phase's own "past sessions untouched").
+async function applySmartSwap() {
+  const oldName = smartSwapExerciseName;
+  const newName = smartSwapPickedName;
+  const newDef = exerciseDefFor(newName);
+  if (!newName || !smartSwapScope) return;
+
+  if (smartSwapScope === 'just_today') {
+    const session = wlsEnsureSession();
+    const idx = session.exercises.findIndex((e) => e.name === oldName && !e.done);
+    if (idx !== -1) {
+      const entry = session.exercises[idx];
+      if (!entry.setsLogged.length) session.exercises.splice(idx, 1);
+      else entry.done = true; // whatever was already logged today stands as its own finished entry
+      wlsSave(session);
+    }
+    const newIdx = wlsAddExercise(newName, { trackingType: newDef?.tracking || 'weight_reps' });
+    liveWorkoutScreen = newIdx;
+    resetExerciseDetailInput(liveWorkoutSession.exercises[newIdx]);
+    closeSmartSwap();
+    toast(`Swapped to ${newName} for today.`);
+    renderLiftsTab();
+  } else {
+    const active = state.profile?.active_training_block;
+    if (!active) { closeSmartSwap(); return; }
+    const previous = active;
+    const nextBlockDays = active.blockDays.map((day) => ({
+      ...day,
+      exercises: day.exercises.map((e) => (e.name === oldName ? { ...e, name: newName, muscle: newDef?.muscle_map_key || e.muscle } : e)),
+    }));
+    const next = { ...active, blockDays: nextBlockDays };
+    const { error } = await supabase.from('profiles').update({ active_training_block: next }).eq('id', state.user.id);
+    if (error) { toast('Could not replace exercise: ' + error.message); return; }
+    state.profile = { ...state.profile, active_training_block: next };
+    closeSmartSwap();
+    showUndoToast(`Replaced ${oldName} with ${newName} in your version.`, async () => {
+      const { error: undoError } = await supabase.from('profiles').update({ active_training_block: previous }).eq('id', state.user.id);
+      if (undoError) { toast('Could not undo: ' + undoError.message); return; }
+      state.profile = { ...state.profile, active_training_block: previous };
+      renderAll();
+    });
+    renderAll();
+  }
 }
 
 function blockBuilderStep1Html() {
