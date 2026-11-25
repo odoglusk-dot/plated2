@@ -12997,6 +12997,338 @@ const BLOCK_SCHEME = {
 const PHASE_POOL = { hypertrophy: 'hypertrophy', strength: 'strength', deload: 'hypertrophy', maintenance: 'hypertrophy', peak: 'strength', taper: 'strength' };
 const BLOCK_WEEK_STRIP = ['Base', '+Sets', '+Sets', 'Deload'];
 
+// ══════════════════════════════════════════════════════════════════════
+// PROGRAM_RULES_ENGINE_START — Krafft SMART PROGRAM batch, Phase 1.
+// ══════════════════════════════════════════════════════════════════════
+// Single source of truth for every progression/deload/missed-session/
+// welcome-back/weekly-volume/swap-ranking number (principle 3). Every
+// function below is pure - sessions/plan/today's date in, a suggestion
+// out, no Supabase/DOM access, no AI - so scripts/test-program-rules.mjs
+// can extract this exact block by its start/end markers and unit-test it
+// directly against index.html, with no second copy of the logic to keep
+// in sync (see docs/smart-program-audit.md's Phase 1 note on why a
+// marker-delimited block beats either inlining untested logic or forking
+// a parallel .mjs copy).
+//
+// Rep range source: this batch's own spec says "if goals is not merged
+// yet, default to the size goal's 6-15 and say so" - GOALS_CONFIG isn't
+// on this branch (the goals batch is still unmerged), so
+// repRangeForBlock() falls back to DEFAULT_REP_RANGE below. The typeof
+// guard means this starts reading the real per-goal range automatically
+// the moment GOALS_CONFIG lands from a future merge, with no code change
+// needed here - only re-check then that its shape (goal.repsMain, a
+// "lo-hi" string) still parses the same way.
+const DEFAULT_REP_RANGE = { min: 6, max: 15 }; // the size goal's 6-15, per this batch's own fallback instruction
+function repRangeForBlock(block) {
+  if (typeof GOALS_CONFIG !== 'undefined') {
+    const goal = typeof goalForBlock === 'function' ? goalForBlock(block) : null;
+    const cfg = goal && GOALS_CONFIG[goal];
+    const parsed = cfg && typeof cfg.repsMain === 'string' ? cfg.repsMain.match(/(\d+)\s*-\s*(\d+)/) : null;
+    if (parsed) return { min: Number(parsed[1]), max: Number(parsed[2]) };
+  }
+  return DEFAULT_REP_RANGE;
+}
+
+const PROGRAM_RULES_CONFIG = {
+  progression: {
+    dropPercentRange: { min: 0.05, max: 0.10 }, // "drop 5 to 10%" - roundToStep() below always lands inside this range once rounded to what the equipment can load
+    evidenceId: 'double_progression_welcomeback_swap',
+  },
+  // "Practical defaults" per the rules table - no evidence id (not a
+  // research claim, nothing to cite).
+  weightSteps: {
+    lb: { barbellUpper: 5, barbellLower: 10, dumbbell: 5, machineOrCable: 5 },
+    kg: { barbellUpper: 2.5, barbellLower: 5, dumbbell: 2.5, machineOrCable: 2.5 },
+  },
+  block: { minWeeks: 4, maxWeeks: 8, defaultWeeks: 6, deloadIsLastWeek: true, evidenceId: 'deloading' },
+  deload: {
+    setsMultiplier: 0.6, // "sets -40%", round up, min 1 - see applyDeloadToSets()
+    weightMultiplier: 0.9, // "weight -10%"
+    minRepsInReserve: 4, // "4+ reps left"
+    reactiveTrigger: { fractionOfMainLifts: 0.8, consecutiveSessions: 2 }, // "down on at least 4 of 5 main lifts across 2 consecutive sessions"
+    evidenceId: 'deloading',
+  },
+  missedSession: { foldMaxAddedMinutes: 15, evidenceId: 'frequency' },
+  welcomeBack: {
+    // 14-27 days -> 90%, 28+ -> 80%, "then normal" (< 14 days doesn't
+    // trigger welcome-back at all - just normal progression).
+    tiers: [
+      { minDays: 14, maxDays: 27, weightMultiplier: 0.9 },
+      { minDays: 28, maxDays: Infinity, weightMultiplier: 0.8 },
+    ],
+    evidenceId: 'double_progression_welcomeback_swap',
+  },
+  weeklyVolume: { primaryMuscleWeight: 1, secondaryMuscleWeight: 0.5, evidenceId: 'weekly_volume' },
+  smartSwap: {
+    rankOrder: ['same_primary_muscle', 'same_movement_pattern', 'available_equipment', 'same_tracking_type', 'not_already_in_workout', 'previously_done'],
+    evidenceId: 'double_progression_welcomeback_swap',
+  },
+};
+
+// Rounds to whatever the equipment can actually load (principle: "no
+// hardcoded numbers elsewhere" - every caller goes through this rather
+// than rounding ad hoc). minutesPerUnit isn't relevant here; step is
+// already in display units (lb or kg) from weightStepFor().
+function roundToStep(value, step) {
+  if (!step) return Math.round(value);
+  return Math.round(value / step) * step;
+}
+
+// equipment: catalog's own `equipment` string (Barbell/Dumbbell/Machine/
+// Cable/Bodyweight/...). isLowerBody: caller's call (quads/hamstrings/
+// glutes/calves muscle_map_key = lower body) - barbell is the only
+// equipment type this config splits upper vs lower ("10 lb lower body").
+function weightStepFor(equipment, isLowerBody, unit) {
+  const table = unit === 'kg' ? PROGRAM_RULES_CONFIG.weightSteps.kg : PROGRAM_RULES_CONFIG.weightSteps.lb;
+  const eq = (equipment || '').toLowerCase();
+  if (eq === 'barbell') return isLowerBody ? table.barbellLower : table.barbellUpper;
+  if (eq === 'dumbbell') return table.dumbbell;
+  if (eq === 'machine' || eq === 'cable') return table.machineOrCable;
+  return table.barbellUpper; // bodyweight/other: nextTargets() never actually uses this for a bodyweight exercise (see "add reps then load" below), kept as a harmless fallback for any other caller
+}
+
+// Classifies one already-logged session against the active rep range -
+// 'top' (every set reached the top), 'below' (at least one set missed
+// the bottom), otherwise 'short' (between the two, same weight next
+// time, +1 rep where short).
+function sessionStatus(repsPerSet, repRange) {
+  if (!repsPerSet || !repsPerSet.length) return 'short';
+  if (repsPerSet.every((r) => r >= repRange.max)) return 'top';
+  if (repsPerSet.some((r) => r < repRange.min)) return 'below';
+  return 'short';
+}
+
+// The single rule "Same rule for every lift" (phone 1) - everything the
+// goal line and "log one set" show comes from this one function.
+// history: ascending-by-date array of {date, weight, reps_per_set,
+// trackingType}. repRange: {min,max} from repRangeForBlock(). weightStep:
+// from weightStepFor() - callers pass trackingType === 'bodyweight_reps'
+// through unchanged; see the dedicated branch below for why.
+function nextTargets(history, repRange, weightStep) {
+  if (!history || !history.length) {
+    return { action: 'first_session', weight: null, reps: null, note: 'No history yet for this exercise - log a session to get a target.' };
+  }
+  const last = history[history.length - 1];
+  const lastReps = last.reps_per_set && last.reps_per_set.length ? last.reps_per_set : [last.reps];
+  const lastStatus = sessionStatus(lastReps, repRange);
+  const prev = history.length > 1 ? history[history.length - 2] : null;
+  const prevReps = prev ? (prev.reps_per_set && prev.reps_per_set.length ? prev.reps_per_set : [prev.reps]) : null;
+  const prevStatus = prevReps ? sessionStatus(prevReps, repRange) : null;
+
+  // "Missed the bottom twice in a row -> drop 5-10%" - both of the last
+  // two sessions missed the bottom at the SAME weight (a weight that
+  // already dropped since the last miss is being given a fresh chance,
+  // not dropped again on top of itself).
+  if (lastStatus === 'below' && prevStatus === 'below' && prev.weight === last.weight) {
+    const dropped = roundToStep(last.weight * (1 - PROGRAM_RULES_CONFIG.progression.dropPercentRange.max), weightStep);
+    // Never round a drop UP to the starting weight on a tiny weightStep -
+    // if rounding erases the whole drop, step down one full increment instead.
+    const safeDropped = dropped >= last.weight ? last.weight - weightStep : dropped;
+    return { action: 'drop_weight', weight: Math.max(weightStep, safeDropped), reps: repRange.min, note: 'Missed the bottom twice in a row. Dropping the weight, then building back up.' };
+  }
+
+  if (lastStatus === 'top') {
+    // Bodyweight: "add reps then load" - progression keeps adding reps
+    // past the top of the range rather than jumping to external load,
+    // since there's no equipment increment to add yet.
+    if (last.trackingType === 'bodyweight_reps') {
+      return { action: 'add_reps_beyond_range', weight: last.weight, reps: Math.max(...lastReps) + 1, note: 'Hit the top on every set. Add a rep next time.' };
+    }
+    return { action: 'add_weight', weight: last.weight + weightStep, reps: repRange.min, note: `Hit the top on every set. Add weight, reps reset to ${repRange.min}.` };
+  }
+
+  // 'short', or a single 'below' not yet repeated - same weight, +1 rep
+  // on whichever sets fell short (capped at the top of the range).
+  const nextReps = lastReps.map((r) => Math.min(repRange.max, r + 1));
+  return { action: 'same_weight_add_rep', weight: last.weight, repsPerSet: nextReps, note: 'Same weight. Add one rep where you fell short.' };
+}
+
+// "Sets -40% (rounded), min 1" / "weight -10%".
+function applyDeloadToSets(sets) {
+  return Math.max(1, Math.ceil(sets * PROGRAM_RULES_CONFIG.deload.setsMultiplier));
+}
+function applyDeloadToWeight(weight, weightStep) {
+  return roundToStep(weight * PROGRAM_RULES_CONFIG.deload.weightMultiplier, weightStep);
+}
+
+// True if e1RM strictly decreased across every consecutive pair in the
+// most recent `sessions` entries of this one exercise's history - the
+// per-exercise half of the reactive-deload trigger.
+function isDownAcrossSessions(history, sessions) {
+  if (!history || history.length < sessions) return false;
+  const recent = history.slice(-sessions);
+  for (let i = 1; i < recent.length; i++) {
+    if (e1RM(recent[i].weight, recent[i].reps) >= e1RM(recent[i - 1].weight, recent[i - 1].reps)) return false;
+  }
+  return true;
+}
+
+// mainLiftHistories: { exerciseName: history[] } for the block's "main"
+// lifts only. Audit note (docs/smart-program-audit.md): generated blocks
+// don't persist a main/accessory role on the final exercise entry, only
+// at generation time - the practical, documented stand-in used here (and
+// by the caller building mainLiftHistories) is movement_type === 'compound'.
+function suggestDeload(mainLiftHistories) {
+  const names = Object.keys(mainLiftHistories || {});
+  const sessions = PROGRAM_RULES_CONFIG.deload.reactiveTrigger.consecutiveSessions;
+  const downCount = names.filter((n) => isDownAcrossSessions(mainLiftHistories[n], sessions)).length;
+  const threshold = Math.ceil(names.length * PROGRAM_RULES_CONFIG.deload.reactiveTrigger.fractionOfMainLifts);
+  return { suggested: names.length > 0 && downCount >= threshold, downCount, totalMainLifts: names.length };
+}
+
+// Preview numbers for the deload screen (phone 3) - "This week as a
+// deload: Exercises same / Sets -40% / Weight -10% / Effort 4+ reps left".
+function deloadPreview(baselineSessionMinutes) {
+  const cfg = PROGRAM_RULES_CONFIG.deload;
+  return {
+    exercises: 'same',
+    setsChange: `${Math.round((1 - cfg.setsMultiplier) * 100)}%`,
+    weightChange: `${Math.round((1 - cfg.weightMultiplier) * 100)}%`,
+    effort: `${cfg.minRepsInReserve}+ reps left`,
+    sessionMinutes: baselineSessionMinutes != null ? { before: baselineSessionMinutes, after: Math.round(baselineSessionMinutes * cfg.setsMultiplier) } : null,
+  };
+}
+
+// Days since the last logged set of ANY exercise, as of todayDateStr -
+// the one input welcomeBack() and the missed-session derivation both need.
+function daysSinceLastWorkout(lifts, todayDateStr) {
+  if (!lifts || !lifts.length) return null;
+  const lastDate = lifts.reduce((max, l) => (l.date > max ? l.date : max), lifts[0].date);
+  return Math.round((new Date(`${todayDateStr}T00:00:00`) - new Date(`${lastDate}T00:00:00`)) / 86400000);
+}
+
+// "14-27 days: 90%; 28+: 80%; then normal" - null means no welcome-back
+// treatment applies (under 14 days, or never trained before).
+function welcomeBack(daysSince) {
+  if (daysSince == null) return null;
+  const tier = PROGRAM_RULES_CONFIG.welcomeBack.tiers.find((t) => daysSince >= t.minDays && daysSince <= t.maxDays);
+  if (!tier) return null;
+  return { daysSince, weightMultiplier: tier.weightMultiplier, sets: 'as_planned', then: 'normal_targets' };
+}
+
+// today's effective block-day index as a full day object, honoring this
+// week's overrides - one row per day, Mon-Sun, for the block timeline and
+// the missed-session check. lifts: this user's full lift history (any
+// date). Returns [{date, dayIndex, status}], status one of
+// rest/done/missed/today/planned. "missed" is derived here, every time -
+// never written to the database as a failure record (principle 2/5 and
+// the spec's own "derived, not stored" instruction).
+function planWeek(block, overrides, lifts, todayDateStr) {
+  const base = new Date(`${todayDateStr}T00:00:00`);
+  const monday = new Date(base);
+  monday.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+  const loggedDates = new Set((lifts || []).map((l) => l.date));
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const dateStr = localDateStr(d);
+    const dayIndex = effectiveBlockDayIndex(block, dateStr, overrides);
+    const hasLog = loggedDates.has(dateStr);
+    let status;
+    if (dayIndex == null) status = 'rest';
+    else if (hasLog) status = 'done';
+    else if (dateStr === todayDateStr) status = 'today';
+    else if (dateStr < todayDateStr) status = 'missed';
+    else status = 'planned';
+    days.push({ date: dateStr, dayIndex, status });
+  }
+  return days;
+}
+
+// The missed-session sheet's three options (phone 5), each with the
+// preview numbers shown before Apply. plannedWeeklySets/plannedMinutes
+// describe the missed day's own exercises - caller supplies them (from
+// the block day + weeklyVolumeForWeek()) since this function stays a pure
+// number-cruncher, no exercise-pool lookups of its own.
+function missedOptions(missedDayPlannedSets, missedDayMinutes) {
+  return [
+    {
+      key: 'do_it_today',
+      label: 'Do it today',
+      effect: 'Shifts the rest of the week by a day.',
+    },
+    {
+      key: 'skip',
+      label: 'Skip it',
+      effect: `Targets stay. Weekly sets planned: ${missedDayPlannedSets} fewer.`,
+      setsDelta: -missedDayPlannedSets,
+    },
+    {
+      key: 'fold_into_next',
+      label: 'Fold into next day',
+      effect: `Adds about ${Math.min(PROGRAM_RULES_CONFIG.missedSession.foldMaxAddedMinutes, missedDayMinutes)} min. Keeps main lifts, trims accessories.`,
+      addedMinutes: Math.min(PROGRAM_RULES_CONFIG.missedSession.foldMaxAddedMinutes, missedDayMinutes),
+    },
+  ];
+}
+
+// Hard working sets per muscle for one week - primary counts 1, secondary
+// counts 0.5, warm-ups excluded (caller filters those out before calling,
+// same warmup_per_set flag the rest of the app already uses).
+// liftsThisWeek: lifts rows with muscle_map_key/muscle_map_secondary_keys
+// already resolved onto each row (same lookup order as getMuscleGroup:
+// the lift's own override, then the exercise def).
+function weeklyVolumeForWeek(liftsThisWeek) {
+  const totals = {};
+  const add = (key, amount) => { if (key) totals[key] = (totals[key] || 0) + amount; };
+  for (const l of liftsThisWeek || []) {
+    const sets = l.sets || (l.reps_per_set ? l.reps_per_set.length : 0);
+    add(l.primaryMuscleKey, sets * PROGRAM_RULES_CONFIG.weeklyVolume.primaryMuscleWeight);
+    (l.secondaryMuscleKeys || []).forEach((k) => add(k, sets * PROGRAM_RULES_CONFIG.weeklyVolume.secondaryMuscleWeight));
+  }
+  return totals;
+}
+
+// Ranks swap candidates per the config's exact order: same primary
+// muscle is REQUIRED (candidates failing it are dropped, not just sorted
+// last); everything else is a soft tie-breaker. candidate shape matches
+// the exercises catalog (muscle_map_key, movement_type, equipment,
+// tracking); inWorkoutNames/triedNames are Sets of exercise names.
+function rankSwaps(exercise, candidates, opts = {}) {
+  const inWorkoutNames = opts.inWorkoutNames || new Set();
+  const triedNames = opts.triedNames || new Set();
+  const userEquipment = opts.userEquipment || null; // array of equipment strings the user has, or null = no filter
+  return candidates
+    .filter((c) => c.name !== exercise.name)
+    .filter((c) => c.muscle_map_key === exercise.muscle_map_key) // required
+    .filter((c) => !userEquipment || userEquipment.includes(c.equipment))
+    .sort((a, b) => {
+      const scoreOf = (c) => {
+        let score = 0;
+        if (c.movement_type === exercise.movement_type) score += 8;
+        if (c.tracking === exercise.tracking) score += 2;
+        if (inWorkoutNames.has(c.name)) score -= 100; // excluded in spirit, kept rankable rather than dropped so callers can still show "already in your workout" if they choose
+        if (triedNames.has(c.name)) score += 1; // "prefer ones the user has done before"
+        return score;
+      };
+      return scoreOf(b) - scoreOf(a);
+    });
+}
+
+// Swap step 2's "suggested start weight ONLY from your own history...
+// or a ratio computed from your own history on both exercises... no
+// history -> show no number." ownHistoryOnNew/ownHistoryOnOld are this
+// user's own lift history (may be empty) for the new and current
+// exercise respectively.
+function suggestSwapStartWeight(ownHistoryOnNew, ownHistoryOnOld) {
+  if (ownHistoryOnNew && ownHistoryOnNew.length) {
+    const last = ownHistoryOnNew[ownHistoryOnNew.length - 1];
+    return { weight: last.weight, reps: last.reps_per_set || [last.reps], source: 'own_history_on_new' };
+  }
+  if (ownHistoryOnOld && ownHistoryOnOld.length) {
+    // No ratio can be computed without having trained BOTH exercises at
+    // least once - with only the old exercise's history, there is
+    // nothing to ratio against, so this still falls through to "no
+    // number" rather than inventing one. (A real ratio needs historical
+    // overlap on both lifts, which ownHistoryOnNew's emptiness rules out
+    // by definition here.)
+    return { weight: null, reps: null, source: 'none', note: 'start light' };
+  }
+  return { weight: null, reps: null, source: 'none', note: 'start light' };
+}
+// PROGRAM_RULES_ENGINE_END
+
 function blockSplitTemplate(days) {
   if (days <= 3) return [
     { label: 'Full Body A', groups: ['push', 'pull', 'legs'] },
