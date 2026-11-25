@@ -485,6 +485,8 @@
      button sheet, opened only from plain tabs today). */
   #whySheet { z-index: 51; }
   #whyBackdrop { z-index: 50; }
+  #missedSheet, #welcomeBackSheet { z-index: 51; }
+  #missedBackdrop, #welcomeBackBackdrop { z-index: 50; }
   .plus-log-field { border: 1px solid var(--border); background: var(--surface); border-radius: 14px;
     padding: 0.8rem 0.9rem; display: flex; align-items: center; gap: 0.6rem; }
   .plus-log-field input { flex: 1; border: none; background: transparent; outline: none; font: inherit; color: var(--text); }
@@ -1420,6 +1422,12 @@
        this same element rather than each building its own. -->
   <div class="plus-sheet hidden" id="whySheet"></div>
   <div class="plus-backdrop hidden" id="whyBackdrop"></div>
+  <!-- Missed-session sheet (SMART PROGRAM batch, phone 5) -->
+  <div class="plus-sheet hidden" id="missedSheet"></div>
+  <div class="plus-backdrop hidden" id="missedBackdrop"></div>
+  <!-- Welcome-back sheet (SMART PROGRAM batch, phone 6) -->
+  <div class="plus-sheet hidden" id="welcomeBackSheet"></div>
+  <div class="plus-backdrop hidden" id="welcomeBackBackdrop"></div>
   <button class="plus-fab" id="plusFab" aria-label="Log anything">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
   </button>
@@ -4008,6 +4016,186 @@ document.addEventListener('click', (e) => {
   if (trigger) openWhySheet(trigger.dataset.whyOpen);
 });
 
+// ── Missed session (SMART PROGRAM batch, phone 5) ───────────────────────
+// Finds the most recent scheduled-but-not-logged day this week, if any.
+// planWeek() derives "missed" fresh on every call (principle 2/5: never
+// stored as a failure record) - the moment an override resolves that
+// date (skip/moved_away/moved_in all do, via effectiveBlockDayIndex),
+// it stops showing up here, so the banner never reappears once handled.
+function findMissedDay() {
+  const block = state.profile?.active_training_block;
+  if (!block) return null;
+  const overrides = pruneScheduleOverrides(state.profile?.schedule_overrides_this_week);
+  const week = planWeek(block, overrides, state.lifts, localDateStr());
+  const missedEntries = week.filter((d) => d.status === 'missed');
+  if (!missedEntries.length) return null;
+  const entry = missedEntries[missedEntries.length - 1];
+  const day = block.blockDays[entry.dayIndex];
+  const dayOfWeekLabel = new Date(`${entry.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' });
+  return { date: entry.date, dayIndex: entry.dayIndex, dayLabel: day?.label || '', dayOfWeekLabel };
+}
+
+function missedSessionBannerHtml() {
+  const missed = findMissedDay();
+  if (!missed) return '';
+  return `<div class="banner" id="missedSessionBanner" style="cursor:pointer;">You missed ${esc(missed.dayOfWeekLabel)}, ${esc(missed.dayLabel)}. No problem. <span style="text-decoration:underline;">Pick what works.</span></div>`;
+}
+
+let missedSessionChoice = null; // 'do_it_today' | 'skip' | 'fold_into_next' | null - reset each time the sheet opens
+function openMissedSessionSheet() {
+  if (!findMissedDay()) return;
+  missedSessionChoice = null;
+  renderMissedSessionSheet();
+  $('#missedSheet').classList.remove('hidden');
+  $('#missedBackdrop').classList.remove('hidden');
+}
+function closeMissedSessionSheet() {
+  $('#missedSheet').classList.add('hidden');
+  $('#missedBackdrop').classList.add('hidden');
+}
+function renderMissedSessionSheet() {
+  const missed = findMissedDay();
+  const sheet = $('#missedSheet');
+  if (!missed || !sheet) { closeMissedSessionSheet(); return; }
+  const day = state.profile.active_training_block.blockDays[missed.dayIndex];
+  const plannedSets = day.exercises.reduce((s, e) => s + (e.sets || 0), 0);
+  const plannedMinutes = Math.round(day.exercises.length * 9);
+  const opts = missedOptions(plannedSets, plannedMinutes);
+  sheet.innerHTML = `
+    <div class="plus-sheet-handle"></div>
+    <h3 style="margin:0 0 0.2rem;">${esc(day?.label || '')}, missed ${esc(missed.dayOfWeekLabel.slice(0, 3))}</h3>
+    ${opts.map((o) => `
+      <label class="row" style="justify-content:flex-start;align-items:flex-start;gap:0.5rem;padding:0.5rem 0;border-top:1px solid var(--border);cursor:pointer;">
+        <input type="radio" name="missedChoice" data-missed-choice="${o.key}" ${missedSessionChoice === o.key ? 'checked' : ''} style="margin-top:0.2rem;">
+        <span><strong>${esc(o.label)}</strong><br><span class="muted small">${esc(o.effect)}</span></span>
+      </label>`).join('')}
+    <p class="muted small" style="margin-top:0.6rem;" data-why-open="frequency">Where you train it matters less than how many hard sets you get each week. <span style="text-decoration:underline;">Why?</span></p>
+    <button class="btn btn-block" id="missedApplyBtn" style="margin-top:0.3rem;width:100%;" ${missedSessionChoice ? '' : 'disabled'}>Apply</button>
+  `;
+  $$('[data-missed-choice]', sheet).forEach((input) => input.addEventListener('change', () => { missedSessionChoice = input.dataset.missedChoice; renderMissedSessionSheet(); }));
+  const applyBtn = $('#missedApplyBtn', sheet);
+  if (applyBtn) applyBtn.addEventListener('click', () => applyMissedSessionChoice(missed));
+}
+$('#missedBackdrop').addEventListener('click', closeMissedSessionSheet);
+document.addEventListener('click', (e) => { if (e.target.closest('#missedSessionBanner')) openMissedSessionSheet(); });
+
+// Applies whichever of the three missed-session options the user picked
+// (phone 5) - all three go through schedule_overrides_this_week, the
+// same additive, weekly-pruned mechanism the existing reschedule menu
+// already uses (see applyScheduleChange above it), never a rewrite of
+// the plan's own saved days/sets, and never a stored "failure" record.
+async function applyMissedSessionChoice(missed) {
+  const block = state.profile?.active_training_block;
+  if (!block || !missedSessionChoice) return;
+  const overrides = { ...pruneScheduleOverrides(state.profile?.schedule_overrides_this_week) };
+  const today = localDateStr();
+  if (missedSessionChoice === 'skip') {
+    overrides[missed.date] = { action: 'skip' };
+  } else if (missedSessionChoice === 'do_it_today') {
+    // "Shifts the rest of the week by a day": today takes on the missed
+    // day's workout, and every later day in this week takes on the
+    // PREVIOUS day's original workout - one day's worth of content runs
+    // off the end of the week rather than wrapping around.
+    const weekDates = [];
+    let d = today;
+    while (currentWeekKey(d) === currentWeekKey(today)) { weekDates.push(d); d = subtractDays(d, -1); }
+    const originals = weekDates.map((date) => effectiveBlockDayIndex(block, date, overrides));
+    overrides[missed.date] = { action: 'moved_away' };
+    let carry = missed.dayIndex;
+    weekDates.forEach((date, i) => {
+      overrides[date] = carry == null ? { action: 'skip' } : { action: 'moved_in', dayIndex: carry };
+      carry = originals[i];
+    });
+  } else if (missedSessionChoice === 'fold_into_next') {
+    const nextDate = subtractDays(today, -1);
+    overrides[missed.date] = { action: 'moved_away' };
+    overrides[nextDate] = { ...(overrides[nextDate] || {}), foldedDayIndex: missed.dayIndex };
+  }
+  const { error } = await supabase.from('profiles').update({ schedule_overrides_this_week: overrides }).eq('id', state.user.id);
+  if (error) { toast('Could not reschedule: ' + error.message); return; }
+  state.profile = { ...state.profile, schedule_overrides_this_week: overrides };
+  closeMissedSessionSheet();
+  missedSessionChoice = null;
+  toast("Updated this week's schedule.");
+  renderAll();
+}
+
+// The exercise list to show as "the plan" for a date, honoring a
+// "fold into next day" choice from the missed-session sheet - the missed
+// day's compound/main lifts are appended (trimmed to the config's added-
+// minutes cap), accessories-first-trimmed per the spec ("trims
+// accessories"). Never rewrites blockDays itself - purely a display-time
+// merge, same spirit as currentDeload()'s read-only overlay.
+function resolvedDayExercises(block, dayIndex, dateStr, overrides) {
+  const day = dayIndex != null ? block.blockDays[dayIndex] : null;
+  const ownExercises = day ? day.exercises : [];
+  const foldedIdx = overrides?.[dateStr]?.foldedDayIndex;
+  const foldedDay = foldedIdx != null ? block.blockDays[foldedIdx] : null;
+  if (!foldedDay) return ownExercises;
+  const mainFromFolded = foldedDay.exercises.filter((e) => exerciseDefFor(e.name)?.movement_type === 'compound');
+  const maxAdded = Math.max(0, Math.floor(PROGRAM_RULES_CONFIG.missedSession.foldMaxAddedMinutes / 9));
+  return [...ownExercises, ...mainFromFolded.slice(0, maxAdded)];
+}
+
+// ── Welcome back (SMART PROGRAM batch, phone 6) ─────────────────────────
+// Only offered before today's own session has started - "never blocks
+// the user from normal weights" means it's a one-time nudge at the start
+// of the day, not something that can reappear mid-session or block it.
+function welcomeBackState() {
+  if (!computeTodaysLiftCtx().empty) return null;
+  return welcomeBack(daysSinceLastWorkout(state.lifts, localDateStr()));
+}
+function welcomeBackBannerHtml() {
+  const wb = welcomeBackState();
+  if (!wb) return '';
+  return `<div class="banner" id="welcomeBackBanner" style="cursor:pointer;">Welcome back. It has been ${wb.daysSince} days since your last workout. <span style="text-decoration:underline;">Ease in?</span></div>`;
+}
+function openWelcomeBackSheet() {
+  const wb = welcomeBackState();
+  if (!wb) return;
+  renderWelcomeBackSheet(wb);
+  $('#welcomeBackSheet').classList.remove('hidden');
+  $('#welcomeBackBackdrop').classList.remove('hidden');
+}
+function closeWelcomeBackSheet() {
+  $('#welcomeBackSheet').classList.add('hidden');
+  $('#welcomeBackBackdrop').classList.add('hidden');
+}
+function renderWelcomeBackSheet(wb) {
+  const sheet = $('#welcomeBackSheet');
+  if (!sheet) return;
+  sheet.innerHTML = `
+    <div class="plus-sheet-handle"></div>
+    <h3 style="margin:0 0 0.2rem;">Welcome back</h3>
+    <p style="margin:0 0 0.4rem;">It has been ${wb.daysSince} days since your last workout.</p>
+    <p class="muted small" style="margin:0 0 0.6rem;">Ease in with one lighter session?</p>
+    <div class="card" style="background:var(--surface-2);">
+      <div class="row" style="justify-content:space-between;padding:0.2rem 0;"><span class="small">Weights</span><span class="mono small">${Math.round(wb.weightMultiplier * 100)}% of last</span></div>
+      <div class="row" style="justify-content:space-between;padding:0.2rem 0;"><span class="small">Sets</span><span class="mono small">as planned</span></div>
+      <div class="row" style="justify-content:space-between;padding:0.2rem 0;"><span class="small">Then</span><span class="mono small">normal targets</span></div>
+    </div>
+    <p class="muted small" style="margin:0.6rem 0;" data-why-open="double_progression_welcomeback_swap">Our default for 14 to 27 days away. 28+ days uses 80%. Not from a study, so you can change or skip it. <span style="text-decoration:underline;">Why?</span></p>
+    <button class="btn btn-primary" id="welcomeBackStartBtn" style="width:100%;margin-bottom:0.4rem;">Start lighter session</button>
+    <button class="btn btn-ghost" id="welcomeBackNormalBtn" style="width:100%;">Use my normal weights</button>
+  `;
+  $('#welcomeBackStartBtn', sheet).addEventListener('click', () => startWelcomeBackSession(wb));
+  $('#welcomeBackNormalBtn', sheet).addEventListener('click', () => { closeWelcomeBackSheet(); startOrContinueWorkoutFromCard(); });
+}
+$('#welcomeBackBackdrop').addEventListener('click', closeWelcomeBackSheet);
+document.addEventListener('click', (e) => { if (e.target.closest('#welcomeBackBanner')) openWelcomeBackSheet(); });
+
+// "Stored; the engine treats it as the user's choice for THIS session
+// only" (same evaporates-with-the-session rule as a goal-line override) -
+// welcomeBackMultiplier lives on the live session object itself, never on
+// the block/profile, so it never persists past today.
+function startWelcomeBackSession(wb) {
+  closeWelcomeBackSheet();
+  const session = wlsEnsureSession();
+  session.welcomeBackMultiplier = wb.weightMultiplier;
+  wlsSave(session);
+  startOrContinueWorkoutFromCard();
+}
+
 // ══════════════════════════════════════════════════════════════════
 // SHARED: sum + streaks
 // ══════════════════════════════════════════════════════════════════
@@ -5122,7 +5310,7 @@ function todaysLiftSummaryHtml() {
   const restToday = !!activeBlock && todaysDayIndex == null; // explicitly skipped/moved away this week — never mutates the block itself
   const hasPlanned = !!((activeBlock && !restToday) || state.plan);
   const todaysEntry = overrides[localDateStr()];
-  const dayExercises = activeBlock && todaysDayIndex != null ? activeBlock.blockDays[todaysDayIndex]?.exercises : null;
+  const dayExercises = activeBlock && todaysDayIndex != null ? resolvedDayExercises(activeBlock, todaysDayIndex, localDateStr(), overrides) : null;
   let label, sub;
   if (!ctx.empty && !ctx.ended) {
     label = 'Continue';
@@ -5971,6 +6159,8 @@ function renderDashboard() {
     <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.1rem;">${esc(todayHeaderDate)}</div>
     <div class="pagetitle" style="margin:0 0 0.6rem;">Today</div>
     ${achievementUnlockBannerHtml()}
+    ${missedSessionBannerHtml()}
+    ${welcomeBackBannerHtml()}
     ${showSpikeWarning ? `
     <div class="card pr-banner">
       <div class="small">⚠️ This week's lift volume is <strong style="color:var(--accent);">${volumeSpike.pctAbove}%</strong> above your recent 4-week average — consider whether that's intentional, or if you should ease off to avoid overuse injury.</div>
@@ -9806,10 +9996,11 @@ function computeDoubleProgressionGoal(exerciseName, repRangeString) {
   if (t.action === 'first_session') return null;
   const activeBlock = state.profile?.active_training_block;
   const onDeload = activeBlock && !!currentDeload(ensureBlockMeta(activeBlock), localDateStr());
-  const deloadWeight = (w) => (onDeload ? applyDeloadToWeight(w, step) : w);
-  const note = onDeload ? 'Deload week: weight reduced about 10%.' : t.note;
-  if (t.repsPerSet) return { weight: deloadWeight(t.weight), reps: Math.min(...t.repsPerSet), action: t.action, note };
-  return { weight: deloadWeight(t.weight), reps: t.reps, action: t.action, note };
+  const wbMultiplier = liveWorkoutSession?.date === localDateStr() ? liveWorkoutSession?.welcomeBackMultiplier : null;
+  const adjustWeight = (w) => roundToStep((onDeload ? applyDeloadToWeight(w, step) : w) * (wbMultiplier || 1), step);
+  const note = onDeload ? 'Deload week: weight reduced about 10%.' : wbMultiplier ? `Welcome back: weight reduced to ${Math.round(wbMultiplier * 100)}% for this session.` : t.note;
+  if (t.repsPerSet) return { weight: adjustWeight(t.weight), reps: Math.min(...t.repsPerSet), action: t.action, note };
+  return { weight: adjustWeight(t.weight), reps: t.reps, action: t.action, note };
 }
 
 // Tap-the-goal-line override (Phase 2.1): "stored; the engine treats it
