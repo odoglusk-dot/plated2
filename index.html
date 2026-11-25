@@ -477,6 +477,14 @@
     border-radius: 28px 28px 0 0; padding: 0.7rem 1rem calc(1.75rem + env(safe-area-inset-bottom, 0px));
     box-shadow: 0 -14px 30px rgba(0,0,0,.22); max-height: 80vh; overflow-y: auto; }
   .plus-sheet-handle { width: 40px; height: 5px; border-radius: 9px; background: var(--border); margin: 0 auto 0.9rem; }
+  /* The Why sheet must open from WITHIN the Lifts tab's own full-screen
+     "as-sheet" overlay (z-index 38, e.g. the A2 exercise screen) as well
+     as from a plain tab - .plus-sheet/.plus-backdrop's own z-index (37/36)
+     sits below that, so these two need an explicit override rather than
+     raising the shared class (which would also affect the unrelated +
+     button sheet, opened only from plain tabs today). */
+  #whySheet { z-index: 51; }
+  #whyBackdrop { z-index: 50; }
   .plus-log-field { border: 1px solid var(--border); background: var(--surface); border-radius: 14px;
     padding: 0.8rem 0.9rem; display: flex; align-items: center; gap: 0.6rem; }
   .plus-log-field input { flex: 1; border: none; background: transparent; outline: none; font: inherit; color: var(--text); }
@@ -1395,6 +1403,11 @@
        — hidden on You and while any sheet is open (see updateFabVisibility()). -->
   <div class="plus-sheet hidden" id="plusSheet"></div>
   <div class="plus-backdrop hidden" id="plusBackdrop"></div>
+  <!-- Shared Why sheet (SMART PROGRAM + goals batches) — one reusable
+       evidence bottom sheet, every "Why?" link across both features opens
+       this same element rather than each building its own. -->
+  <div class="plus-sheet hidden" id="whySheet"></div>
+  <div class="plus-backdrop hidden" id="whyBackdrop"></div>
   <button class="plus-fab" id="plusFab" aria-label="Log anything">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
   </button>
@@ -3869,6 +3882,119 @@ function onPlusTileTap(key) {
 }
 $('#plusFab').addEventListener('click', openPlusSheet);
 $('#plusBackdrop').addEventListener('click', closePlusSheet);
+
+// ══════════════════════════════════════════════════════════════════════
+// SHARED WHY SHEET — SMART PROGRAM batch Phase 7 (built here, ahead of
+// its own phase, since Phase 2's goal line already needs a working "Why?"
+// link). One reusable bottom sheet backing every evidence citation across
+// this batch (and the goals batch too, once merged — see
+// docs/smart-program-audit.md's note on reconciling the two
+// EVIDENCE_CONFIG objects by key at that point).
+// ══════════════════════════════════════════════════════════════════════
+// Wording transcribed verbatim from the spec - do not strengthen, round,
+// or add a number that isn't there. verified:false on every citation is
+// required: a human (Owen) checks each one against the paper abstract
+// before it ships as verified - never flip one to true from this session.
+// See scripts/lint-evidence-smart-program.mjs for the build-time check
+// enforcing both this and the shared content rules (no "proven"/
+// guaranteed/promised-result wording, no percent/effect-size figure
+// outside citations[].finding, every non-limited entry needs a real
+// citation, "limited" always displays as "Limited evidence").
+const EVIDENCE_CONFIG = {
+  deloading: {
+    title: 'Why deload?',
+    plainAnswer: 'A deload is a planned lighter week. Coaches generally agree it can help you stay consistent and lowers the chance of injury or overreaching.',
+    meansForYou: 'Our exact deload numbers (sets, weight, effort) are defaults, not from a study - experts agree on why to deload, just not on the precise amount.',
+    label: 'limited',
+    labelNote: 'expert consensus',
+    citations: [
+      { authors: 'Bell, Strafford, Coleman, Androulakis Korakakis, Nolan', year: '2023', journal: 'Sports Medicine - Open 9:87', finding: 'International Delphi consensus of 21 coaches. A deload is a period of reduced training stress; at least 70% agreed it can help adherence and reduce injury and overreaching. No agreed numbers; the authors call it under-researched.', verified: false },
+    ],
+    usedFor: ['block', 'deload_week'],
+  },
+  frequency: {
+    title: 'Does it matter which day you train a muscle?',
+    plainAnswer: 'Where you train it matters less than how many hard sets you get each week overall.',
+    meansForYou: 'That\'s why missing a specific day isn\'t treated as a failure here - the weekly total is what the targets care about, not which day each set happened on.',
+    label: 'moderate',
+    labelNote: 'muscle size; strength wasn\'t covered by this review',
+    citations: [
+      { authors: 'Grgic, Schoenfeld, Latella', year: '2019', journal: 'Journal of Science and Medicine in Sport 22(3):361-370', finding: 'Review: when weekly training volume is equated, training frequency had no pronounced effect on muscle gain.', verified: false },
+    ],
+    usedFor: ['missed_session'],
+  },
+  weekly_volume: {
+    title: 'How is weekly volume counted?',
+    plainAnswer: 'More weekly hard sets per muscle, up to a point, builds toward more muscle growth than fewer sets.',
+    meansForYou: 'The target band shown here reflects that relationship. The counting rule itself (primary muscle counts a full set, secondary counts half) is our own convention for keeping the math simple, not something a study measured directly.',
+    label: 'strong',
+    citations: [
+      { authors: 'Schoenfeld, Ogborn, Krieger', year: '2016', journal: 'Journal of Sports Sciences', finding: 'Meta-analysis; graded dose-response - each added weekly set per muscle linked to a small extra gain.', verified: false },
+    ],
+    usedFor: ['weekly_volume'],
+  },
+  double_progression_welcomeback_swap: {
+    title: 'Where do these numbers come from?',
+    plainAnswer: 'Standard coaching practice.',
+    meansForYou: 'No single study is cited for this one - it\'s a practical rule we use, not a research finding, which is why it\'s labeled Limited evidence.',
+    label: 'limited',
+    citations: [],
+    usedFor: ['progression', 'welcome_back', 'smart_swap'],
+  },
+};
+let whySheetOpenId = null;
+let whySheetCitationsExpanded = false;
+function whySheetEvidenceLabel(label) {
+  if (label === 'strong') return { text: 'Strong evidence', color: 'var(--success)' };
+  if (label === 'moderate') return { text: 'Moderate evidence', color: 'var(--accent)' };
+  return { text: 'Limited evidence', color: '#B08D52' };
+}
+function openWhySheet(evidenceId) {
+  whySheetOpenId = evidenceId;
+  whySheetCitationsExpanded = false;
+  renderWhySheet();
+  $('#whySheet').classList.remove('hidden');
+  $('#whyBackdrop').classList.remove('hidden');
+}
+function closeWhySheet() {
+  whySheetOpenId = null;
+  $('#whySheet').classList.add('hidden');
+  $('#whyBackdrop').classList.add('hidden');
+}
+function renderWhySheet() {
+  const entry = EVIDENCE_CONFIG[whySheetOpenId];
+  const sheet = $('#whySheet');
+  if (!entry || !sheet) return;
+  const badge = whySheetEvidenceLabel(entry.label);
+  sheet.innerHTML = `
+    <div class="plus-sheet-handle"></div>
+    <h3 style="margin:0 0 0.4rem;">${esc(entry.title)}</h3>
+    <span class="badge" style="background:${badge.color};color:#fff;">${esc(badge.text)}</span>
+    ${entry.labelNote ? `<p class="muted small" style="margin:0.3rem 0 0;">${esc(entry.labelNote)}</p>` : ''}
+    <p style="margin:0.6rem 0 0;">${esc(entry.plainAnswer)}</p>
+    <div class="card" style="background:var(--surface-2);margin-top:0.6rem;">
+      <p class="muted small" style="margin:0;">${esc(entry.meansForYou)}</p>
+    </div>
+    ${entry.citations.length ? `
+    <div style="border-left:3px solid var(--gold);padding-left:0.6rem;margin-top:0.6rem;">
+      ${entry.citations.map((c) => `<p class="muted small" style="margin:0 0 0.3rem;">${esc(c.authors)} (${esc(c.year)}), ${esc(c.journal)}${whySheetCitationsExpanded ? ` — ${esc(c.finding)}` : ''}</p>`).join('')}
+      <button class="btn-link" id="whySheetMoreBtn" style="text-transform:none;text-decoration:underline;">${whySheetCitationsExpanded ? 'Show less' : 'See full sources'}</button>
+    </div>` : `<p class="muted small" style="margin-top:0.6rem;font-style:italic;">No study cited for this one — see above.</p>`}
+    <button class="btn btn-block" id="whySheetCloseBtn" style="margin-top:0.9rem;">Close</button>
+  `;
+  const moreBtn = $('#whySheetMoreBtn', sheet);
+  if (moreBtn) moreBtn.addEventListener('click', () => { whySheetCitationsExpanded = !whySheetCitationsExpanded; renderWhySheet(); });
+  const closeBtn = $('#whySheetCloseBtn', sheet);
+  if (closeBtn) closeBtn.addEventListener('click', closeWhySheet);
+}
+$('#whyBackdrop').addEventListener('click', closeWhySheet);
+// Event delegation: any [data-why-open="<evidenceId>"] anywhere in the
+// app opens the sheet, with no per-screen wiring needed as new "Why?"
+// links get added across later phases.
+document.addEventListener('click', (e) => {
+  const trigger = e.target.closest('[data-why-open]');
+  if (trigger) openWhySheet(trigger.dataset.whyOpen);
+});
 
 // ══════════════════════════════════════════════════════════════════
 // SHARED: sum + streaks
@@ -9629,18 +9755,6 @@ function prForTrackingType(trackingType, entries) {
   }
 }
 
-// Double-progression "Goal:" line (Phase 3, exercise screen A2). Given a
-// rep range (from whatever program context is active, if any — a quick/
-// program-optional workout simply has none, which is fine, that's the
-// hard "a program is never required" rule), the rule is standard double
-// progression: once every set hits the TOP of the range, add weight and
-// drop back to the BOTTOM of the range; otherwise keep the same weight and
-// aim to beat the weakest set by one rep, capped at the top of the range.
-// With no range at all (quick workout with no plan behind it), the goal
-// is simply "match last time" — there's no "enough" to detect without a
-// target range.
-const DOUBLE_PROGRESSION_INCREMENT_LB = 5; // simple v1 flat increment; Phase 5's progression/deload work may refine this per-exercise
-
 function parseRepRange(str) {
   if (!str) return null;
   const rangeMatch = String(str).match(/(\d+)\s*[-–]\s*(\d+)/);
@@ -9649,19 +9763,92 @@ function parseRepRange(str) {
   return singleMatch ? { low: Number(singleMatch[1]), high: Number(singleMatch[1]) } : null;
 }
 
+// Equipment-aware weight step for a given exercise name, reusing the same
+// lower-body muscle list the Block Builder already groups exercises by
+// (BLOCK_GROUP_MUSCLES.legs), so "barbell 10 lb lower body" doesn't need
+// a second definition of what counts as lower body.
+function weightStepForExercise(exerciseName) {
+  const def = exerciseDefFor(exerciseName);
+  const isLowerBody = !!def && BLOCK_GROUP_MUSCLES.legs.includes(def.muscle_map_key);
+  return weightStepFor(def?.equipment, isLowerBody, weightUnitLabel());
+}
+
+// The "Goal:" line (SMART PROGRAM batch, Phase 2) - a thin wrapper over
+// the PROGRAM_RULES_ENGINE's nextTargets(), translating its richer
+// {action, weight, reps|repsPerSet, note} shape into the {weight, reps}
+// pair every existing call site already expects, so none of them needed
+// to change. repRangeString (an explicit per-day plan range, e.g.
+// "8-12") wins when present; with no plan behind the exercise at all,
+// this now falls back to the active goal's own rep range
+// (repRangeForBlock) rather than the old "no range = just match last
+// time" behavior — the spec's "same rule for every lift" applies even to
+// a program-optional quick workout, since a is always resolvable.
 function computeDoubleProgressionGoal(exerciseName, repRangeString) {
   const history = state.lifts
     .filter((l) => l.exercise === exerciseName)
     .sort((a, b) => (a.date + (a.created_at || '')).localeCompare(b.date + (b.created_at || '')));
-  const last = history[history.length - 1];
-  if (!last) return null;
-  const repsPerSet = last.reps_per_set && last.reps_per_set.length ? last.reps_per_set : [last.reps];
-  const range = parseRepRange(repRangeString);
-  if (!range) return { weight: last.weight, reps: Math.round(repsPerSet[repsPerSet.length - 1]) };
-  const allHitTop = repsPerSet.every((r) => r >= range.high);
-  if (allHitTop) return { weight: last.weight + DOUBLE_PROGRESSION_INCREMENT_LB, reps: range.low };
-  const minReps = Math.min(...repsPerSet);
-  return { weight: last.weight, reps: Math.min(range.high, minReps + 1) };
+  if (!history.length) return null;
+  const range = parseRepRange(repRangeString) ? { min: parseRepRange(repRangeString).low, max: parseRepRange(repRangeString).high } : repRangeForBlock(state.profile?.active_training_block);
+  const step = weightStepForExercise(exerciseName);
+  const t = nextTargets(history, range, step);
+  if (t.action === 'first_session') return null;
+  if (t.repsPerSet) return { weight: t.weight, reps: Math.min(...t.repsPerSet), action: t.action, note: t.note };
+  return { weight: t.weight, reps: t.reps, action: t.action, note: t.note };
+}
+
+// Tap-the-goal-line override (Phase 2.1): "stored; the engine treats it
+// as the user's choice for that session only" - lives on the live
+// session's own exercise object (wlsAddExercise's shape), never written
+// back into program-rules.config or any persisted plan, so it evaporates
+// with the session the moment a fresh one starts tomorrow.
+function effectiveGoalFor(ex) {
+  if (ex.targetOverride) return { weight: ex.targetOverride.weight, reps: ex.targetOverride.reps, isOverride: true };
+  const goal = computeDoubleProgressionGoal(ex.name, ex.repRangeString);
+  return goal ? { ...goal, isOverride: false } : null;
+}
+let goalOverrideEditing = false;
+let goalOverrideForm = { weight: '', reps: '' };
+function goalLineHtml(ex) {
+  if (goalOverrideEditing) {
+    return `<div class="row" style="align-items:center;gap:0.3rem;margin-top:0.15rem;flex-wrap:nowrap;">
+      <input class="input mono" id="goalOverrideWeight" type="number" value="${esc(goalOverrideForm.weight)}" placeholder="Weight" style="width:68px;padding:0.25rem 0.4rem;">
+      <span class="muted small">&times;</span>
+      <input class="input mono" id="goalOverrideReps" type="number" value="${esc(goalOverrideForm.reps)}" placeholder="Reps" style="width:52px;padding:0.25rem 0.4rem;">
+      <button class="btn btn-sm btn-primary" id="goalOverrideSaveBtn">Save</button>
+      <button class="btn btn-sm btn-ghost" id="goalOverrideCancelBtn">Cancel</button>
+    </div>`;
+  }
+  const goal = effectiveGoalFor(ex);
+  if (!goal) return '';
+  return `<div class="muted small" id="goalLineTap" style="cursor:pointer;">Goal: ${toDisplayWeight(goal.weight).value} &times; ${goal.reps}${goal.isOverride ? ' <span class="pill-soft">Your override</span>' : ''} <span style="text-decoration:underline;">(tap to change)</span></div>
+    <span class="muted small" id="howTargetsOpenLink" style="text-decoration:underline;cursor:pointer;">How targets are set</span>`;
+}
+function wireGoalLineEvents(panel, ex) {
+  const tap = $('#goalLineTap', panel);
+  if (tap) tap.addEventListener('click', () => {
+    const goal = effectiveGoalFor(ex);
+    goalOverrideForm = { weight: goal ? String(toDisplayWeight(goal.weight).value) : '', reps: goal ? String(goal.reps) : '' };
+    goalOverrideEditing = true;
+    renderLiftsTab();
+  });
+  const weightInput = $('#goalOverrideWeight', panel);
+  if (weightInput) weightInput.addEventListener('input', (e) => { goalOverrideForm.weight = e.target.value; });
+  const repsInput = $('#goalOverrideReps', panel);
+  if (repsInput) repsInput.addEventListener('input', (e) => { goalOverrideForm.reps = e.target.value; });
+  const saveBtn = $('#goalOverrideSaveBtn', panel);
+  if (saveBtn) saveBtn.addEventListener('click', () => {
+    const weight = fromDisplayWeight(goalOverrideForm.weight);
+    const reps = Number(goalOverrideForm.reps);
+    if (!weight || !reps) return;
+    ex.targetOverride = { weight, reps };
+    goalOverrideEditing = false;
+    wlsSave(liveWorkoutSession);
+    renderLiftsTab();
+  });
+  const cancelBtn = $('#goalOverrideCancelBtn', panel);
+  if (cancelBtn) cancelBtn.addEventListener('click', () => { goalOverrideEditing = false; renderLiftsTab(); });
+  const howTargetsLink = $('#howTargetsOpenLink', panel);
+  if (howTargetsLink) howTargetsLink.addEventListener('click', () => { showHowTargetsPage = true; renderLiftsTab(); });
 }
 
 // Best-effort rep-range lookup for "today" — checks the active generated
@@ -9883,9 +10070,42 @@ let plusLogSetMode = null;
 let plusLogSetExerciseIdx = null;
 let plusLogSetSearch = '';
 
+// SMART PROGRAM batch, Phase 2 (mockup phone 1) — a plain-language page
+// explaining the one progression rule every lift uses. Reachable from the
+// Goal line wherever it appears; overlays whatever screen was open rather
+// than needing its own tab, same pattern as showExerciseGlossary.
+let showHowTargetsPage = false;
+function renderHowTargetsPage(panel) {
+  const rows = [
+    { glyph: '&#8593;', bg: '#E3EDE6', color: 'var(--success)', when: 'Hit the top on every set', action: 'Add weight', detail: '70 &times; 10, 10, 10 &rarr; next: 72.5 &times; 8. Reps reset to the bottom of your range.' },
+    { glyph: '=', bg: 'var(--surface-3)', color: 'var(--text-dim)', when: 'Some sets came up short', action: 'Same weight', detail: '70 &times; 10, 9, 8 &rarr; next: 70 &times; 10, 10, 9. Add one rep where you fell short.' },
+    { glyph: '&#8595;', bg: '#FBE6DD', color: 'var(--danger)', when: 'Missed the bottom twice in a row', action: 'Drop 5–10%', detail: 'Then build back up.' },
+  ];
+  panel.innerHTML = `
+    <button class="btn-link" id="howTargetsBackBtn" style="text-transform:none;text-decoration:underline;">&#8249; Back</button>
+    <div class="pagetitle" style="margin:0.2rem 0 0.1rem;">How targets are set</div>
+    <p class="muted" style="margin:0 0 0.8rem;">Same rule for every lift. You can change any target.</p>
+    ${rows.map((r) => `
+      <div class="card">
+        <div class="row" style="align-items:flex-start;gap:0.6rem;">
+          <span style="flex:none;min-width:0;width:1.9rem;height:1.9rem;border-radius:50%;background:${r.bg};color:${r.color};display:flex;align-items:center;justify-content:center;font-weight:700;">${r.glyph}</span>
+          <div style="min-width:0;">
+            <div class="muted small">${esc(r.when)}</div>
+            <div style="font-weight:700;">${esc(r.action)}</div>
+            <div class="muted small" style="margin-top:0.2rem;">${r.detail}</div>
+          </div>
+        </div>
+      </div>`).join('')}
+    <div class="banner">Targets are suggestions. You can change any of them.</div>
+    <p class="muted small">Weight steps come from equipment type (barbell, dumbbell, machine). <span data-why-open="double_progression_welcomeback_swap" style="text-decoration:underline;cursor:pointer;">Why?</span></p>
+  `;
+  $('#howTargetsBackBtn').addEventListener('click', () => { showHowTargetsPage = false; renderLiftsTab(); });
+}
+
 function renderLiftsTab() {
   const panel = $('#panel-lifts');
   if (!panel) return;
+  if (showHowTargetsPage) return renderHowTargetsPage(panel);
   updateScreenSheetTitle();
   if (plusLogSetMode === 'pick') return renderPlusLogSetPicker(panel);
   if (plusLogSetMode === 'quick') return renderPlusLogSetQuick(panel, plusLogSetExerciseIdx);
@@ -10162,7 +10382,6 @@ function renderPlusLogSetQuick(panel, idx) {
   if (!ex) { plusLogSetMode = 'pick'; renderPlusLogSetPicker(panel); return; }
   const def = exerciseDefFor(ex.name);
   const lastTime = lastTimeLabelFor(ex.name, true);
-  const goal = computeDoubleProgressionGoal(ex.name, ex.repRangeString);
   const rest = wlsRestTimeRemainingMs();
   const restSecs = Math.ceil(rest / 1000);
   const trackingType = ex.trackingType || def?.tracking || 'weight_reps';
@@ -10181,7 +10400,7 @@ function renderPlusLogSetQuick(panel, idx) {
         <div style="flex:1;">
           <h3 style="margin:0 0 0.2rem;">${esc(ex.name)}</h3>
           ${lastTime ? `<div class="muted small">Last: ${esc(lastTime.label)}</div>` : `<div class="muted small">First time logging this one</div>`}
-          ${goal ? `<div class="muted small">Goal: ${toDisplayWeight(goal.weight).value} &times; ${goal.reps}</div>` : ''}
+          ${goalLineHtml(ex)}
         </div>
       </div>
 
@@ -10228,6 +10447,7 @@ function renderPlusLogSetQuick(panel, idx) {
   $('#plsBackBtn').addEventListener('click', () => { plusLogSetMode = 'pick'; plusLogSetSearch = ''; renderLiftsTab(); });
   $('#plsTodayToggleBtn').addEventListener('click', () => { exerciseDetailTodayExpanded = !exerciseDetailTodayExpanded; todaysLiftsRemoveConfirm = null; renderLiftsTab(); });
   wireTodaysOtherLiftsEvents(panel);
+  wireGoalLineEvents(panel, ex);
   $('#plsOpenFullBtn').addEventListener('click', () => {
     plusLogSetMode = null;
     liveWorkoutScreen = idx;
@@ -10378,6 +10598,7 @@ function resetExerciseDetailInput(ex) {
   exerciseDetailCueExpanded = false;
   exerciseDetailTodayExpanded = false;
   todaysLiftsRemoveConfirm = null;
+  goalOverrideEditing = false;
   exerciseDetailJustFinished = false;
 }
 
@@ -10484,7 +10705,6 @@ function renderExerciseDetailScreen(panel, idx) {
   const def = exerciseDefFor(ex.name);
   const total = session.exercises.length;
   const lastTime = lastTimeLabelFor(ex.name, true);
-  const goal = computeDoubleProgressionGoal(ex.name, ex.repRangeString);
   const rest = wlsRestTimeRemainingMs();
   const restSecs = Math.ceil(rest / 1000);
 
@@ -10507,7 +10727,7 @@ function renderExerciseDetailScreen(panel, idx) {
           <h3 style="margin:0 0 0.2rem;">${esc(ex.name)}${exerciseDetailJustFinished && lastTimeIsPr(ex.name) ? ` <span class="pill-soft">★ New PR</span>` : ''}</h3>
           <div class="muted small">${esc(def?.equipment || '')}${ex.repRangeString ? ` &middot; ${ex.setsLogged.length + 1 <= (ex.prescribedSets || 3) ? ex.prescribedSets || 3 : ex.setsLogged.length} × ${esc(ex.repRangeString)}` : ''}</div>
           ${lastTime ? `<div class="muted small" style="cursor:pointer;" id="exLastTimeCopy" data-ex-last-weight="${lastTime.weight}" data-ex-last-reps="${lastTime.repsPerSet[lastTime.repsPerSet.length - 1]}">Last: ${esc(lastTime.label)} <span style="text-decoration:underline;">(tap to copy)</span></div>` : `<div class="muted small">First time logging this one</div>`}
-          ${goal ? `<div class="muted small">Goal: ${toDisplayWeight(goal.weight).value} × ${goal.reps}</div>` : ''}
+          ${goalLineHtml(ex)}
         </div>
       </div>
 
@@ -10548,6 +10768,7 @@ function renderExerciseDetailScreen(panel, idx) {
   $('#exOverviewBackBtn').addEventListener('click', () => { liveWorkoutScreen = 'overview'; renderLiftsTab(); });
   $('#exTodayToggleBtn').addEventListener('click', () => { exerciseDetailTodayExpanded = !exerciseDetailTodayExpanded; todaysLiftsRemoveConfirm = null; renderLiftsTab(); });
   wireTodaysOtherLiftsEvents(panel);
+  wireGoalLineEvents(panel, ex);
   const lastCopyEl = $('#exLastTimeCopy', panel);
   if (lastCopyEl) lastCopyEl.addEventListener('click', () => {
     exerciseDetailInput.weight = String(toDisplayWeight(Number(lastCopyEl.dataset.exLastWeight)).value);
@@ -11259,6 +11480,7 @@ function wlsAddExercise(name, opts = {}) {
       prescribedSets: opts.prescribedSets ?? null,
       trackingType: opts.trackingType || 'weight_reps', liftRowId: null, done: false,
       supersetGroup: opts.supersetGroup ?? null, setsLogged: [],
+      targetOverride: null, // {weight, reps} | null - this session's own tap-to-override of the Goal line, see effectiveGoalFor()
     });
     idx = session.exercises.length - 1;
   }
