@@ -9321,6 +9321,179 @@ function wireWeeklyHardSetsEvents(panel) {
   if (infoBtn) infoBtn.addEventListener('click', () => { weeklySetsInfoExpanded = !weeklySetsInfoExpanded; renderLiftsTab(); });
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Weekly volume (SMART PROGRAM batch, phone 7) - "done so far / planned
+// for the week" per muscle, against the goal's target band. Distinct
+// from the pre-existing Weekly Training Volume card above (a rolling
+// 7-day, done-only guideline shown on the Training sub-tab) - this is a
+// real calendar-week comparison with a forward-looking planned total,
+// reached from its own Progress-tab row.
+// ══════════════════════════════════════════════════════════════════
+let weeklyVolumeWeekToggle = 'this'; // 'this' | 'last'
+let weeklyVolumeExpandedMuscle = null; // a MUSCLE_MAP_KEYS key, or null
+
+// Same primary/secondary resolution order computeWeeklyHardSetsByMuscle
+// already uses (a lift's own muscle_map_keys override wins, else the
+// exercise def) - pulled out so both can share it rather than drifting.
+function resolveLiftMuscleKeys(lift) {
+  if (lift.muscle_map_keys && lift.muscle_map_keys.length) {
+    const [primaryMuscleKey, ...secondaryMuscleKeys] = lift.muscle_map_keys;
+    return { primaryMuscleKey, secondaryMuscleKeys };
+  }
+  const def = exerciseDefFor(lift.exercise);
+  if (!def || !def.muscle_map_key) return { primaryMuscleKey: null, secondaryMuscleKeys: [] };
+  return { primaryMuscleKey: def.muscle_map_key, secondaryMuscleKeys: def.muscle_map_secondary_keys || [] };
+}
+
+// The week's FULL intended total per muscle - every one of the 7 dates'
+// effective (override-aware) scheduled day, resolved through
+// resolvedDayExercises() so a "fold into next day" choice is reflected
+// here too. This does NOT shrink just because a day hasn't happened yet
+// or was missed outright (principle 5: a miss never lowers a target) -
+// only an actual Skip (which resolves that date to null) removes its
+// sets from the total, exactly like the missed-session sheet's own
+// "Targets stay" / "Weekly sets planned: N fewer" preview numbers.
+function weeklyVolumePlannedByMuscle(block, overrides, dates) {
+  const totals = {};
+  dates.forEach((date) => {
+    const dayIdx = effectiveBlockDayIndex(block, date, overrides);
+    resolvedDayExercises(block, dayIdx, date, overrides).forEach((ex) => {
+      const def = exerciseDefFor(ex.name);
+      const sets = ex.sets || 0;
+      if (def?.muscle_map_key) totals[def.muscle_map_key] = (totals[def.muscle_map_key] || 0) + sets * PROGRAM_RULES_CONFIG.weeklyVolume.primaryMuscleWeight;
+      (def?.muscle_map_secondary_keys || []).forEach((k) => { totals[k] = (totals[k] || 0) + sets * PROGRAM_RULES_CONFIG.weeklyVolume.secondaryMuscleWeight; });
+    });
+  });
+  return totals;
+}
+
+// "Tap a muscle to see which exercises count and their set contribution."
+function contributingExercisesForMuscle(muscleKey, dates) {
+  const rows = [];
+  state.lifts.filter((l) => dates.includes(l.date)).forEach((l) => {
+    const { primaryMuscleKey, secondaryMuscleKeys } = resolveLiftMuscleKeys(l);
+    const sets = workingSetCount(l);
+    if (!sets) return;
+    if (primaryMuscleKey === muscleKey) rows.push({ name: l.exercise, contribution: sets, role: 'primary' });
+    else if (secondaryMuscleKeys.includes(muscleKey)) rows.push({ name: l.exercise, contribution: sets * PROGRAM_RULES_CONFIG.weeklyVolume.secondaryMuscleWeight, role: 'secondary' });
+  });
+  return rows;
+}
+
+// The banner's gap/over copy - computed from real schedule + logged
+// data, never AI-written, per the spec's own "computed, not AI."
+function weeklyVolumeGapBanner(block, overrides, dates, doneTotals, plannedTotals, priorities) {
+  if (weeklyVolumeWeekToggle === 'last' || !block) return null;
+  const today = localDateStr();
+  const statusFor = (k) => weeklyVolumeStatus(doneTotals[k] || 0, weeklyVolumeTargetBand(k, priorities));
+  // Only muscles this split actually trains (planned > 0) are worth
+  // flagging - a muscle with nothing scheduled at all isn't "under
+  // target," it's simply not part of this program.
+  const trained = MUSCLE_MAP_KEYS.filter((k) => (plannedTotals[k] || 0) > 0);
+  const underMuscles = trained.filter((k) => statusFor(k) === 'under');
+  const overMuscles = trained.filter((k) => statusFor(k) === 'over');
+  if (!underMuscles.length && !overMuscles.length) return null;
+  const loggedDates = new Set(state.lifts.map((l) => l.date));
+  const sessionsLeft = dates.filter((d) => d >= today && effectiveBlockDayIndex(block, d, overrides) != null && !loggedDates.has(d)).length;
+  let coveringDayLabel = null;
+  for (const d of dates) {
+    if (d < today) continue;
+    const idx = effectiveBlockDayIndex(block, d, overrides);
+    if (idx == null) continue;
+    const exs = resolvedDayExercises(block, idx, d, overrides);
+    if (exs.some((ex) => underMuscles.includes(exerciseDefFor(ex.name)?.muscle_map_key))) { coveringDayLabel = block.blockDays[idx].label; break; }
+  }
+  const parts = [];
+  if (underMuscles.length) {
+    const names = underMuscles.map((k) => MUSCLE_MAP_KEY_LABELS[k]).join(' and ');
+    parts.push(`${esc(names)} ${underMuscles.length === 1 ? 'is' : 'are'} under target with ${sessionsLeft} session${sessionsLeft === 1 ? '' : 's'} left.${coveringDayLabel ? ` ${esc(coveringDayLabel)} covers them.` : ''}`);
+  }
+  if (overMuscles.length) {
+    const names = overMuscles.map((k) => MUSCLE_MAP_KEY_LABELS[k]).join(', ');
+    parts.push(`${esc(names)} ${overMuscles.length === 1 ? 'is' : 'are'} over: consider trimming.`);
+  }
+  return parts.join(' ');
+}
+
+function weeklyVolumeRowHtml() {
+  return `
+    <div class="card" id="progressWeeklyVolumeRow" style="cursor:pointer;">
+      <div class="row" style="justify-content:space-between;align-items:center;border-top:none;padding-top:0;">
+        <h3 style="margin:0;">Weekly Volume</h3><span class="muted">›</span>
+      </div>
+      <p class="muted small" style="margin-top:0.3rem;">Done sets so far, against this week's plan.</p>
+    </div>`;
+}
+
+function weeklyVolumeStatusColor(status) {
+  if (status === 'under') return '#B08D52';
+  if (status === 'over') return 'var(--danger)';
+  return 'var(--success)';
+}
+
+function weeklyVolumeSectionHtml() {
+  const block = state.profile?.active_training_block;
+  const thisWeekStart = getWeekStart(localDateStr());
+  const weekStart = weeklyVolumeWeekToggle === 'last' ? subtractDays(thisWeekStart, 7) : thisWeekStart;
+  const dates = Array.from({ length: 7 }, (_, i) => subtractDays(weekStart, -i));
+  const overrides = weeklyVolumeWeekToggle === 'last' ? {} : pruneScheduleOverrides(state.profile?.schedule_overrides_this_week);
+  const priorities = block?.priorities || [];
+
+  const doneLifts = state.lifts.filter((l) => dates.includes(l.date)).map((l) => {
+    const { primaryMuscleKey, secondaryMuscleKeys } = resolveLiftMuscleKeys(l);
+    return { primaryMuscleKey, secondaryMuscleKeys, sets: workingSetCount(l) };
+  });
+  const done = weeklyVolumeForWeek(doneLifts);
+  const planned = block ? weeklyVolumePlannedByMuscle(block, overrides, dates) : {};
+  const banner = weeklyVolumeGapBanner(block, overrides, dates, done, planned, priorities);
+
+  return `
+    <button class="btn-link" id="weeklyVolumeBackBtn" style="text-transform:none;text-decoration:underline;">&#8249; Progress</button>
+    <div class="pagetitle" style="margin:0.2rem 0 0.1rem;font-size:1.69rem;">Weekly volume</div>
+    <div class="seg-control" style="margin-bottom:0.6rem;">
+      <span class="${weeklyVolumeWeekToggle === 'this' ? 'on' : ''}" data-wv-week="this">This week</span>
+      <span class="${weeklyVolumeWeekToggle === 'last' ? 'on' : ''}" data-wv-week="last">Last</span>
+    </div>
+    <p class="muted small" style="margin:0 0 0.6rem;">Hard sets per muscle. The outlined band is the target for your goal.</p>
+    <div class="card">
+      ${MUSCLE_MAP_KEYS.filter((k) => (planned[k] || 0) > 0 || (done[k] || 0) > 0).map((k) => {
+        const doneVal = Math.round((done[k] || 0) * 10) / 10;
+        const plannedVal = Math.max(doneVal, Math.round((planned[k] || 0) * 10) / 10);
+        const band = weeklyVolumeTargetBand(k, priorities);
+        const status = weeklyVolumeStatus(doneVal, band);
+        const maxScale = Math.max(band.high, plannedVal, 1);
+        const donePct = Math.max(0, Math.min(100, (doneVal / maxScale) * 100));
+        const bandLowPct = Math.max(0, Math.min(100, (band.low / maxScale) * 100));
+        const bandHighPct = Math.max(0, Math.min(100, (band.high / maxScale) * 100));
+        return `<div class="row" style="align-items:center;gap:0.6rem;padding:0.35rem 0;cursor:pointer;" data-wv-muscle="${k}">
+          <span class="small" style="flex:none;min-width:4.5rem;">${esc(MUSCLE_MAP_KEY_LABELS[k])}</span>
+          <div style="flex:1;height:0.57rem;background:var(--surface-3);border-radius:0.3rem;position:relative;overflow:visible;">
+            <div style="position:absolute;left:${bandLowPct}%;width:${Math.max(0, bandHighPct - bandLowPct)}%;top:-2px;bottom:-2px;border:1px solid var(--text-dim);border-radius:0.35rem;"></div>
+            <div style="width:${donePct}%;height:100%;border-radius:0.3rem;background:${weeklyVolumeStatusColor(status)};"></div>
+          </div>
+          <span class="mono small" style="flex:none;min-width:0;">${doneVal}/${plannedVal}</span>
+        </div>
+        ${weeklyVolumeExpandedMuscle === k ? `
+          <div style="margin:0 0 0.5rem 5.1rem;padding:0.4rem 0 0.4rem 0.6rem;border-left:2px solid var(--border);">
+            ${contributingExercisesForMuscle(k, dates).length ? contributingExercisesForMuscle(k, dates).map((r) => `<div class="row" style="justify-content:space-between;padding:0.15rem 0;"><span class="small">${esc(r.name)}${r.role === 'secondary' ? ' <span class="muted">(secondary)</span>' : ''}</span><span class="mono muted small">${Math.round(r.contribution * 10) / 10}</span></div>`).join('') : `<p class="muted small" style="margin:0;">No exercises logged for this muscle ${weeklyVolumeWeekToggle === 'last' ? 'that week' : 'yet this week'}.</p>`}
+          </div>` : ''}`;
+      }).join('')}
+    </div>
+    ${banner ? `<div class="banner">${banner}</div>` : ''}
+    <p class="muted small" data-why-open="weekly_volume">How is this counted? <span style="text-decoration:underline;">Why?</span></p>
+  `;
+}
+
+function wireWeeklyVolumeSectionEvents(panel) {
+  $('#weeklyVolumeBackBtn', panel).addEventListener('click', () => { progressOverviewTab = 'overview'; renderProgressTab(); });
+  $$('[data-wv-week]', panel).forEach((el) => el.addEventListener('click', () => { weeklyVolumeWeekToggle = el.dataset.wvWeek; weeklyVolumeExpandedMuscle = null; renderProgressTab(); }));
+  $$('[data-wv-muscle]', panel).forEach((row) => row.addEventListener('click', () => {
+    const k = row.dataset.wvMuscle;
+    weeklyVolumeExpandedMuscle = weeklyVolumeExpandedMuscle === k ? null : k;
+    renderProgressTab();
+  }));
+}
+
 const MUSCLE_MAP_WINDOWS = [[7, '7 Days'], [30, '30 Days'], [null, 'All Time']];
 let muscleMapWindow = 7;
 let muscleMapSelectedRegion = null; // a MUSCLE_MAP_KEYS key now, not a BODY_REGIONS one
@@ -13489,7 +13662,12 @@ const PROGRAM_RULES_CONFIG = {
     ],
     evidenceId: 'double_progression_welcomeback_swap',
   },
-  weeklyVolume: { primaryMuscleWeight: 1, secondaryMuscleWeight: 0.5, evidenceId: 'weekly_volume' },
+  // targetBand: "size 10-20" per this batch's own fallback instruction
+  // (same numbers as the pre-existing WEEKLY_SETS_GUIDELINE, so the two
+  // don't show conflicting guidance side by side); emphasisBonus: "+4"
+  // for a block's own priority muscles (active_training_block.priorities
+  // - already-built data, not a new field).
+  weeklyVolume: { primaryMuscleWeight: 1, secondaryMuscleWeight: 0.5, targetBand: { low: 10, high: 20 }, emphasisBonus: 4, evidenceId: 'weekly_volume' },
   smartSwap: {
     rankOrder: ['same_primary_muscle', 'same_movement_pattern', 'available_equipment', 'same_tracking_type', 'not_already_in_workout', 'previously_done'],
     evidenceId: 'double_progression_welcomeback_swap',
@@ -13709,6 +13887,24 @@ function weeklyVolumeForWeek(liftsThisWeek) {
     (l.secondaryMuscleKeys || []).forEach((k) => add(k, sets * PROGRAM_RULES_CONFIG.weeklyVolume.secondaryMuscleWeight));
   }
   return totals;
+}
+
+// Target band for the weekly-volume bars (phone 7) - the goal's band
+// (default 10-20, "size" goal's own range once GOALS_CONFIG is merged)
+// plus the config's emphasis bonus for a block's own priority muscles.
+// priorities: active_training_block.priorities (already-built data).
+function weeklyVolumeTargetBand(muscleKey, priorities) {
+  const band = PROGRAM_RULES_CONFIG.weeklyVolume.targetBand;
+  const bonus = (priorities || []).includes(muscleKey) ? PROGRAM_RULES_CONFIG.weeklyVolume.emphasisBonus : 0;
+  return { low: band.low + bonus, high: band.high + bonus };
+}
+// 'under' | 'in_range' | 'over' against that band - under is never
+// treated as a failure (brass, not red), only genuinely over target
+// gets the warn color.
+function weeklyVolumeStatus(value, band) {
+  if (value < band.low) return 'under';
+  if (value > band.high) return 'over';
+  return 'in_range';
 }
 
 // Ranks swap candidates per the config's exact order: same primary
@@ -16052,9 +16248,17 @@ function renderBlockView(panel) {
     </div>
     <div class="card">
       <button class="btn btn-sm" id="blockViewEditDaysBtn">View / customize days</button>
+      <button class="btn btn-sm btn-ghost" id="blockViewWeeklyVolumeBtn" style="margin-top:0.4rem;">Weekly volume &rsaquo;</button>
     </div>
   `;
   $('#blockViewBackBtn').addEventListener('click', () => { showBlockView = false; showPlansHub = true; renderLiftsTab(); });
+  $('#blockViewWeeklyVolumeBtn').addEventListener('click', () => {
+    showBlockView = false;
+    progressOverviewTab = 'weekly_volume';
+    weeklyVolumeExpandedMuscle = null;
+    renderProgressTab();
+    setActiveTab('progress');
+  });
   $('#blockViewEditDaysBtn').addEventListener('click', () => {
     showBlockView = false;
     blockBuilderPreview = state.profile.active_training_block;
@@ -17673,6 +17877,11 @@ function progressInsightsHtml() {
 function renderProgressTab() {
   const panel = $('#panel-progress');
   if (!panel) return;
+  if (progressOverviewTab === 'weekly_volume') {
+    panel.innerHTML = weeklyVolumeSectionHtml();
+    wireWeeklyVolumeSectionEvents(panel);
+    return;
+  }
   panel.innerHTML = `
     <div class="pagehead"><div class="pagetitle">Progress</div></div>
     <div class="seg-control">
@@ -17688,6 +17897,7 @@ function renderProgressTab() {
       ${progressStatHalfCardsHtml()}
       ${muscleMapRowHtml()}
       ${plansBlocksRowHtml()}
+      ${weeklyVolumeRowHtml()}
       ${progressToolsSectionHtml()}
       ${progressHistoryLinksHtml()}
     ` : progressInsightsHtml()}
@@ -17695,6 +17905,8 @@ function renderProgressTab() {
 
   $$('[data-progress-window]', panel).forEach((el) => el.addEventListener('click', () => { progressWindow = el.dataset.progressWindow; renderProgressTab(); }));
   $$('[data-progress-view]', panel).forEach((el) => el.addEventListener('click', () => { progressOverviewTab = el.dataset.progressView; renderProgressTab(); }));
+  const weeklyVolumeRow = $('#progressWeeklyVolumeRow', panel);
+  if (weeklyVolumeRow) weeklyVolumeRow.addEventListener('click', () => { progressOverviewTab = 'weekly_volume'; weeklyVolumeExpandedMuscle = null; renderProgressTab(); });
 
   const topInsight = $('#topInsightCard', panel);
   if (topInsight) topInsight.addEventListener('click', () => { progressOverviewTab = 'insights'; renderProgressTab(); });

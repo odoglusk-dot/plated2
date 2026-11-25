@@ -61,12 +61,14 @@ const EXPORT_NAMES = [
   'nextTargets', 'applyDeloadToSets', 'applyDeloadToWeight', 'isDownAcrossSessions', 'suggestDeload', 'deloadPreview',
   'daysSinceLastWorkout', 'welcomeBack', 'planWeek', 'missedOptions', 'weeklyVolumeForWeek', 'rankSwaps', 'suggestSwapStartWeight',
   'ensureBlockMeta', 'weekInBlockFor', 'blockHasEnded', 'blockWeekStates', 'currentDeload',
+  'weeklyVolumeTargetBand', 'weeklyVolumeStatus',
 ];
 const {
   DEFAULT_REP_RANGE, repRangeForBlock, PROGRAM_RULES_CONFIG, roundToStep, weightStepFor, sessionStatus,
   nextTargets, applyDeloadToSets, applyDeloadToWeight, isDownAcrossSessions, suggestDeload, deloadPreview,
   daysSinceLastWorkout, welcomeBack, planWeek, missedOptions, weeklyVolumeForWeek, rankSwaps, suggestSwapStartWeight,
   ensureBlockMeta, weekInBlockFor, blockHasEnded, blockWeekStates, currentDeload,
+  weeklyVolumeTargetBand, weeklyVolumeStatus,
 } = vm.runInContext(`({${EXPORT_NAMES.join(', ')}})`, sandbox);
 
 // ── Minimal test harness ────────────────────────────────────────────────
@@ -368,6 +370,26 @@ eq(welcomeBack(null), null, 'no history at all => no welcome-back treatment (not
   const result = suggestDeload(histories);
   eq(result.downCount, 4, '4 of 5 lifts dropped e1RM across their last 2 sessions');
   ok(result.suggested, '4 of 5 (80%) meets the configured 80% threshold - deload suggested');
+}
+
+// ── weeklyVolumeTargetBand / weeklyVolumeStatus (Phase 5) ────────────────
+{
+  const band = weeklyVolumeTargetBand('chest', []);
+  eq(band.low, 10, 'default target band low (size goal fallback)');
+  eq(band.high, 20, 'default target band high');
+  const emphasized = weeklyVolumeTargetBand('quads', ['quads']);
+  eq(emphasized.low, 14, 'a priority muscle gets the +4 emphasis bonus added to the low end');
+  eq(emphasized.high, 24, 'and to the high end');
+  const notEmphasized = weeklyVolumeTargetBand('chest', ['quads']);
+  eq(notEmphasized.low, 10, 'a muscle not in priorities gets no bonus, even when other muscles are priorities');
+}
+{
+  const band = { low: 10, high: 20 };
+  eq(weeklyVolumeStatus(8, band), 'under', 'below the band is under');
+  eq(weeklyVolumeStatus(10, band), 'in_range', 'the low boundary itself counts as in range');
+  eq(weeklyVolumeStatus(15, band), 'in_range', 'inside the band is in range');
+  eq(weeklyVolumeStatus(20, band), 'in_range', 'the high boundary itself counts as in range');
+  eq(weeklyVolumeStatus(22, band), 'over', 'above the band is over');
 }
 
 console.log(`\n${pass} passed, ${fail} failed.`);
