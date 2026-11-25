@@ -914,6 +914,18 @@
   .day-dots i.dd-done { background: var(--accent); }
   .day-dots i.dd-next { background: var(--gold); }
 
+  /* Week dots (block view, phone 2): one per week of the block. The
+     deload (last) week always renders dashed/outlined rather than
+     filled, so it reads as structurally different at a glance; its
+     border color still reflects done/current/upcoming like the rest. */
+  .wk-dots { display: flex; gap: 0.28rem; margin: 0.5rem 0 0; }
+  .wk-dots i { flex: 1; height: 0.44rem; border-radius: 0.27rem; background: #DAD5C8; display: block; font-style: normal; box-sizing: border-box; }
+  .wk-dots i.wk-dot-done { background: var(--accent); }
+  .wk-dots i.wk-dot-current { background: var(--gold); }
+  .wk-dots i.wk-dot-deload { background: transparent; border: 0.14rem dashed var(--text-dim); }
+  .wk-dots i.wk-dot-deload.wk-dot-done { border-color: var(--accent); }
+  .wk-dots i.wk-dot-deload.wk-dot-current { border-color: var(--gold); }
+
   /* Dark hero card (used for the active-program summary) - mockup
      linear-gradient(160deg,#25272C,#17181B), radius 18px x1.4234 -> 26px. */
   .dark-hero-card { background: linear-gradient(160deg, #25272C, #17181B); color: #fff; border-radius: 1.6rem; padding: 1rem 1.06rem; margin-bottom: 0.8rem; }
@@ -9792,8 +9804,12 @@ function computeDoubleProgressionGoal(exerciseName, repRangeString) {
   const step = weightStepForExercise(exerciseName);
   const t = nextTargets(history, range, step);
   if (t.action === 'first_session') return null;
-  if (t.repsPerSet) return { weight: t.weight, reps: Math.min(...t.repsPerSet), action: t.action, note: t.note };
-  return { weight: t.weight, reps: t.reps, action: t.action, note: t.note };
+  const activeBlock = state.profile?.active_training_block;
+  const onDeload = activeBlock && !!currentDeload(ensureBlockMeta(activeBlock), localDateStr());
+  const deloadWeight = (w) => (onDeload ? applyDeloadToWeight(w, step) : w);
+  const note = onDeload ? 'Deload week: weight reduced about 10%.' : t.note;
+  if (t.repsPerSet) return { weight: deloadWeight(t.weight), reps: Math.min(...t.repsPerSet), action: t.action, note };
+  return { weight: deloadWeight(t.weight), reps: t.reps, action: t.action, note };
 }
 
 // Tap-the-goal-line override (Phase 2.1): "stored; the engine treats it
@@ -10106,6 +10122,8 @@ function renderLiftsTab() {
   const panel = $('#panel-lifts');
   if (!panel) return;
   if (showHowTargetsPage) return renderHowTargetsPage(panel);
+  if (showDeloadScreen) return renderDeloadScreen(panel);
+  if (showBlockView) return renderBlockView(panel);
   updateScreenSheetTitle();
   if (plusLogSetMode === 'pick') return renderPlusLogSetPicker(panel);
   if (plusLogSetMode === 'quick') return renderPlusLogSetQuick(panel, plusLogSetExerciseIdx);
@@ -13533,6 +13551,78 @@ function rankSwaps(exercise, candidates, opts = {}) {
 // history -> show no number." ownHistoryOnNew/ownHistoryOnOld are this
 // user's own lift history (may be empty) for the new and current
 // exercise respectively.
+// Phase 3.1: additive, nullable block fields - block number, block length
+// (weeks), and the date THIS block number started (separate from
+// createdDate so "run it again" can start a fresh block without losing
+// the original start date, though for a block that has never been rerun
+// the two are the same day). Existing blocks made before these fields
+// existed get the defaults here, in memory, every time they're read; the
+// caller persists them to profiles.active_training_block the first time
+// the block view is actually opened - never retroactively for every
+// block at once (the spec's own "never retroactively" instruction).
+function ensureBlockMeta(block) {
+  if (!block) return block;
+  return {
+    ...block,
+    blockNumber: block.blockNumber || 1,
+    blockLength: block.blockLength || PROGRAM_RULES_CONFIG.block.defaultWeeks,
+    blockStartDate: block.blockStartDate || block.createdDate,
+    deload: block.deload || null, // the one-week overlay, {startedDate, reason: 'scheduled'|'reactive'} | null
+    deloadSnoozedUntil: block.deloadSnoozedUntil || null,
+  };
+}
+
+// Which calendar week of the block (1..blockLength) "today" falls in -
+// generalizes the old hardcoded "Week X/4" display to the config's 4-8
+// week range. Clamped to blockLength so a block that's run long (missed
+// the review) still reads as "week L", not an out-of-range number.
+function weekInBlockFor(block, dateStr) {
+  const length = block.blockLength || PROGRAM_RULES_CONFIG.block.defaultWeeks;
+  const start = new Date(`${block.blockStartDate || block.createdDate}T00:00:00`);
+  const today = new Date(`${dateStr}T00:00:00`);
+  const daysSince = Math.round((today - start) / 86400000);
+  return Math.min(length, Math.max(1, Math.floor(Math.max(0, daysSince) / 7) + 1));
+}
+
+// True once the block's full duration (including its deload week) has
+// elapsed - the block-review screen's trigger (phone 4).
+function blockHasEnded(block, dateStr) {
+  const length = block.blockLength || PROGRAM_RULES_CONFIG.block.defaultWeeks;
+  const start = new Date(`${block.blockStartDate || block.createdDate}T00:00:00`);
+  const today = new Date(`${dateStr}T00:00:00`);
+  const daysSince = Math.round((today - start) / 86400000);
+  return daysSince >= length * 7;
+}
+
+// One entry per week, 1..blockLength, for the week-dots strip (phone 2) -
+// status is 'done' | 'current' | 'upcoming', isDeload flags the last week
+// (drawn dashed) when the config says the last week is a deload.
+function blockWeekStates(block, dateStr) {
+  const length = block.blockLength || PROGRAM_RULES_CONFIG.block.defaultWeeks;
+  const current = weekInBlockFor(block, dateStr);
+  const states = [];
+  for (let w = 1; w <= length; w++) {
+    states.push({
+      week: w,
+      isDeload: w === length && PROGRAM_RULES_CONFIG.block.deloadIsLastWeek,
+      status: w < current ? 'done' : w === current ? 'current' : 'upcoming',
+    });
+  }
+  return states;
+}
+
+// The deload overlay actually in effect today, or null - a deload only
+// stays "active" for the 7 days starting on its own startedDate, after
+// which it lapses on its own (no explicit clear needed, so a stale
+// profiles row never leaves a deload stuck on forever).
+function currentDeload(block, dateStr) {
+  if (!block.deload) return null;
+  const started = new Date(`${block.deload.startedDate}T00:00:00`);
+  const today = new Date(`${dateStr}T00:00:00`);
+  const daysSince = Math.round((today - started) / 86400000);
+  return daysSince >= 0 && daysSince < 7 ? block.deload : null;
+}
+
 function suggestSwapStartWeight(ownHistoryOnNew, ownHistoryOnOld) {
   if (ownHistoryOnNew && ownHistoryOnNew.length) {
     const last = ownHistoryOnNew[ownHistoryOnNew.length - 1];
@@ -15423,6 +15513,13 @@ let blockBuilderPreview = null;
 let blockBuilderExpandedDayIndex = -1;
 let blockBuilderViewingActive = false;
 let blockBuilderStarting = false;
+
+// Smart Program batch, Phase 3 (phones 2-4) - block view, deload
+// suggestion, block review. All three are reached from the block summary
+// card's "View block" button (renderBlockView decides which one to show).
+let showBlockView = false;
+let showDeloadScreen = false; // true while the deload suggestion screen (phone 3) is open
+let blockLengthEditing = false; // inline "Change it in Edit program" chip row open on the block view
 // Manual per-instance overrides UI state (substitute/add/remove exercise,
 // edit sets/reps) — a one-off adjustment to the current plan, never the
 // rule engine. Keyed by "dayIndex:exerciseIndex" so each lives independent
@@ -15565,14 +15662,13 @@ function blockBuilderSummaryCardHtml() {
       <button class="btn btn-sm" id="blockBuilderOpenBtn">Build a block</button>
     </div>`;
   }
-  const start = new Date(`${active.createdDate}T00:00:00`);
-  const today = new Date(`${localDateStr()}T00:00:00`);
-  const daysSince = Math.round((today - start) / 86400000);
-  const weekNum = Math.min(4, Math.floor(Math.max(0, daysSince) / 7) + 1);
+  const meta = ensureBlockMeta(active);
+  const weekNum = weekInBlockFor(meta, localDateStr());
+  const onDeload = !!currentDeload(meta, localDateStr());
   const focusOpt = BLOCK_FOCUS_OPTIONS.find((o) => o.key === active.focus);
   const focusName = focusOpt ? focusOpt.name : (PLAN_PHASE_TYPES[active.focus]?.name || active.focus);
   // When a Plan is driving the current block, its phase index is the
-  // more meaningful progress indicator than the block's own Week X/4 —
+  // more meaningful progress indicator than the block's own Week X/L —
   // both are shown so the two cards read as connected. The block's own
   // End button is hidden in this state (see planSummaryCardHtml's End
   // Plan button below) so a user can't orphan the plan by ending just
@@ -15582,7 +15678,7 @@ function blockBuilderSummaryCardHtml() {
   return `<div class="card">
     <div class="row" style="justify-content:space-between;align-items:center;">
       <h3 style="margin:0;">Training Block</h3>
-      <span class="muted small">Week ${weekNum}/4 · ${esc(BLOCK_WEEK_STRIP[weekNum - 1])}</span>
+      <span class="muted small">Week ${weekNum}/${meta.blockLength}${onDeload ? ' · Deload' : ''}</span>
     </div>
     <p class="muted small" style="margin-top:0.25rem;">${esc(focusName)} · ${esc(blockSplitName(active.days))}${planContext}</p>
     <div class="row" style="margin-top:0.5rem;">
@@ -15600,7 +15696,176 @@ function wireBlockBuilderSummaryEvents(panel) {
     renderLiftsTab();
   });
   const viewBtn = $('#blockBuilderViewBtn', panel);
-  if (viewBtn) viewBtn.addEventListener('click', () => {
+  if (viewBtn) viewBtn.addEventListener('click', openBlockView);
+  const endBtn = $('#blockBuilderEndBtn', panel);
+  if (endBtn) endBtn.addEventListener('click', async () => {
+    const { error } = await supabase.from('profiles').update({ active_training_block: null }).eq('id', state.user.id);
+    if (error) return toast('Could not end block: ' + error.message);
+    state.profile = { ...state.profile, active_training_block: null };
+    renderLiftsTab();
+  });
+}
+
+// Persists ensureBlockMeta()'s defaults the first time they're actually
+// missing - "existing programs start as Block 1, week 1 the first time
+// they are opened after the update, never retroactively" (phase 3.1):
+// this only ever writes when opening the block view finds a gap, never
+// as a batch migration.
+async function openBlockView() {
+  const active = state.profile?.active_training_block;
+  if (!active) return;
+  const meta = ensureBlockMeta(active);
+  const changed = meta.blockNumber !== (active.blockNumber || null) || meta.blockLength !== (active.blockLength || null) || meta.blockStartDate !== (active.blockStartDate || null);
+  if (changed) {
+    const { error } = await supabase.from('profiles').update({ active_training_block: meta }).eq('id', state.user.id);
+    if (!error) state.profile = { ...state.profile, active_training_block: meta };
+  }
+  showBlockView = true;
+  blockLengthEditing = false;
+  setActiveTab('lifts');
+  renderLiftsTab();
+}
+
+// Deduped compound-movement exercise names across the block's own days -
+// the practical "main lifts" stand-in documented in the engine's
+// suggestDeload() comment (generated blocks don't persist a role past
+// generation time).
+function blockMainLiftNames(block) {
+  const names = [];
+  const seen = new Set();
+  (block.blockDays || []).forEach((day) => day.exercises.forEach((ex) => {
+    const def = exerciseDefFor(ex.name);
+    if (def && def.movement_type === 'compound' && !seen.has(ex.name)) { seen.add(ex.name); names.push(ex.name); }
+  }));
+  return names;
+}
+
+// Full (not block-scoped) history per main lift, for suggestDeload()'s
+// "down across the last 2 sessions" check - the trigger looks at recent
+// training regardless of when the current block started.
+function mainLiftHistoriesForBlock(block) {
+  const histories = {};
+  blockMainLiftNames(block).forEach((name) => {
+    histories[name] = state.lifts.filter((l) => l.exercise === name).sort((a, b) => a.date.localeCompare(b.date));
+  });
+  return histories;
+}
+
+// Est. max change "this block so far" (phone 2) - first vs. most recent
+// logged session on this lift SINCE the block started, both run through
+// e1RM (same function session analysis uses - phase 2.3's reuse applies
+// here too). null when nothing's been logged on it yet this block.
+function estMaxChangeInBlock(name, block) {
+  const start = block.blockStartDate || block.createdDate;
+  const history = state.lifts.filter((l) => l.exercise === name && l.date >= start).sort((a, b) => a.date.localeCompare(b.date));
+  if (!history.length) return null;
+  const first = history[0], last = history[history.length - 1];
+  return { from: Math.round(e1RM(first.weight, first.reps)), to: Math.round(e1RM(last.weight, last.reps)) };
+}
+
+function sessionsDoneInBlock(block) {
+  const start = block.blockStartDate || block.createdDate;
+  return new Set(state.lifts.filter((l) => l.date >= start && l.date <= localDateStr()).map((l) => l.date)).size;
+}
+function sessionsPlannedInBlock(block, dateStr) {
+  return (block.blockDays?.length || 0) * weekInBlockFor(block, dateStr);
+}
+
+// Whether to show the deload banner today, and why - null when nothing
+// to suggest right now. A deload already active (currentDeload) or
+// snoozed this week never shows a NEW suggestion on top of itself.
+function deloadSuggestionState(block, dateStr) {
+  if (currentDeload(block, dateStr)) return null;
+  if (block.deloadSnoozedUntil && dateStr < block.deloadSnoozedUntil) return null;
+  const length = block.blockLength || PROGRAM_RULES_CONFIG.block.defaultWeeks;
+  if (weekInBlockFor(block, dateStr) === length && PROGRAM_RULES_CONFIG.block.deloadIsLastWeek && !blockHasEnded(block, dateStr)) {
+    return { reason: 'scheduled' };
+  }
+  const result = suggestDeload(mainLiftHistoriesForBlock(block));
+  return result.suggested ? { reason: 'reactive', downCount: result.downCount, totalMainLifts: result.totalMainLifts } : null;
+}
+
+// "Deload this week" (Apply) - a one-week overlay stored on the block
+// object itself, never a rewrite of blockDays' saved sets/weights
+// (principle 2: past sessions, and the plan's own saved numbers, never
+// change). Read back by currentDeload() wherever the goal line needs to
+// know whether today is a deload day.
+async function applyDeloadNow(reason) {
+  const active = state.profile?.active_training_block;
+  if (!active) return;
+  const next = { ...ensureBlockMeta(active), deload: { startedDate: localDateStr(), reason } };
+  const { error } = await supabase.from('profiles').update({ active_training_block: next }).eq('id', state.user.id);
+  if (error) { toast('Could not start deload: ' + error.message); return; }
+  state.profile = { ...state.profile, active_training_block: next };
+  showDeloadScreen = false;
+  toast('This week is set to a deload.');
+  renderLiftsTab();
+}
+// "Not now" - snoozes the SUGGESTION for 7 days; never touches the plan.
+async function snoozeDeloadSuggestion() {
+  const active = state.profile?.active_training_block;
+  if (!active) return;
+  const next = { ...ensureBlockMeta(active), deloadSnoozedUntil: subtractDays(localDateStr(), -7) };
+  const { error } = await supabase.from('profiles').update({ active_training_block: next }).eq('id', state.user.id);
+  if (error) { toast('Could not snooze: ' + error.message); return; }
+  state.profile = { ...state.profile, active_training_block: next };
+  showDeloadScreen = false;
+  renderLiftsTab();
+}
+
+// Block view (mockup phone 2). Delegates to the block-review screen once
+// the block's full duration (deload week included) has elapsed.
+function renderBlockView(panel) {
+  const active = state.profile?.active_training_block;
+  if (!active) { showBlockView = false; renderLiftsTab(); return; }
+  const block = ensureBlockMeta(active);
+  const today = localDateStr();
+  if (blockHasEnded(block, today)) return renderBlockReview(panel, block);
+
+  const focusOpt = BLOCK_FOCUS_OPTIONS.find((o) => o.key === block.focus);
+  const focusName = block.sourceProgramName || (focusOpt ? focusOpt.name : (PLAN_PHASE_TYPES[block.focus]?.name || block.focus));
+  const weekNum = weekInBlockFor(block, today);
+  const weekStates = blockWeekStates(block, today);
+  const onDeload = !!currentDeload(block, today);
+  const suggestion = deloadSuggestionState(block, today);
+  const mainLifts = blockMainLiftNames(block).slice(0, 2);
+  const sessionsDone = sessionsDoneInBlock(block);
+  const sessionsPlanned = sessionsPlannedInBlock(block, today);
+
+  panel.innerHTML = `
+    <button class="btn-link" id="blockViewBackBtn" style="text-transform:none;text-decoration:underline;">&#8249; Plans</button>
+    <div class="pagetitle" style="margin:0.2rem 0 0.1rem;font-size:1.69rem;">${esc(focusName)}</div>
+    <p class="muted small" style="margin:0 0 0.6rem;">Your version &middot; ${esc(blockSplitName(block.days))} &middot; ${block.days} days</p>
+    <div class="card">
+      <strong>Block ${block.blockNumber} &middot; Week ${weekNum} of ${block.blockLength}</strong>
+      <p class="muted small" style="margin:0.2rem 0 0;">${onDeload ? 'This is a deload week.' : `Deload in week ${block.blockLength}`}</p>
+      <div class="wk-dots">${weekStates.map((w) => `<i class="wk-dot-${w.status}${w.isDeload ? ' wk-dot-deload' : ''}"></i>`).join('')}</div>
+      <p class="muted small" style="margin-top:0.4rem;">Week ${block.blockLength} is a lighter week so you come back fresh.</p>
+      ${suggestion ? `<div class="banner" id="deloadSuggestionBanner" style="cursor:pointer;margin-top:0.6rem;margin-bottom:0;">${suggestion.reason === 'reactive' ? 'Your last sessions were down. A lighter week may help.' : 'This block has reached its deload week.'} <span style="text-decoration:underline;">Review</span></div>` : ''}
+    </div>
+    <div class="card">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">This block so far</div>
+      ${mainLifts.length ? mainLifts.map((name) => {
+        const chg = estMaxChangeInBlock(name, block);
+        if (!chg) return '';
+        return `<div class="row" style="justify-content:space-between;margin-top:0.4rem;"><span class="small">Est. max, ${esc(name)}</span><span class="mono small">${toDisplayWeight(chg.from).value} &rarr; ${toDisplayWeight(chg.to).value} ${weightUnitLabel()}</span></div>`;
+      }).join('') : `<p class="muted small" style="margin:0.4rem 0 0;">No main-lift sessions logged yet this block.</p>`}
+      <div class="row" style="justify-content:space-between;margin-top:0.4rem;"><span class="small">Sessions done</span><span class="mono small">${sessionsDone} of ${sessionsPlanned}</span></div>
+    </div>
+    <div class="card">
+      ${blockLengthEditing ? `
+        <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Block length</div>
+        <div class="chip-row">${[4, 5, 6, 7, 8].map((n) => `<button class="chip ${n === block.blockLength ? 'chip-active' : ''}" data-block-length="${n}">${n}</button>`).join('')}</div>
+      ` : `<p class="muted small" style="margin:0;">Block length: ${block.blockLength} weeks. <span id="blockLengthEditLink" style="text-decoration:underline;cursor:pointer;">Change it</span></p>`}
+      <p class="muted small" style="margin:0.4rem 0 0;" data-why-open="deloading">Why deload? <span style="text-decoration:underline;">Why?</span></p>
+    </div>
+    <div class="card">
+      <button class="btn btn-sm" id="blockViewEditDaysBtn">View / customize days</button>
+    </div>
+  `;
+  $('#blockViewBackBtn').addEventListener('click', () => { showBlockView = false; showPlansHub = true; renderLiftsTab(); });
+  $('#blockViewEditDaysBtn').addEventListener('click', () => {
+    showBlockView = false;
     blockBuilderPreview = state.profile.active_training_block;
     blockBuilderExpandedDayIndex = -1;
     blockBuilderViewingActive = true;
@@ -15608,11 +15873,120 @@ function wireBlockBuilderSummaryEvents(panel) {
     showBlockBuilder = true;
     renderLiftsTab();
   });
-  const endBtn = $('#blockBuilderEndBtn', panel);
-  if (endBtn) endBtn.addEventListener('click', async () => {
-    const { error } = await supabase.from('profiles').update({ active_training_block: null }).eq('id', state.user.id);
-    if (error) return toast('Could not end block: ' + error.message);
-    state.profile = { ...state.profile, active_training_block: null };
+  const suggestionBanner = $('#deloadSuggestionBanner', panel);
+  if (suggestionBanner) suggestionBanner.addEventListener('click', () => { showDeloadScreen = true; renderLiftsTab(); });
+  const lengthLink = $('#blockLengthEditLink', panel);
+  if (lengthLink) lengthLink.addEventListener('click', () => { blockLengthEditing = true; renderLiftsTab(); });
+  $$('[data-block-length]', panel).forEach((btn) => btn.addEventListener('click', async () => {
+    const n = Number(btn.dataset.blockLength);
+    const next = { ...block, blockLength: n };
+    const { error } = await supabase.from('profiles').update({ active_training_block: next }).eq('id', state.user.id);
+    if (error) { toast('Could not change length: ' + error.message); return; }
+    state.profile = { ...state.profile, active_training_block: next };
+    blockLengthEditing = false;
+    renderLiftsTab();
+  }));
+}
+
+// Deload suggestion screen (mockup phone 3) - reactive and scheduled both
+// land here, same screen, same Apply/Not-now choice, per the mockup's own
+// caption ("the scheduled one in week 6 uses the same screen").
+function renderDeloadScreen(panel) {
+  const active = state.profile?.active_training_block;
+  if (!active) { showDeloadScreen = false; renderLiftsTab(); return; }
+  const block = ensureBlockMeta(active);
+  const today = localDateStr();
+  const suggestion = deloadSuggestionState(block, today) || { reason: 'scheduled' };
+  const todaysOverrides = pruneScheduleOverrides(state.profile?.schedule_overrides_this_week);
+  const todaysDayIdx = effectiveBlockDayIndex(block, today, todaysOverrides);
+  const baselineMinutes = todaysDayIdx != null ? Math.round(block.blockDays[todaysDayIdx].exercises.length * 9) : null;
+  const preview = deloadPreview(baselineMinutes);
+  const message = suggestion.reason === 'reactive'
+    ? `Your last ${PROGRAM_RULES_CONFIG.deload.reactiveTrigger.consecutiveSessions} sessions were down. Est. max dropped on ${suggestion.downCount} of ${suggestion.totalMainLifts} main lifts. A lighter week may help. Your call.`
+    : `This block has reached its scheduled deload week. A lighter week may help. Your call.`;
+  panel.innerHTML = `
+    <button class="btn-link" id="deloadBackBtn" style="text-transform:none;text-decoration:underline;">&#8249; Back</button>
+    <div class="mono" style="text-transform:uppercase;letter-spacing:0.08em;font-weight:700;margin:0.3rem 0 0.2rem;">Deload</div>
+    <p style="margin:0 0 0.8rem;">${esc(message)}</p>
+    <div class="card">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">This week as a deload</div>
+      <div class="row" style="justify-content:space-between;padding:0.2rem 0;"><span class="small">Exercises</span><span class="mono small">${esc(preview.exercises)}</span></div>
+      <div class="row" style="justify-content:space-between;padding:0.2rem 0;"><span class="small">Sets per exercise</span><span class="mono small">&minus;${preview.setsChange}</span></div>
+      <div class="row" style="justify-content:space-between;padding:0.2rem 0;"><span class="small">Weight</span><span class="mono small">&minus;${preview.weightChange}</span></div>
+      <div class="row" style="justify-content:space-between;padding:0.2rem 0;"><span class="small">Effort</span><span class="mono small">${esc(preview.effort)}</span></div>
+      ${preview.sessionMinutes ? `<div class="row" style="justify-content:space-between;padding:0.2rem 0;"><span class="small">Session length</span><span class="mono small">${preview.sessionMinutes.before} &rarr; ${preview.sessionMinutes.after} min</span></div>` : ''}
+    </div>
+    <p class="muted small" data-why-open="deloading">These are our defaults. Experts agree on why to deload, not on exact numbers. <span style="text-decoration:underline;">Why?</span></p>
+    <div class="row" style="gap:0.5rem;margin-top:0.5rem;">
+      <button class="btn" id="deloadNotNowBtn" style="flex:1;">Not now</button>
+      <button class="btn btn-primary" id="deloadApplyBtn" style="flex:1;">Deload this week</button>
+    </div>
+  `;
+  $('#deloadBackBtn').addEventListener('click', () => { showDeloadScreen = false; renderLiftsTab(); });
+  $('#deloadNotNowBtn').addEventListener('click', snoozeDeloadSuggestion);
+  $('#deloadApplyBtn').addEventListener('click', () => applyDeloadNow(suggestion.reason));
+}
+
+// End-of-block review (mockup phone 4), shown instead of the normal block
+// view once blockHasEnded() is true.
+function renderBlockReview(panel, block) {
+  const sessions = sessionsDoneInBlock(block);
+  const mainLifts = blockMainLiftNames(block);
+  const wentUp = [];
+  const stalled = [];
+  mainLifts.forEach((name) => {
+    const chg = estMaxChangeInBlock(name, block);
+    if (chg && chg.to > chg.from) wentUp.push({ name, from: chg.from, to: chg.to });
+    if (isExerciseStalled(name)) {
+      const alt = computeSwapAlternatives(exerciseDefFor(name) || { name }, { limit: 1 })[0];
+      stalled.push({ name, alt: alt?.name || null });
+    }
+  });
+  panel.innerHTML = `
+    <button class="btn-link" id="blockReviewDoneBtn" style="text-transform:none;text-decoration:underline;">&#8249; Done</button>
+    <div class="mono" style="text-transform:uppercase;letter-spacing:0.08em;font-weight:700;margin:0.3rem 0 0.1rem;">Block ${block.blockNumber} review</div>
+    <p class="muted small" style="margin:0 0 0.8rem;">${block.blockLength} weeks, ${sessions} session${sessions === 1 ? '' : 's'}</p>
+    ${wentUp.length ? `<div class="card">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Went up</div>
+      ${wentUp.map((w) => `<div class="row" style="justify-content:space-between;padding:0.2rem 0;"><span class="small">${esc(w.name)}</span><span class="mono small">${toDisplayWeight(w.from).value} &rarr; ${toDisplayWeight(w.to).value} ${weightUnitLabel()}</span></div>`).join('')}
+    </div>` : ''}
+    ${stalled.length ? `<div class="card">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Stalled</div>
+      ${stalled.map((s) => `<p style="margin:0.2rem 0;"><strong>${esc(s.name)}</strong></p><p class="muted small" style="margin:0 0 0.4rem;">Try adding a set${s.alt ? `, or swap to ${esc(s.alt)} for the next block.` : '.'}</p>`).join('')}
+    </div>` : ''}
+    <div class="card">
+      <div class="mono small" style="text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Next block</div>
+      <button class="btn btn-sm" id="blockReviewRunAgainBtn" style="width:100%;margin-bottom:0.4rem;">Run it again with new targets</button>
+      <button class="btn btn-sm btn-ghost" id="blockReviewChangeBtn" style="width:100%;margin-bottom:0.4rem;">Change goal or days</button>
+      <button class="btn btn-sm btn-ghost" id="blockReviewLightWeekBtn" style="width:100%;">Take a light week first</button>
+    </div>
+  `;
+  $('#blockReviewDoneBtn').addEventListener('click', () => { showBlockView = false; showPlansHub = true; renderLiftsTab(); });
+  $('#blockReviewRunAgainBtn').addEventListener('click', async () => {
+    const fresh = generateBlock({ focus: block.focus, priorities: block.priorities, days: block.days, equipment: block.equipment, avoid: block.avoid, poolKey: block.focus });
+    const next = { ...fresh, blockNumber: block.blockNumber + 1, blockLength: block.blockLength, blockStartDate: fresh.createdDate, deload: null, deloadSnoozedUntil: null, sourceProgramId: block.sourceProgramId, sourceProgramName: block.sourceProgramName };
+    const { error } = await supabase.from('profiles').update({ active_training_block: next }).eq('id', state.user.id);
+    if (error) { toast('Could not start the next block: ' + error.message); return; }
+    state.profile = { ...state.profile, active_training_block: next };
+    toast(`Block ${next.blockNumber} started.`);
+    renderLiftsTab();
+  });
+  $('#blockReviewChangeBtn').addEventListener('click', () => {
+    showBlockView = false;
+    resetBlockBuilderState();
+    showBlockBuilder = true;
+    renderLiftsTab();
+  });
+  $('#blockReviewLightWeekBtn').addEventListener('click', async () => {
+    // Extends the block's own timeline by one week so this light week
+    // gets its own deload overlay before the review screen reappears -
+    // the block's saved days/sets are never touched, only the overlay
+    // and the bookkeeping date that decides when review shows again.
+    const extended = { ...block, blockStartDate: subtractDays(block.blockStartDate, -7), deload: { startedDate: localDateStr(), reason: 'scheduled' } };
+    const { error } = await supabase.from('profiles').update({ active_training_block: extended }).eq('id', state.user.id);
+    if (error) { toast('Could not start a light week: ' + error.message); return; }
+    state.profile = { ...state.profile, active_training_block: extended };
+    toast('This week set to a light week.');
     renderLiftsTab();
   });
 }

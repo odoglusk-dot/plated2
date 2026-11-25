@@ -60,11 +60,13 @@ const EXPORT_NAMES = [
   'DEFAULT_REP_RANGE', 'repRangeForBlock', 'PROGRAM_RULES_CONFIG', 'roundToStep', 'weightStepFor', 'sessionStatus',
   'nextTargets', 'applyDeloadToSets', 'applyDeloadToWeight', 'isDownAcrossSessions', 'suggestDeload', 'deloadPreview',
   'daysSinceLastWorkout', 'welcomeBack', 'planWeek', 'missedOptions', 'weeklyVolumeForWeek', 'rankSwaps', 'suggestSwapStartWeight',
+  'ensureBlockMeta', 'weekInBlockFor', 'blockHasEnded', 'blockWeekStates', 'currentDeload',
 ];
 const {
   DEFAULT_REP_RANGE, repRangeForBlock, PROGRAM_RULES_CONFIG, roundToStep, weightStepFor, sessionStatus,
   nextTargets, applyDeloadToSets, applyDeloadToWeight, isDownAcrossSessions, suggestDeload, deloadPreview,
   daysSinceLastWorkout, welcomeBack, planWeek, missedOptions, weeklyVolumeForWeek, rankSwaps, suggestSwapStartWeight,
+  ensureBlockMeta, weekInBlockFor, blockHasEnded, blockWeekStates, currentDeload,
 } = vm.runInContext(`({${EXPORT_NAMES.join(', ')}})`, sandbox);
 
 // ── Minimal test harness ────────────────────────────────────────────────
@@ -316,6 +318,56 @@ eq(welcomeBack(null), null, 'no history at all => no welcome-back treatment (not
   const noHistory = suggestSwapStartWeight([], [{ weight: 70, reps_per_set: [10, 10, 10] }]);
   eq(noHistory.weight, null, 'no history on the new exercise => no invented number, even with history on the old one');
   eq(noHistory.note, 'start light', 'no-history case shows "start light" instead of a guessed ratio');
+}
+
+// ── ensureBlockMeta / weekInBlockFor / blockHasEnded / blockWeekStates ───
+// (Phase 3: block fields, deload timeline)
+{
+  const legacyBlock = { focus: 'hypertrophy', days: 4, createdDate: '2026-10-01', blockDays: [] };
+  const meta = ensureBlockMeta(legacyBlock);
+  eq(meta.blockNumber, 1, 'a block from before this field existed defaults to Block 1 - never retroactively stored, just computed here');
+  eq(meta.blockLength, PROGRAM_RULES_CONFIG.block.defaultWeeks, 'missing blockLength defaults to the config default (6)');
+  eq(meta.blockStartDate, '2026-10-01', 'missing blockStartDate falls back to the existing createdDate');
+  eq(meta.deload, null, 'no deload overlay by default');
+}
+{
+  const block = { blockLength: 6, blockStartDate: '2026-10-01' };
+  eq(weekInBlockFor(block, '2026-10-01'), 1, 'day zero is week 1');
+  eq(weekInBlockFor(block, '2026-10-07'), 1, 'still week 1 through day 6 (0-indexed)');
+  eq(weekInBlockFor(block, '2026-10-08'), 2, 'day 7 rolls into week 2');
+  eq(weekInBlockFor(block, '2026-11-19'), 6, 'past the block\'s own length, week number clamps at blockLength (6), never overruns');
+  ok(!blockHasEnded(block, '2026-11-11'), 'day 41 is still inside week 6 (the deload week itself) - not yet ended');
+  ok(blockHasEnded(block, '2026-11-12'), 'once day 42 (6*7) is reached, the block has fully ended, deload week included');
+}
+{
+  const states = blockWeekStates({ blockLength: 6, blockStartDate: '2026-10-01' }, '2026-10-15'); // day 14 => week 3
+  eq(states.length, 6, 'one entry per week of the block');
+  eq(states[0].status, 'done', 'week 1 is in the past => done');
+  eq(states[2].status, 'current', 'week 3 (today falls in it) => current');
+  eq(states[3].status, 'upcoming', 'week 4 hasn\'t started yet => upcoming');
+  ok(states[5].isDeload, 'the last week (6) is flagged as the deload week');
+  ok(!states[0].isDeload, 'week 1 is not flagged as the deload week');
+}
+{
+  const noDeload = { deload: null };
+  eq(currentDeload(noDeload, '2026-11-19'), null, 'no deload object => not currently on a deload');
+  const freshDeload = { deload: { startedDate: '2026-11-19', reason: 'reactive' } };
+  ok(currentDeload(freshDeload, '2026-11-19') !== null, 'a deload started today is active today');
+  ok(currentDeload(freshDeload, '2026-11-25') !== null, 'still active 6 days later (within the 7-day window)');
+  eq(currentDeload(freshDeload, '2026-11-26') , null, 'lapses on its own after 7 days - no explicit clearing needed');
+}
+
+// ── suggestDeload reuse check (Phase 3's reactive trigger, already
+// covered structurally in Phase 1 - this just confirms the "4 of 5 main
+// lifts down across 2 sessions" threshold math holds at a realistic size).
+{
+  const down = (a, b) => [{ date: '2026-11-01', weight: a, reps: 8 }, { date: '2026-11-08', weight: b, reps: 8 }];
+  const histories = {
+    bench: down(100, 95), squat: down(150, 145), row: down(80, 78), ohp: down(60, 58), deadlift: down(185, 185),
+  };
+  const result = suggestDeload(histories);
+  eq(result.downCount, 4, '4 of 5 lifts dropped e1RM across their last 2 sessions');
+  ok(result.suggested, '4 of 5 (80%) meets the configured 80% threshold - deload suggested');
 }
 
 console.log(`\n${pass} passed, ${fail} failed.`);
